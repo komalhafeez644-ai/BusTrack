@@ -1,8 +1,8 @@
-# BusTrack 🚍📍
+# BusTrack 
 
 BusTrack is a smart transportation management system developed to improve the safety, monitoring, and efficiency of student transport. The system provides real-time bus tracking, attendance management, notifications, and transport monitoring through a user-friendly mobile application.
 
-## 📌 Features
+## Features
 - Real-time bus tracking using GPS and Google Maps  
 - Student attendance management  
 - Bus arrival and delay notifications  
@@ -11,7 +11,7 @@ BusTrack is a smart transportation management system developed to improve the sa
 - AI-based delay prediction and ETA optimization  
 - Secure Firebase authentication  
 
-## 🛠️ Technologies Used
+## Technologies Used
 - Frontend: Android Studio (Kotlin)  
 - Backend: Firebase  
 - Database: Firebase Firestore  
@@ -19,7 +19,7 @@ BusTrack is a smart transportation management system developed to improve the sa
 - Notifications: Firebase Cloud Messaging (FCM)  
 - Maps & Tracking: Google Maps SDK & GPS Services  
 
-## 📂 Project Structure
+## Project Structure
 BusTrack/
 │── app/
 │── java/
@@ -30,9 +30,9 @@ BusTrack/
 │── Gradle Scripts/
 │── README.md
 
-## 🚀 Getting Started
+## Getting Started
 1. Clone the repository  
-git clone https://github.com/your-username/BusTrack.git  
+git clone https://github.com/komalhafeez644-ai/BusTrack 
 
 2. Open the project in Android Studio  
 
@@ -42,8 +42,8 @@ git clone https://github.com/your-username/BusTrack.git
 
 5. Run the application on Android device or emulator  
 
-## 🤝 Contributing
+## ontributing
 Contributions and improvements are welcome. Feel free to fork the repository and submit pull requests.
 
-## 📧 Contact
+## Contact
 For any queries or suggestions regarding the BusTrack project, feel free to contact the development team.
