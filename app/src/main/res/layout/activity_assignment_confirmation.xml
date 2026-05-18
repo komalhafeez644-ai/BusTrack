@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8F9FB">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="280dp"
+            android:background="@color/primaryDark"
+            android:padding="20dp">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/ivProfile"
+                android:layout_width="90dp"
+                android:layout_height="90dp"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="20dp"
+                android:src="@drawable/img"
+                app:shapeAppearanceOverlay="@style/CircleImage"
+                app:strokeColor="@color/white"
+                app:strokeWidth="2dp"
+                android:scaleType="centerCrop"
+                android:background="@color/white"/>
+
+            <TextView
+                android:id="@+id/tvStudentName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/ivProfile"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="12dp"
+                android:text="Ethan Sterling"
+                android:textColor="@color/white"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvStudentId"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/tvStudentName"
+                android:layout_centerHorizontal="true"
+                android:text="#CF-99281"
+                android:textColor="#B0C4DE" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/tvStudentId"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="15dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_status_assigned"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"
+                    android:paddingTop="5dp"
+                    android:paddingBottom="5dp"
+                    android:text="Successfully Assigned"
+                    android:textColor="#2E7D32"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:background="@drawable/bg_status_optimized"
+                    android:paddingLeft="12dp"
+                    android:paddingRight="12dp"
+                    android:paddingTop="5dp"
+                    android:paddingBottom="5dp"
+                    android:text="Route Optimized"
+                    android:textColor="#1565C0"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+        </RelativeLayout>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-40dp"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Operational Summary"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="45dp"
+                        android:layout_height="45dp"
+                        android:background="@drawable/bg_icon_circle"
+                        android:padding="10dp"
+                        android:src="@drawable/directions_bus_unfilled"
+                        app:tint="@color/primaryDark" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="15dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Assigned Bus"
+                            android:textSize="11sp"
+                            android:textColor="@color/lightGray" />
+
+                        <TextView
+                            android:id="@+id/tvBusNumber"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Bus 42"
+                            android:textStyle="bold"
+                            android:textColor="#212121"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvBusService"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Inter-Campus Express"
+                            android:textSize="11sp"
+                            android:textColor="@color/primaryBlue"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="45dp"
+                        android:layout_height="45dp"
+                        android:background="@drawable/bg_icon_circle"
+                        android:padding="10dp"
+                        android:src="@drawable/badge"
+                        app:tint="@color/primaryDark" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="15dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Driver"
+                            android:textSize="11sp"
+                            android:textColor="@color/lightGray"  />
+
+                        <TextView
+                            android:id="@+id/tvDriverName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ahmed Ali"
+                            android:textStyle="bold"
+                            android:textColor="#212121"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvDriverRole"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Senior Operative"
+                            android:textSize="11sp"
+                            android:textColor="@color/primaryBlue"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="45dp"
+                        android:layout_height="45dp"
+                        android:background="@drawable/bg_icon_circle"
+                        android:padding="10dp"
+                        android:src="@drawable/outline_location"
+                        app:tint="@color/primaryDark" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="15dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Pickup Stop"
+                            android:textSize="11sp"
+                            android:textColor="@color/lightGray"  />
+
+                        <TextView
+                            android:id="@+id/tvStopName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Sector 15 North"
+                            android:textStyle="bold"
+                            android:textColor="#212121"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvStopDetail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Main Gate Entry"
+                            android:textSize="11sp"
+                            android:textColor="@color/primaryBlue"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:orientation="vertical">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Route Coverage"
+                            android:textSize="11sp"
+                            android:textColor="@color/lightGray"  />
+
+                        <TextView
+                            android:id="@+id/tvCoveragePercentage"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentRight="true"
+                            android:text="98%"
+                            android:textStyle="bold"
+                            android:textColor="@color/primaryDark" />
+
+                    </RelativeLayout>
+
+                    <ProgressBar
+                        android:id="@+id/pbCoverage"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="6dp"
+                        android:progress="98"
+                        android:progressTint="@color/primaryBlue"
+                        android:max="100" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardBackgroundColor="#F5F7FA"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Optimization Logic"
+                    android:textStyle="bold"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/tvOptimizationLogic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/lightGray"
+                    android:textSize="13sp"
+                    android:lineSpacingMultiplier="1.2"
+                    android:text="The assignment was calculated based on proximity to Sector 15 and current bus occupancy. Bus 42 provides the minimal latency for the 8:00 AM window." />
+
+                <TextView
+                    android:id="@+id/tvEstimatedTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="right"
+                    android:layout_marginTop="12dp"
+                    android:textColor="@color/primaryBlue"
+                    android:textStyle="bold"
+                    android:textSize="15sp"
+                    android:text="Estimated Pickup: 07:45 AM" />
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <Button android:id="@+id/btnConfirm" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginHorizontal="16dp" android:backgroundTint="@color/primaryDark" android:text="Confirm &amp; Notify Parent" android:textAllCaps="false" android:textSize="16sp" app:cornerRadius="10dp"/>
+        <Button android:id="@+id/btnEdit" android:layout_width="match_parent" android:layout_height="56dp" android:layout_margin="16dp" android:backgroundTint="@color/white" android:text="Edit Assignment" android:textAllCaps="false" android:textColor="@color/primaryBlue" style="@style/Widget.MaterialComponents.Button.OutlinedButton" app:cornerRadius="10dp" android:layout_marginBottom="30dp"/>
+
+    </LinearLayout>
+</ScrollView>

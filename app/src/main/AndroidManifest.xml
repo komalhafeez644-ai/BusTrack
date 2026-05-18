@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Campus Fleet"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BusTrack_App">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="YOUR_API_KEY"/>
+        <activity
+            android:name=".AddRouteActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.RouteDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.ManageRouteActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.AddStudentActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.admin.ManageStudentActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.StudentDetailsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="ui.admin.AddDriverActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.EditDriverActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.DriversActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.AttendanceActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.EditAssignmentActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.admin.RouteMapActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.AssignmentConfirmationActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.ApplicationDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.BusApplicationsActivity"
+            android:exported="false"
+            tools:ignore="MissingClass" />
+        <activity
+            android:name="ui_authentication.LoginActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="ui_authentication.SignupActivity"
+            android:exported="false" />
+        <activity
+            android:name=".login.ForgotPasswordActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.AdminDashboardActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.LiveTrackingActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.TrackDriverActivity"
+            android:exported="false" />
+    </application>
+
+</manifest>

@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">BusTrack_App</string>
+
+    <string-array name="route_options">
+        <item>Route 1</item>
+        <item>Route 2</item>
+        <item>Route 3</item>
+    </string-array>
+
+    <string-array name="stop_options">
+        <item>Sector 15 North</item>
+        <item>Saddar Karachi</item>
+        <item>Commercial Market</item>
+    </string-array>
+
+    <string-array name="bus_options">
+        <item>Bus 42</item>
+        <item>Bus 18</item>
+        <item>Bus 05</item>
+    </string-array>
+</resources>

@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Outer Circle -->
+    <path
+        android:fillColor="#08224A"
+        android:pathData="M100,100m-90,0a90,90 0,1 1,180 0a90,90 0,1 1,-180 0" />
+    <!-- Placeholder for Bus/Road - Stylized B -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,60 L130,60 L130,140 L70,140 Z M80,70 L120,70 L120,130 L80,130 Z" />
+    <path
+        android:fillColor="#1B4D9B"
+        android:pathData="M85,80 L115,80 L115,100 L85,100 Z M85,110 L115,110 L115,120 L85,120 Z" />
+</vector>

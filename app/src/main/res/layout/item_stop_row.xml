@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:paddingVertical="12dp">
+
+    <TextView
+        android:id="@+id/tvStopNumber"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:background="#0A1D37"
+        android:text="01"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_toEndOf="@id/tvStopNumber"
+        android:layout_toStartOf="@id/btnDeleteStop"
+        android:layout_marginStart="14dp">
+
+        <TextView
+            android:id="@+id/tvStopName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Main Terminal"
+            android:textStyle="bold"
+            android:textColor="#0A1D37"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tvStopTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🕒 07:00 AM"
+            android:textColor="#64748B"
+            android:textSize="12sp"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/btnDeleteStop"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        app:tint="#64748B"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="Delete Stop" />
+
+</RelativeLayout>
