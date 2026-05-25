@@ -49,7 +49,7 @@
             android:textColor="#191C1E"
             android:textSize="18sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toStartOf="@+id/btnEdit"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/imageContainer"
             app:layout_constraintTop_toTopOf="@id/imageContainer"
             tools:text="Driver Name" />
@@ -66,23 +66,24 @@
 
         <TextView
             android:id="@+id/txtBusInfo"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:textColor="#44474D"
             android:textSize="12sp"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/icBus"
             app:layout_constraintTop_toTopOf="@id/icBus"
-            tools:text="Assigned\nBus: Bus-01" />
+            tools:text="Assigned Bus: Bus-01" />
 
         <ImageView
             android:id="@+id/icRoute"
             android:layout_width="18dp"
             android:layout_height="18dp"
-            android:layout_marginStart="24dp"
+            android:layout_marginTop="4dp"
             android:src="@drawable/alt_route"
-            app:layout_constraintStart_toEndOf="@id/txtBusInfo"
-            app:layout_constraintTop_toTopOf="@id/icBus"
+            app:layout_constraintStart_toStartOf="@id/icBus"
+            app:layout_constraintTop_toBottomOf="@id/txtBusInfo"
             app:tint="#44474D" />
 
         <TextView
@@ -92,21 +93,28 @@
             android:layout_marginStart="6dp"
             android:textColor="#44474D"
             android:textSize="12sp"
-            app:layout_constraintEnd_toStartOf="@id/btnEdit"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/icRoute"
             app:layout_constraintTop_toTopOf="@id/icRoute"
-            tools:text="Route:\nRoute-02" />
+            tools:text="Route: Route-02" />
 
-        <ImageButton
-            android:id="@+id/btnEdit"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/outline_edit_24"
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnViewProfile"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginTop="8dp"
+            android:paddingHorizontal="12dp"
+            android:text="View Profile"
+            android:textAllCaps="false"
+            android:textColor="@color/primaryBlue"
+            android:textSize="12sp"
+            app:cornerRadius="8dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="#75777E" />
+            app:layout_constraintTop_toBottomOf="@id/txtRouteInfo"
+            app:strokeColor="@color/primaryBlue"
+            app:strokeWidth="1dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

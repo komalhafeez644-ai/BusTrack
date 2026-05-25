@@ -124,13 +124,15 @@
                 android:src="@drawable/directions_bus_unfilled"
                 app:tint="#005DB7" />
 
-            <Spinner
-                android:id="@+id/dialogSpinnerBus"
+            <TextView
+                android:id="@+id/dialogTvBus"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_marginStart="12dp"
-                android:entries="@array/bus_options"
-                android:spinnerMode="dropdown" />
+                android:gravity="center_vertical"
+                android:text="Bus #42"
+                android:textColor="#111111"
+                android:textSize="16sp" />
         </LinearLayout>
 
         <LinearLayout

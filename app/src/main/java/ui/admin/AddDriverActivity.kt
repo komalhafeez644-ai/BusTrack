@@ -4,18 +4,31 @@ import android.app.Dialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityAddDriverBinding
 import com.example.bustrack_app.models.DriverModel
+import com.example.bustrack_app.data.DriverRepository
+import utils.ViewUtils
 
 class AddDriverActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAddDriverBinding
+
+    // Photo Picker Launcher
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            binding.imgUpload.setImageURI(it)
+            binding.imgUpload.setPadding(0, 0, 0, 0)
+            Toast.makeText(this, "Photo uploaded successfully", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,6 +36,7 @@ class AddDriverActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnAddDriver.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             val name = binding.etFullName.text.toString()
             val empId = binding.etEmployeeId.text.toString()
             val cnic = binding.etCnic.text.toString()
@@ -55,12 +69,28 @@ class AddDriverActivity : AppCompatActivity() {
                 email = email
             )
 
+            // Repository mein add karein takay data save rahay
+            DriverRepository.addDriver(newDriver)
+
             // Direct finish karne ki bajaye Success Dialog dikhayein
             showSuccessDialog(name, newDriver)
         }
 
-        binding.btnBack.setOnClickListener { finish() }
-        binding.btnCancel.setOnClickListener { finish() }
+        binding.btnBack.setOnClickListener { 
+            ViewUtils.applyClickEffect(it)
+            finish() 
+        }
+        
+        binding.btnCancel.setOnClickListener { 
+            ViewUtils.applyClickEffect(it)
+            finish() 
+        }
+
+        // Camera Button Click
+        binding.btnPickImage.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            pickImageLauncher.launch("image/*")
+        }
     }
 
     // Custom Success Dialog Function

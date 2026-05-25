@@ -48,7 +48,7 @@ class DriverAdapter(
                 itemBinding.imgDriver.setImageResource(driver.profileImage)
             }
 
-            itemBinding.btnEdit.setOnClickListener { onEditClick(driver) }
+            itemBinding.btnViewProfile.setOnClickListener { onEditClick(driver) }
         }
     }
 }

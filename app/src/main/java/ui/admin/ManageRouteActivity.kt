@@ -1,5 +1,6 @@
-package com.example.bustrack_app.ui.admin
+package ui.admin
 
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -22,6 +23,8 @@ class ManageRouteActivity : AppCompatActivity() {
         binding = ActivityManageRouteBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        utils.NavigationUtils.setupBottomNavigation(this)
+
         setupRecyclerView()
         setupObservers()
         setupSearchEngine()
@@ -30,7 +33,9 @@ class ManageRouteActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         routeAdapter = RouteAdapter(listOf()) { selectedRoute ->
-            Toast.makeText(this, "Loading ${selectedRoute.routeName} Details...", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, com.example.bustrack_app.ui.admin.RouteDetailActivity::class.java)
+            intent.putExtra("ROUTE_ID", selectedRoute.id)
+            startActivity(intent)
         }
         binding.rvRoutes.apply {
             layoutManager = LinearLayoutManager(this@ManageRouteActivity)

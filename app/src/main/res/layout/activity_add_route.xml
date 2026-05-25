@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F5F7FB"
-    tools:context=".AddRouteActivity">
+    tools:context="ui.admin.AddRouteActivity">
 
     <!-- Top Header -->
 
@@ -32,8 +32,8 @@
                 android:id="@+id/btnBack"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
-                android:src="@android:drawable/ic_media_previous"
-                android:tint="@android:color/white"/>
+                android:src="@drawable/outline_arrow_back_24"
+                app:tint="@color/white" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -116,7 +116,8 @@
                     android:layout_width="0dp"
                     android:layout_height="50dp"
                     android:layout_weight="1"
-                    android:text="Undo"/>
+                    android:text="Undo"
+                    />
 
                 <Button
                     android:id="@+id/btnClear"

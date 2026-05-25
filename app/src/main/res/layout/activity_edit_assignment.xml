@@ -41,7 +41,8 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude"
         app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -54,6 +55,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="16dp"
+                app:cardBackgroundColor="@color/white"
                 app:cardElevation="2dp"
                 app:layout_constraintTop_toTopOf="parent">
 
@@ -64,24 +66,26 @@
 
                     <com.google.android.material.imageview.ShapeableImageView
                         android:id="@+id/ivStudent"
-                        android:layout_width="45dp"
-                        android:layout_height="45dp"
-                        android:src="@drawable/img"
+                        android:layout_width="55dp"
+                        android:layout_height="55dp"
+                        android:src="@drawable/ic_person"
+                        android:scaleType="centerCrop"
                         app:shapeAppearanceOverlay="@style/CircleImage"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/tvStudentName"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:text="Ethan Sterling"
                         android:textColor="#333333"
-                        android:textSize="16sp"
+                        android:textSize="17sp"
                         android:textStyle="bold"
                         app:layout_constraintStart_toEndOf="@id/ivStudent"
-                        app:layout_constraintTop_toTopOf="@id/ivStudent" />
+                        app:layout_constraintTop_toTopOf="@id/ivStudent"
+                        app:layout_constraintEnd_toStartOf="@+id/tvStatusBadge"/>
 
                     <TextView
                         android:id="@+id/tvStudentDetails"
@@ -94,6 +98,7 @@
                         app:layout_constraintTop_toBottomOf="@id/tvStudentName" />
 
                     <TextView
+                        android:id="@+id/tvStatusBadge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_status_assigned"
@@ -125,6 +130,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
+                app:cardBackgroundColor="@color/white"
                 app:cardCornerRadius="16dp"
                 app:layout_constraintTop_toBottomOf="@id/labelCurrent">
 
@@ -140,10 +146,10 @@
                         android:background="@drawable/bg_icon_circle"
                         android:padding="8dp"
                         android:src="@drawable/directions_bus_unfilled"
-                        app:tint="@color/primaryBlue"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:layout_constraintBottom_toBottomOf="parent"/>
+                        app:tint="@color/primaryBlue" />
 
                     <TextView
                         android:id="@+id/tvBusNumber"
@@ -206,22 +212,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
                 android:hint="Select Available Bus"
-
                 app:hintTextColor="@color/primaryBlue"
                 android:textColorHint="#666666"
-
                 app:startIconDrawable="@drawable/search"
-                app:startIconTint="#666666"
+                app:startIconTint="#000000"
+                app:endIconTint="#000000"
                 app:boxBackgroundColor="@color/white"
-
-                app:boxStrokeColor="#E0E0E0"
-                app:boxStrokeWidth="1dp"
-                app:boxStrokeWidthFocused="1dp"
-
-                app:boxCornerRadiusTopStart="30dp"
-                app:boxCornerRadiusBottomStart="30dp"
-                app:boxCornerRadiusTopEnd="30dp"
-                app:boxCornerRadiusBottomEnd="30dp"
+                app:boxStrokeColor="#000000"
+                app:boxStrokeWidth="1.5dp"
+                app:boxStrokeWidthFocused="2dp"
                 app:layout_constraintTop_toBottomOf="@id/labelReassign">
 
                 <AutoCompleteTextView
@@ -230,9 +229,8 @@
                     android:layout_height="wrap_content"
                     android:inputType="none"
                     android:paddingStart="50dp"
-                    android:text="Bus 101 - Express North 12/40 seats"
                     android:textSize="14sp"
-                    android:textColor="#333333"
+                    android:textColor="#212121"
                     android:background="@null" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -246,15 +244,12 @@
                 app:hintTextColor="@color/primaryBlue"
                 android:textColorHint="#666666"
                 app:startIconDrawable="@drawable/search"
-                app:startIconTint="#666666"
+                app:startIconTint="#000000"
+                app:endIconTint="#000000"
                 app:boxBackgroundColor="@color/white"
-                app:boxStrokeColor="#E0E0E0"
-                app:boxStrokeWidth="1dp"
-                app:boxStrokeWidthFocused="1dp"
-                app:boxCornerRadiusTopStart="30dp"
-                app:boxCornerRadiusBottomStart="30dp"
-                app:boxCornerRadiusTopEnd="30dp"
-                app:boxCornerRadiusBottomEnd="30dp"
+                app:boxStrokeColor="#000000"
+                app:boxStrokeWidth="1.5dp"
+                app:boxStrokeWidthFocused="2dp"
                 app:layout_constraintTop_toBottomOf="@id/inputBus">
 
                 <AutoCompleteTextView
@@ -263,9 +258,8 @@
                     android:layout_height="wrap_content"
                     android:inputType="none"
                     android:paddingStart="50dp"
-                    android:text="Route 5 - City Express"
                     android:textSize="14sp"
-                    android:textColor="#333333"
+                    android:textColor="#212121"
                     android:background="@null" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -279,27 +273,23 @@
                 app:hintTextColor="@color/primaryBlue"
                 android:textColorHint="#666666"
                 app:startIconDrawable="@drawable/outline_location"
-                app:startIconTint="#D32F2F"
+                app:startIconTint="#000000"
+                app:endIconTint="#000000"
                 app:boxBackgroundColor="@color/white"
-                app:boxStrokeColor="#E0E0E0"
-                app:boxStrokeWidth="1dp"
-                app:boxStrokeWidthFocused="1dp"
-                app:boxCornerRadiusTopStart="30dp"
-                app:boxCornerRadiusBottomStart="30dp"
-                app:boxCornerRadiusTopEnd="30dp"
-                app:boxCornerRadiusBottomEnd="30dp"
+                app:boxStrokeColor="#000000"
+                app:boxStrokeWidth="1.5dp"
+                app:boxStrokeWidthFocused="2dp"
                 app:layout_constraintTop_toBottomOf="@id/inputRoute">
 
                 <AutoCompleteTextView
-                    android:id="@+id/spinnerPickupStop"
+                    android:id="@+id/etPickupStop"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="none"
                     android:paddingStart="50dp"
                     android:paddingEnd="50dp"
-                    android:text="Oakwood Square - Gate 3"
                     android:textSize="14sp"
-                    android:textColor="#333333"
+                    android:textColor="#212121"
                     android:drawableEnd="@android:drawable/ic_menu_directions"
                     android:drawablePadding="8dp"
                     android:background="@null" />
@@ -311,9 +301,11 @@
                 android:layout_marginTop="24dp"
                 android:backgroundTint="#001431"
                 android:text="Update &amp; Notify >"
+                android:textColor="@color/white"
                 android:textAllCaps="false"
                 app:cornerRadius="10dp"
-                app:layout_constraintTop_toBottomOf="@id/inputStop" />
+                app:layout_constraintTop_toBottomOf="@id/inputStop"
+                android:hapticFeedbackEnabled="true" />
 
             <Button
                 android:id="@+id/btnCancel"
@@ -327,8 +319,17 @@
                 android:elevation="2dp"
                 app:cornerRadius="10dp"
                 app:layout_constraintTop_toBottomOf="@id/btnUpdate"
-                app:layout_constraintBottom_toBottomOf="parent" />
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:hapticFeedbackEnabled="true" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
+    <include
+        android:id="@+id/bottomNavInclude"
+        layout="@layout/layout_bottom_navigation"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

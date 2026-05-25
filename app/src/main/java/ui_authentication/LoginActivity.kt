@@ -12,6 +12,7 @@ import com.example.bustrack_app.login.ForgotPasswordActivity
 import com.example.bustrack_app.utils.Resource
 import com.example.bustrack_app.viewmodels.LoginViewModel
 import com.google.android.material.textfield.TextInputEditText
+import ui.admin.AdminDashboardActivity
 // IMPORT ADD KIYA: Taake intent ko pata chale Signup Activity kahan hai
 
 class LoginActivity : AppCompatActivity() {
@@ -27,6 +28,7 @@ class LoginActivity : AppCompatActivity() {
         val btnLogin = findViewById<Button>(R.id.btnLogin)
         val tvSignUp = findViewById<TextView>(R.id.tvSignUp)
         val tvForgotPassword = findViewById<TextView>(R.id.tvForgotPassword)
+        val btnGoogle = findViewById<Button>(R.id.btnGoogle)
 
         btnLogin.setOnClickListener {
             val email = etEmail.text.toString().trim()
@@ -50,6 +52,10 @@ class LoginActivity : AppCompatActivity() {
             startActivity(Intent(this, ForgotPasswordActivity::class.java))
         }
 
+        btnGoogle.setOnClickListener {
+            viewModel.loginWithGoogle()
+        }
+
         observeLogin()
     }
 
@@ -57,13 +63,13 @@ class LoginActivity : AppCompatActivity() {
         viewModel.loginState.observe(this) { resource ->
             when (resource) {
                 is Resource.Loading -> {
-                    // Yahan aap progress bar dikha sakte hain
+                    Toast.makeText(this, "Connecting to Google...", Toast.LENGTH_SHORT).show()
                 }
                 is Resource.Success -> {
                     Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
-                    // Yahan Dashboard par jane ka code add karein
-                    // startActivity(Intent(this, AdminDashboardActivity::class.java))
-                    // finish()
+                    val intent = Intent(this, AdminDashboardActivity::class.java)
+                    startActivity(intent)
+                    finish()
                 }
                 is Resource.Error -> {
                     Toast.makeText(this, resource.message ?: "Login Failed", Toast.LENGTH_SHORT).show()

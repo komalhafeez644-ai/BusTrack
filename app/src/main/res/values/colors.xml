@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="primaryDark">#08224A</color>
-    <color name="primaryBlue">#1B4D9B</color>
+    <color name="primaryBlue">#1565C0</color>
     <color name="white">#FFFFFF</color>
     <color name="lightGray">#666666</color>
     <color name="textColorBlue">#B9C7E4</color>
@@ -11,6 +11,7 @@
     <color name="IconBackgroundTint">#EFF2F7</color>
     <color name="cardBackground">#F5F5F5</color>
     <color name="black">#1C1C1E</color>
+    <color name="DarkGrey">#333333</color>
     <!-- Live Tracking Screen Colors -->
     <color name="map_bg_dark">#0B1528</color>
     <color name="chip_selected_blue">#3D8BFF</color>

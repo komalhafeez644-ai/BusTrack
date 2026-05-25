@@ -2,11 +2,10 @@
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.tools.com/tools"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
-    android:layout_dependency="@id/rvRoutes"
     android:layout_marginBottom="14dp"
     app:cardBackgroundColor="@android:color/white"
     app:cardCornerRadius="16dp"
@@ -180,8 +179,6 @@
                 android:textStyle="bold"
                 app:backgroundTint="#0A1D37"
                 app:cornerRadius="18dp"
-                app:insetTop="0dp"
-                app:insetBottom="0dp"
                 android:paddingHorizontal="16dp"
                 tools:ignore="HardcodedText" />
         </RelativeLayout>

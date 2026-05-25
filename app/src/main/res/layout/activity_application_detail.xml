@@ -67,11 +67,11 @@
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- CONTENT -->
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         app:layout_constraintTop_toBottomOf="@id/topBar"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -113,11 +113,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
                     android:background="@drawable/bg_chip_selected"
-                    android:backgroundTint="#FEF3C7"
+                    android:backgroundTint="#DCFCE7"
                     android:paddingHorizontal="16dp"
                     android:paddingVertical="8dp"
-                    android:text="Pending"
-                    android:textColor="#D97706"
+                    android:text="Approved"
+                    android:textColor="#166534"
                     android:textSize="13sp"
                     android:textStyle="bold"/>
             </LinearLayout>
@@ -284,7 +284,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SYSTEM ANALYSIS"
+                        android:text="Assignment details"
                         android:textStyle="bold"
                         android:textColor="@color/lightGray"
                         android:textSize="11sp"
@@ -294,7 +294,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="Nearest Route"
+                        android:text="Assigned Route"
                         android:textColor="@color/lightGray"
                         android:textSize="13sp"/>
 
@@ -330,7 +330,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="Nearest Stop"
+                        android:text="Assigned stop"
                         android:textColor="@color/lightGray"
                         android:textSize="13sp"/>
 
@@ -344,21 +344,6 @@
                         android:textStyle="bold"
                         android:textSize="18sp"/>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:background="@drawable/bg_chip_selected"
-                        android:backgroundTint="#DCFCE7"
-                        android:paddingHorizontal="16dp"
-                        android:paddingVertical="8dp"
-                        android:text="Covered by Route"
-                        android:textColor="#166534"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        app:drawableStartCompat="@drawable/person_check"
-                        app:drawableTint="#166534"
-                        android:drawablePadding="8dp"/>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -376,19 +361,21 @@
                     android:layout_height="64dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="10dp"
-                    android:text="Approve"
+                    android:text="Close"
                     android:textAllCaps="false"
-                    android:textColor="#14532D"
+                    android:textColor="@color/primaryBlue"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#DCFCE7"
+                    app:backgroundTint="@color/white"
                     app:cornerRadius="20dp"
                     app:strokeWidth="2dp"
-                    app:strokeColor="#BBF7D0"
-                    app:icon="@drawable/person_check"
-                    app:iconTint="#14532D"
+                    app:strokeColor="@color/primaryBlue"
+                    app:icon="@drawable/ic_close"
+                    app:iconTint="@color/primaryBlue"
                     app:iconGravity="textStart"
-                    app:iconPadding="8dp"/>
+                    app:iconPadding="8dp"
+                    android:hapticFeedbackEnabled="true"
+                    app:rippleColor="#200284C7"/>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnReject"
@@ -396,22 +383,32 @@
                     android:layout_height="64dp"
                     android:layout_weight="1"
                     android:layout_marginStart="10dp"
-                    android:text="Reject"
+                    android:text="Edit"
                     android:textAllCaps="false"
-                    android:textColor="#7F1D1D"
+                    android:textColor="@color/white"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#FEE2E2"
+                    app:backgroundTint="@color/primaryDark"
                     app:cornerRadius="20dp"
                     app:strokeWidth="2dp"
-                    app:strokeColor="#FECACA"
-                    app:icon="@drawable/ic_close"
-                    app:iconTint="#7F1D1D"
+                    app:strokeColor="@color/primaryDark"
+                    app:icon="@drawable/outline_edit_24"
+                    app:iconTint="@color/white"
                     app:iconGravity="textStart"
-                    app:iconPadding="8dp"/>
+                    app:iconPadding="8dp"
+                    android:hapticFeedbackEnabled="true"
+                    app:rippleColor="#40FFFFFF"/>
 
             </LinearLayout>
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
+    <include
+        android:id="@+id/bottomNavInclude"
+        layout="@layout/layout_bottom_navigation"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

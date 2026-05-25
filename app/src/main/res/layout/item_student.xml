@@ -94,7 +94,7 @@
             android:layout_width="14dp"
             android:layout_height="14dp"
             android:layout_marginTop="12dp"
-            android:src="@drawable/ic_location"
+            android:src="@drawable/outline_location"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/divider"
             app:tint="#666666" />
@@ -142,10 +142,11 @@
             android:textColor="#1E88E5"
             android:textSize="13sp"
             android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="@id/txtLocationInfo"
+            android:paddingVertical="4dp"
+            app:layout_constraintBottom_toBottomOf="@id/icLocation"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/icLocation"
-            tools:text="Assign Route" />
+            tools:text="View Details" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

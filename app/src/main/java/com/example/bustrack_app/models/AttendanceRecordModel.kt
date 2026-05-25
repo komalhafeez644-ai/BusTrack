@@ -5,5 +5,7 @@ data class AttendanceRecordModel(
     val rollNo: String,
     val busStop: String,
     val arrivalTime: String,
-    val status: String // "LATE", "PRESENT", "ABSENT"
+    val status: String,
+    val route: String,
+    val date: String
 )

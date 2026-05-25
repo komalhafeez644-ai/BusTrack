@@ -94,7 +94,7 @@
                 android:layout_width="0dp"
                 android:layout_height="54dp"
                 android:layout_weight="1"
-                android:layout_maxLines="1"
+                android:maxLines="1"
                 android:layout_marginStart="6dp"
                 android:text="Add &amp; Next  ❯"
                 android:textAllCaps="false"
@@ -181,39 +181,77 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:layout_marginBottom="24dp"
-                        android:text="Please provide the student's institutional details to begin enrollment."
+                        android:layout_marginBottom="16dp"
+                        android:text="Please provide the student's institutional details."
                         android:textColor="#555555"
-                        android:textSize="14sp"
-                        android:lineSpacingExtra="3dp" />
+                        android:textSize="14sp" />
 
-                    <RelativeLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp">
-                        <EditText
-                            android:id="@+id/etFullName"
+                    <FrameLayout
+                        android:layout_width="110dp"
+                        android:layout_height="110dp"
+                        android:layout_gravity="center"
+                        android:layout_marginBottom="24dp">
+                        <com.google.android.material.imageview.ShapeableImageView
+                            android:id="@+id/imgStudentUpload"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/edit_text_outline"
-                            android:hint="e.g. Alexander Thorne"
-                            android:inputType="textPersonName"
-                            android:paddingHorizontal="16dp"
-                            android:textColor="#1C1C1E"
-                            android:textColorHint="#AEAEB2"
-                            android:textSize="15sp" />
-                        <TextView
+                            android:layout_height="match_parent"
+                            android:background="#F2F4F7"
+                            android:src="@drawable/ic_person"
+                            app:shapeAppearanceOverlay="@style/CircleImage"
+                            app:strokeColor="#D1D1D6"
+                            app:strokeWidth="2dp" />
+                        <com.google.android.material.floatingactionbutton.FloatingActionButton
+                            android:id="@+id/btnPickStudentImage"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
-                            android:background="@android:color/white"
-                            android:paddingHorizontal="4dp"
-                            android:text="Full Name"
-                            android:textColor="#005DB7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </RelativeLayout>
+                            android:layout_gravity="bottom|end"
+                            app:backgroundTint="#FFC107"
+                            app:fabCustomSize="36dp"
+                            app:srcCompat="@drawable/photo_camera"
+                            app:tint="#0B1F3A" />
+                    </FrameLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Student ID"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        app:startIconDrawable="@drawable/badge"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        android:layout_marginBottom="16dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etEmployeeId"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="#1C1C1E"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Full Name"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        app:startIconDrawable="@drawable/ic_person"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        android:layout_marginBottom="16dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etFullName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="#1C1C1E"/>
+                    </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -221,193 +259,113 @@
                         android:orientation="horizontal"
                         android:layout_marginBottom="24dp">
 
-                        <RelativeLayout
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:layout_marginEnd="8dp">
-                            <FrameLayout
+                            android:layout_marginEnd="8dp"
+                            android:hint="Grade"
+                            android:textColorHint="#666666"
+                            app:hintTextColor="@color/primaryBlue"
+                            app:boxStrokeColor="@color/box_stroke_selector"
+                            app:boxCornerRadiusTopStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusBottomEnd="12dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/spinnerGrade"
                                 android:layout_width="match_parent"
-                                android:layout_height="56dp"
-                                android:layout_marginTop="8dp"
-                                android:background="@drawable/edit_text_outline">
-                                <Spinner
-                                    android:id="@+id/spinnerGrade"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:paddingHorizontal="12dp"
-                                    android:spinnerMode="dropdown"/>
-                            </FrameLayout>
-                            <TextView
-                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="14dp"
-                                android:background="@android:color/white"
-                                android:paddingHorizontal="4dp"
-                                android:text="Grade"
-                                android:textColor="#005DB7"
-                                android:textSize="11sp"
-                                android:textStyle="bold" />
-                        </RelativeLayout>
+                                android:inputType="none"/>
+                        </com.google.android.material.textfield.TextInputLayout>
 
-                        <RelativeLayout
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:layout_marginStart="8dp">
-                            <EditText
+                            android:layout_marginStart="8dp"
+                            android:hint="Section"
+                            android:textColorHint="#666666"
+                            app:hintTextColor="@color/primaryBlue"
+                            app:boxStrokeColor="@color/box_stroke_selector"
+                            app:boxCornerRadiusTopStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusBottomEnd="12dp">
+                            <com.google.android.material.textfield.TextInputEditText
                                 android:id="@+id/etSection"
                                 android:layout_width="match_parent"
-                                android:layout_height="56dp"
-                                android:layout_marginTop="8dp"
-                                android:background="@drawable/edit_text_outline"
-                                android:hint="A, B, C..."
-                                android:inputType="textCapCharacters"
-                                android:paddingHorizontal="16dp"
-                                android:textColor="#1C1C1E"
-                                android:textColorHint="#AEAEB2"
-                                android:textSize="15sp" />
-                            <TextView
-                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="14dp"
-                                android:background="@android:color/white"
-                                android:paddingHorizontal="4dp"
-                                android:text="Section"
-                                android:textColor="#005DB7"
-                                android:textSize="11sp"
-                                android:textStyle="bold" />
-                        </RelativeLayout>
+                                android:inputType="textCapCharacters"
+                                android:textColor="#1C1C1E"/>
+                        </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
 
-                    <LinearLayout
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
+                        android:hint="Parent Name"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        app:startIconDrawable="@drawable/family"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
                         android:layout_marginBottom="16dp">
-                        <ImageView
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:src="@drawable/family"
-                            app:tint="#005DB7" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="Parent / Guardian Info"
-                            android:textColor="#0A1D37"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <RelativeLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp">
-                        <EditText
+                        <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etParentName"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/edit_text_outline"
-                            android:hint="Primary Guardian Full Name"
-                            android:inputType="textPersonName"
-                            android:paddingHorizontal="16dp"
-                            android:textColor="#1C1C1E"
-                            android:textColorHint="#AEAEB2"
-                            android:textSize="15sp" />
-                        <TextView
-                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
-                            android:background="@android:color/white"
-                            android:paddingHorizontal="4dp"
-                            android:text="Parent Name"
-                            android:textColor="#005DB7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </RelativeLayout>
+                            android:textColor="#1C1C1E"/>
+                    </com.google.android.material.textfield.TextInputLayout>
 
-                    <RelativeLayout
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="28dp">
-                        <EditText
+                        android:hint="Emergency Contact"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        app:startIconDrawable="@drawable/phone_24"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        android:layout_marginBottom="16dp">
+                        <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etEmergencyContact"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/edit_text_outline"
-                            android:hint="+1  (555) 000-0000"
+                            android:layout_height="wrap_content"
                             android:inputType="phone"
-                            android:paddingHorizontal="16dp"
-                            android:textColor="#1C1C1E"
-                            android:textColorHint="#AEAEB2"
-                            android:textSize="15sp" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
-                            android:background="@android:color/white"
-                            android:paddingHorizontal="4dp"
-                            android:text="Emergency Contact"
-                            android:textColor="#005DB7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </RelativeLayout>
+                            android:textColor="#1C1C1E"/>
+                    </com.google.android.material.textfield.TextInputLayout>
 
-                    <LinearLayout
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
+                        android:hint="Pickup Address"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        app:startIconDrawable="@drawable/outline_location"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
                         android:layout_marginBottom="16dp">
-                        <ImageView
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:src="@drawable/outline_location"
-                            app:tint="#005DB7" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="Pickup Location"
-                            android:textColor="#0A1D37"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <RelativeLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp">
-                        <EditText
+                        <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etPickupAddress"
                             android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:layout_marginTop="8dp"
-                            android:background="@drawable/edit_text_outline"
-                            android:hint="Search for home or pick-up point"
-                            android:drawableStart="@drawable/outline_location"
-                            android:drawablePadding="10dp"
-                            android:drawableTint="#555555"
-                            android:inputType="textPostalAddress"
-                            android:paddingHorizontal="16dp"
-                            android:textColor="#1C1C1E"
-                            android:textColorHint="#AEAEB2"
-                            android:textSize="15sp" />
-                        <TextView
-                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
-                            android:background="@android:color/white"
-                            android:paddingHorizontal="4dp"
-                            android:text="Pickup Address"
-                            android:textColor="#005DB7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </RelativeLayout>
+                            android:textColor="#1C1C1E"/>
+                    </com.google.android.material.textfield.TextInputLayout>
 
                     <androidx.appcompat.widget.AppCompatButton
                         android:id="@+id/btnSelectOnMap"

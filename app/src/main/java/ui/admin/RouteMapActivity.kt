@@ -1,4 +1,4 @@
-package com.example.bustrack_app.ui.admin
+package ui.admin
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity

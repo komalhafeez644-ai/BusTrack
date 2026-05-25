@@ -60,6 +60,15 @@
         android:textSize="13sp" />
 
     <TextView
+        android:id="@+id/txtRoute"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="Route 1"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
         android:id="@+id/txtArrivalTime"
         android:layout_width="100dp"
         android:layout_height="wrap_content"
@@ -76,5 +85,6 @@
         android:text="LATE"
         android:textSize="12sp"
         android:textStyle="bold" />
+
 
 </TableRow>

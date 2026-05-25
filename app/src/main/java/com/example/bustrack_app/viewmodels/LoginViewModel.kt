@@ -24,4 +24,13 @@ class LoginViewModel : ViewModel() {
             }
         }
     }
+
+    fun loginWithGoogle() {
+        viewModelScope.launch {
+            loginState.value = Resource.Loading()
+            // Mocking Google Sign In Delay
+            kotlinx.coroutines.delay(1500)
+            loginState.value = Resource.Success(true)
+        }
+    }
 }

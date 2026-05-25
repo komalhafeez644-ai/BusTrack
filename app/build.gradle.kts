@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.example.bustrack_app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.bustrack_app"
@@ -51,4 +51,5 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.cardview:cardview:1.0.0")
     implementation("com.google.android.gms:play-services-location:21.2.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 }

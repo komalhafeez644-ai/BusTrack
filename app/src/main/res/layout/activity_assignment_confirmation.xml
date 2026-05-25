@@ -16,6 +16,14 @@
             android:background="@color/primaryDark"
             android:padding="20dp">
 
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/outline_arrow_back_24"
+                app:tint="@color/white"
+                android:contentDescription="Back" />
+
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/ivProfile"
                 android:layout_width="90dp"
@@ -95,6 +103,7 @@
             android:layout_marginLeft="16dp"
             android:layout_marginRight="16dp"
             app:cardCornerRadius="20dp"
+            app:cardBackgroundColor="@color/white"
             app:cardElevation="10dp">
 
             <LinearLayout
@@ -173,7 +182,7 @@
                         android:layout_height="45dp"
                         android:background="@drawable/bg_icon_circle"
                         android:padding="10dp"
-                        android:src="@drawable/badge"
+                        android:src="@drawable/alt_route"
                         app:tint="@color/primaryDark" />
 
                     <LinearLayout
@@ -185,7 +194,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Driver"
+                            android:text="Route"
                             android:textSize="11sp"
                             android:textColor="@color/lightGray"  />
 
@@ -193,7 +202,7 @@
                             android:id="@+id/tvDriverName"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Ahmed Ali"
+                            android:text="Route 1"
                             android:textStyle="bold"
                             android:textColor="#212121"
                             android:textSize="14sp" />
@@ -202,7 +211,7 @@
                             android:id="@+id/tvDriverRole"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Senior Operative"
+                            android:text="North Gate"
                             android:textSize="11sp"
                             android:textColor="@color/primaryBlue"
                             android:textStyle="bold" />
@@ -340,23 +349,47 @@
                     android:lineSpacingMultiplier="1.2"
                     android:text="The assignment was calculated based on proximity to Sector 15 and current bus occupancy. Bus 42 provides the minimal latency for the 8:00 AM window." />
 
-                <TextView
-                    android:id="@+id/tvEstimatedTime"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="right"
-                    android:layout_marginTop="12dp"
-                    android:textColor="@color/primaryBlue"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    android:text="Estimated Pickup: 07:45 AM" />
-
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
 
-        <Button android:id="@+id/btnConfirm" android:layout_width="match_parent" android:layout_height="56dp" android:layout_marginHorizontal="16dp" android:backgroundTint="@color/primaryDark" android:text="Confirm &amp; Notify Parent" android:textAllCaps="false" android:textSize="16sp" app:cornerRadius="10dp"/>
-        <Button android:id="@+id/btnEdit" android:layout_width="match_parent" android:layout_height="56dp" android:layout_margin="16dp" android:backgroundTint="@color/white" android:text="Edit Assignment" android:textAllCaps="false" android:textColor="@color/primaryBlue" style="@style/Widget.MaterialComponents.Button.OutlinedButton" app:cornerRadius="10dp" android:layout_marginBottom="30dp"/>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnConfirm"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="16dp"
+            android:backgroundTint="@color/primaryDark"
+            android:text="Confirm &amp; Notify Parent"
+            android:textColor="@color/white"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            app:cornerRadius="10dp"
+            android:hapticFeedbackEnabled="true"
+            app:rippleColor="#40FFFFFF"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEdit"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_margin="16dp"
+            android:backgroundTint="@color/white"
+            android:text="Edit Assignment"
+            android:textAllCaps="false"
+            android:textColor="@color/primaryBlue"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            app:cornerRadius="10dp"
+            android:layout_marginBottom="30dp"
+            android:hapticFeedbackEnabled="true"
+            app:rippleColor="#200284C7"/>
+        <include
+            android:id="@+id/bottomNavInclude"
+            layout="@layout/layout_bottom_navigation"
+            android:layout_width="0dp"
+            android:layout_height="70dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
     </LinearLayout>
+
 </ScrollView>

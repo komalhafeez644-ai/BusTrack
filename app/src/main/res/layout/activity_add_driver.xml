@@ -71,6 +71,7 @@
                 android:layout_margin="16dp"
                 app:cardCornerRadius="28dp"
                 app:cardElevation="8dp"
+                app:cardBackgroundColor="@color/white"
                 app:layout_constraintTop_toBottomOf="@id/txtTitle">
 
                 <LinearLayout
@@ -119,6 +120,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="20dp"
                         android:hint="Employee ID"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/badge"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -126,9 +130,9 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etEmployeeId"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="48dp" />
+                            android:layout_height="wrap_content" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -137,6 +141,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="Full Name"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/ic_person"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -144,9 +151,9 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etFullName"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="48dp" />
+                            android:layout_height="wrap_content" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -155,6 +162,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="CNIC Number"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/id_card"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -162,9 +172,9 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etCnic"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="48dp" />
+                            android:layout_height="wrap_content" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -173,6 +183,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="Contact Number"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/phone_24"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -180,9 +193,9 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etPhone"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="48dp" />
+                            android:layout_height="wrap_content" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -191,6 +204,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="Email Address"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/ic_mail"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -198,9 +214,9 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etEmail"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="48dp" />
+                            android:layout_height="wrap_content" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -209,6 +225,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="Password"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:passwordToggleEnabled="true"
                         app:startIconDrawable="@drawable/lock"
                         app:boxCornerRadiusTopStart="12dp"
@@ -217,10 +236,10 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etPassword"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword"
-                            android:paddingStart="48dp" />
+                            android:inputType="textPassword" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -229,6 +248,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:hint="Confirm Password"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
                         app:passwordToggleEnabled="true"
                         app:startIconDrawable="@drawable/lock_reset"
                         app:boxCornerRadiusTopStart="12dp"
@@ -237,10 +259,10 @@
                         app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etConfirmPassword"
+                            android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword"
-                            android:paddingStart="48dp" />
+                            android:inputType="textPassword" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout
@@ -296,6 +318,7 @@
             android:layout_weight="1"
             android:backgroundTint="#0B1F3A"
             android:text="ADD DRIVER"
+            android:textColor="@color/white"
             app:cornerRadius="12dp" />
     </LinearLayout>
 

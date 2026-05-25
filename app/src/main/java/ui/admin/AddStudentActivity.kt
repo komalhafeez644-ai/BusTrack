@@ -1,19 +1,32 @@
-package com.example.bustrack_app.ui.admin
+package ui.admin
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.view.MotionEvent
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.toColorInt // 👈 Color.parseColor ki warning fix karne ke liye extension import
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.databinding.ActivityAddStudentBinding
+import com.example.bustrack_app.models.StudentModel
+import utils.ViewUtils
 
 class AddStudentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAddStudentBinding
+
+    // Photo Picker Launcher
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            binding.imgStudentUpload.setImageURI(it)
+            binding.imgStudentUpload.setPadding(0, 0, 0, 0)
+            Toast.makeText(this, "Photo uploaded successfully", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,122 +38,97 @@ class AddStudentActivity : AppCompatActivity() {
     }
 
     private fun setupGradeSpinner() {
-        // Grade dropdown items list load dynamically array setup mapping configuration
         val grades = arrayOf("Grade 9", "Grade 10", "Grade 11", "Grade 12", "BS IT 7th semester")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, grades)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerGrade.adapter = adapter
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, grades)
+        binding.spinnerGrade.setAdapter(adapter)
     }
 
-    @SuppressLint("ClickableViewAccessibility") // Custom Touch Listener handling ke liye Android Studio requirement annotation
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupClickListeners() {
-        // Top Back Header Navigation Action control trigger
         binding.btnBack.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             finish()
         }
 
-        // Map Selection Module Interface Activation Click Hook
+        binding.btnPickStudentImage.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            pickImageLauncher.launch("image/*")
+        }
+
         binding.btnSelectOnMap.setOnClickListener {
-            Toast.makeText(this, "Opening Map Route Picker...", Toast.LENGTH_SHORT).show()
+            ViewUtils.applyClickEffect(it)
+            Toast.makeText(this, "Opening Map picker...", Toast.LENGTH_SHORT).show()
         }
 
-        // =====================================================================
-        // 1. --- Cancel Form Button Touch & Click Listener ---
-        // =====================================================================
-        binding.btnCancelForm.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    // Jab user click kare (dabaaye rakhay) -> Text White aur Background primaryBlue ho jaye
-                    binding.btnCancelForm.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-                    binding.btnCancelForm.setBackgroundColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                }
-                MotionEvent.ACTION_UP -> {
-                    v.performClick() // 👈 performClick warning ka permanent proper handle!
-                    // Jab user click chhor de -> Original default style reverse ho jaye
-                    binding.btnCancelForm.setTextColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                    binding.btnCancelForm.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent))
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    binding.btnCancelForm.setTextColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                    binding.btnCancelForm.setBackgroundColor(ContextCompat.getColor(this, android.R.color.transparent))
-                }
-            }
-            false // Click listener properly cascade hone ke liye false rakha hai
-        }
-        binding.btnCancelForm.setOnClickListener {
-            finish()
-        }
-
-        // =====================================================================
-        // 2. --- Only Add Button Touch & Click Listener ---
-        // =====================================================================
-        binding.btnOnlyAdd.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    // Click karne par text white aur background fill ho jaye
-                    binding.btnOnlyAdd.setTextColor(ContextCompat.getColor(this, android.R.color.white))
-                    binding.btnOnlyAdd.setBackgroundColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                }
-                MotionEvent.ACTION_UP -> {
-                    v.performClick() // 👈 Accessibility click compliance handle node
-                    // Ungli uthane par wapas normal shape aur light gray background ho jaye
-                    binding.btnOnlyAdd.setTextColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                    binding.btnOnlyAdd.setBackgroundColor("#F2F2F7".toColorInt()) // 👈 String extension KTX logic fix!
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    binding.btnOnlyAdd.setTextColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                    binding.btnOnlyAdd.setBackgroundColor("#F2F2F7".toColorInt())
-                }
-            }
-            false
-        }
         binding.btnOnlyAdd.setOnClickListener {
-            if (validateFormInputFields()) {
-                Toast.makeText(this, "Student Profile Successfully Enrolled!", Toast.LENGTH_LONG).show()
+            ViewUtils.applyClickEffect(it)
+            if (validateForm()) {
+                saveStudent() // Only add
+                Toast.makeText(this, "Student Added Successfully!", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
 
-        // =====================================================================
-        // 3. --- Add & Next Button Touch & Click Listener ---
-        // =====================================================================
-        binding.btnAddAndNext.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    // Click hone par dark background thoda change hokar primaryBlue feedback de
-                    binding.btnAddAndNext.setBackgroundColor(ContextCompat.getColor(this, R.color.primaryBlue))
-                }
-                MotionEvent.ACTION_UP -> {
-                    v.performClick() // 👈 Perform click node integration
-                    // Chhorne par wapas original primaryDark color (#0A1D37) set ho jaye
-                    binding.btnAddAndNext.setBackgroundColor("#0A1D37".toColorInt()) // 👈 Hex validation KTX fix!
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    binding.btnAddAndNext.setBackgroundColor("#0A1D37".toColorInt())
-                }
-            }
-            false
-        }
         binding.btnAddAndNext.setOnClickListener {
-            if (validateFormInputFields()) {
-                Toast.makeText(this, "Moving to Step 2: Documents Verification System", Toast.LENGTH_SHORT).show()
+            ViewUtils.applyClickEffect(it)
+            if (validateForm()) {
+                val newStudent = saveStudent()
+                // Navigation to Route Analysis
+                val intent = Intent(this, RouteAnalysisActivity::class.java)
+                intent.putExtra("APPLICATION_DATA", mapStudentToAppModel(newStudent))
+                startActivity(intent)
+                finish()
             }
+        }
+
+        binding.btnCancelForm.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            finish()
         }
     }
 
-    private fun validateFormInputFields(): Boolean {
+    private fun validateForm(): Boolean {
         if (binding.etFullName.text.toString().trim().isEmpty()) {
-            binding.etFullName.error = "Student name required"
+            binding.etFullName.error = "Name required"
             return false
         }
-        if (binding.etParentName.text.toString().trim().isEmpty()) {
-            binding.etParentName.error = "Parent name required"
-            return false
-        }
-        if (binding.etEmergencyContact.text.toString().trim().isEmpty()) {
-            binding.etEmergencyContact.error = "Contact configuration required"
+        if (binding.etEmployeeId.text.toString().trim().isEmpty()) {
+            binding.etEmployeeId.error = "ID required"
             return false
         }
         return true
+    }
+
+    private fun saveStudent(): StudentModel {
+        val student = StudentModel(
+            id = binding.etEmployeeId.text.toString().trim(),
+            name = binding.etFullName.text.toString().trim(),
+            grade = binding.spinnerGrade.text.toString(),
+            location = binding.etPickupAddress.text.toString().trim(),
+            route = null,
+            busNo = null,
+            status = "UNASSIGNED",
+            profileImage = 0,
+            fatherName = binding.etParentName.text.toString().trim(),
+            phoneNumber = binding.etEmergencyContact.text.toString().trim(),
+            pickupTime = "TBD",
+            insuranceStatus = "Pending"
+        )
+        StudentRepository.addStudent(student)
+        return student
+    }
+
+    private fun mapStudentToAppModel(s: StudentModel): com.example.bustrack_app.models.ApplicationModel {
+        return com.example.bustrack_app.models.ApplicationModel(
+            id = s.id.filter { it.isDigit() }.toIntOrNull() ?: (100..999).random(),
+            studentName = s.name,
+            studentClass = s.grade,
+            pickupPoint = s.location,
+            contactNumber = s.phoneNumber,
+            time = "Now",
+            status = "Pending",
+            image = s.profileImage,
+            parentName = s.fatherName
+        )
     }
 }

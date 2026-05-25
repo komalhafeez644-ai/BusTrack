@@ -7,6 +7,13 @@
     android:background="@color/primaryDark"
     tools:context="ui.admin.LiveTrackingActivity">
 
+    <!-- Google Map Fragment Container -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/map"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- Top Header -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/header"
@@ -17,10 +24,10 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageView
-            android:id="@+id/btnMenu"
+            android:id="@+id/btnBack"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:src="@drawable/outline_dashboard_24"
+            android:src="@drawable/outline_arrow_back_24"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
@@ -36,31 +43,8 @@
             android:textSize="20sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toEndOf="@id/btnMenu"
+            app:layout_constraintStart_toEndOf="@id/btnBack"
             app:layout_constraintTop_toTopOf="parent" />
-
-        <ImageView
-            android:id="@+id/ivProfileTop"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/ic_person"
-            app:tint="@color/white"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            android:contentDescription="Profile" />
-
-        <ImageView
-            android:id="@+id/btnNotification"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginEnd="16dp"
-            android:src="@drawable/notifications"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/ivProfileTop"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/white"
-            android:contentDescription="Notifications" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -81,7 +65,7 @@
         <ImageView
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:src="@drawable/outline_assignment_24"
+            android:src="@drawable/search"
             app:tint="@color/lightGray"
             android:contentDescription="Search Icon" />
 
@@ -93,7 +77,7 @@
             android:background="@null"
             android:hint="Search Bus ID or Route..."
             android:inputType="text"
-            android:textColor="@color/text_dark_navy"
+            android:textColor="@color/lightGray"
             android:textSize="14sp"
             android:importantForAutofill="no" />
 
@@ -120,13 +104,16 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             app:cardCornerRadius="8dp"
+            android:backgroundTint="@color/white"
             app:cardElevation="2dp">
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="8dp"
-                android:src="@drawable/bg_google"
+                android:src="@drawable/zoom_in_24"
                 android:scaleType="centerInside"
+                app:tint="@color/primaryBlue"
+
                 android:contentDescription="Zoom In" />
         </androidx.cardview.widget.CardView>
 
@@ -134,13 +121,15 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginTop="8dp"
+            app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="8dp"
             app:cardElevation="2dp">
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="8dp"
-                android:src="@drawable/bg_google"
+                android:src="@drawable/baseline_add_24"
+                app:tint="@color/primaryBlue"
                 android:scaleType="centerInside"
                 android:contentDescription="Zoom Out" />
         </androidx.cardview.widget.CardView>
@@ -150,6 +139,7 @@
             android:layout_height="40dp"
             android:layout_marginTop="16dp"
             app:cardCornerRadius="8dp"
+            android:backgroundTint="@color/white"
             app:cardElevation="2dp">
             <ImageView
                 android:layout_width="match_parent"
@@ -172,7 +162,7 @@
         app:cardBackgroundColor="@color/card_bg_light"
         app:cardCornerRadius="24dp"
         app:cardElevation="8dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomNav">
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -330,124 +320,13 @@
         app:tint="@color/white"
         android:contentDescription="Alert megaphone" />
 
-    <!-- Bottom Navigation -->
-    <LinearLayout
-        android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
+    <include
+        android:id="@+id/bottomNavInclude"
+        layout="@layout/layout_bottom_navigation"
+        android:layout_width="0dp"
         android:layout_height="70dp"
-        android:background="@color/white"
-        android:elevation="16dp"
-        android:orientation="horizontal"
-        android:weightSum="5"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <LinearLayout
-            android:id="@+id/navDashboard"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/outline_dashboard_24"
-                app:tint="@color/bottom_nav_unselected"
-                android:contentDescription="Dashboard" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Dashboard"
-                android:textColor="@color/bottom_nav_unselected"
-                android:textSize="10sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/navLiveTracking"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:background="@drawable/bg_chip_selected"
-            android:layout_margin="8dp">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/outline_location"
-                app:tint="@color/primaryBlue"
-                android:contentDescription="Live Tracking" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Live Tracking"
-                android:textColor="@color/primaryBlue"
-                android:textSize="10sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/navAttendance"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/person_check"
-                app:tint="@color/bottom_nav_unselected"
-                android:contentDescription="Attendance" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Attendance"
-                android:textColor="@color/bottom_nav_unselected"
-                android:textSize="10sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/navAlerts"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/notifications"
-                app:tint="@color/bottom_nav_unselected"
-                android:contentDescription="Alerts" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Alerts"
-                android:textColor="@color/bottom_nav_unselected"
-                android:textSize="10sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/navProfile"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/outline_account_circle_24"
-                app:tint="@color/bottom_nav_unselected"
-                android:contentDescription="Profile" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Profile"
-                android:textColor="@color/bottom_nav_unselected"
-                android:textSize="10sp" />
-        </LinearLayout>
-    </LinearLayout>
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

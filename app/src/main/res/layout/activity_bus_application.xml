@@ -67,11 +67,11 @@
         app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/outline_assignment_24"
-            app:tint="@color/lightGray"
-            android:contentDescription="Search Icon" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="Search Icon"
+            android:src="@drawable/search"
+            app:tint="@color/lightGray" />
 
         <EditText
             android:id="@+id/searchBox"
@@ -93,42 +93,55 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
+        android:layout_marginHorizontal="16dp"
         android:gravity="center"
         android:orientation="horizontal"
         app:layout_constraintTop_toBottomOf="@id/searchContainer">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/tabAll"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_marginEnd="8dp"
             android:background="@drawable/bg_chip_selected"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
+            android:paddingVertical="10dp"
             android:text="All"
+            android:textAlignment="center"
             android:textColor="@color/primaryDark"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"/>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/tabPending"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_marginEnd="8dp"
             android:background="@drawable/bg_chip_unselected"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
+            android:paddingVertical="10dp"
             android:text="Pending"
+            android:textAlignment="center"
             android:textColor="@color/lightGray"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:clickable="true"
+            android:focusable="true"/>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/tabApproved"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:background="@drawable/bg_chip_unselected"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
+            android:paddingVertical="10dp"
             android:text="Approved"
+            android:textAlignment="center"
             android:textColor="@color/lightGray"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:clickable="true"
+            android:focusable="true"/>
     </LinearLayout>
 
     <!-- RECYCLER VIEW -->
@@ -141,8 +154,16 @@
         android:paddingBottom="16dp"
         tools:listitem="@layout/item_application"
         app:layout_constraintTop_toBottomOf="@id/filterChips"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
+    <include
+        android:id="@+id/bottomNavInclude"
+        layout="@layout/layout_bottom_navigation"
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -111,6 +111,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="24dp"
+                app:cardBackgroundColor="@color/white"
                 app:cardCornerRadius="24dp"
                 app:cardElevation="4dp"
                 app:layout_constraintTop_toBottomOf="@id/tvBadgeSemester">
@@ -395,39 +396,7 @@
                 app:cardBackgroundColor="#F2F2F7"
                 app:layout_constraintEnd_toStartOf="@id/cardInsurance"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/mainDetailCard">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@android:drawable/ic_menu_recent_history"
-                        app:tint="#005DB7" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="Pick-up Time"
-                        android:textColor="#8E8E93"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/tvPickupTime"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#1C1C1E"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        tools:text="07:15 AM" />
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
+                app:layout_constraintTop_toBottomOf="@id/mainDetailCard"/>
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/cardInsurance"
@@ -441,45 +410,11 @@
                 app:cardBackgroundColor="#F2F2F7"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@id/cardPickup"
-                app:layout_constraintTop_toBottomOf="@id/mainDetailCard">
+                app:layout_constraintTop_toBottomOf="@id/mainDetailCard"/>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
 
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@android:drawable/ic_menu_manage"
-                        app:tint="#005DB7" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="Insurance Status"
-                        android:textColor="#8E8E93"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/tvInsuranceStatus"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="#1C1C1E"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        tools:text="Active" />
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="32dp"
-                app:layout_constraintTop_toBottomOf="@id/cardPickup" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

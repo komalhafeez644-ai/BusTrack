@@ -70,8 +70,8 @@ class StudentAdapter(
                 itemBinding.txtBusInfo.visibility = View.VISIBLE
                 itemBinding.txtBusInfo.text = "Bus #102" // Yahan student model se bus info dein
 
-                // 3. Button change to Edit Details
-                itemBinding.btnAction.text = "Edit Details"
+                // 3. Button change to View Details
+                itemBinding.btnAction.text = "View Details"
                 itemBinding.btnAction.setOnClickListener { onEditClick(student) }
             }
 

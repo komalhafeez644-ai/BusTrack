@@ -24,22 +24,28 @@ class RouteDetailActivity : AppCompatActivity() {
         binding = ActivityRouteDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Dummy data initialization
-        currentRoute = RouteModel(
-            id = "1",
-            routeCode = "05",
-            routeName = "Express North",
-            status = "ACTIVE",
-            busNo = "UNIT-9021",
-            driverName = "Ahmed Ali",
-            stopsCount = 8,
-            studentsCount = 48,
-            stopsList = mutableListOf(
-                StopItem("01", "Sunrise Apartments", "07:00 AM", 33.7000, 73.0600),
-                StopItem("02", "Green Park", "07:15 AM", 33.7100, 73.0700),
-                StopItem("03", "Library West Gate", "07:25 AM", 33.7200, 73.0800)
+        // Get route ID from intent
+        val routeId = intent.getStringExtra("ROUTE_ID")
+        currentRoute = com.example.bustrack_app.data.RouteRepository.routeList.value?.find { it.id == routeId }
+        
+        // If not found, use a fallback (for testing)
+        if (currentRoute == null) {
+            currentRoute = com.example.bustrack_app.models.RouteModel(
+                id = "1",
+                routeCode = "05",
+                routeName = "Express North",
+                status = "ACTIVE",
+                busNo = "BUS-102",
+                driverName = "Ahmed Ali",
+                stopsCount = 8,
+                studentsCount = 48,
+                stopsList = mutableListOf(
+                    com.example.bustrack_app.models.StopItem("01", "Sunrise Apartments", "07:00 AM", 33.7000, 73.0600),
+                    com.example.bustrack_app.models.StopItem("02", "Green Park", "07:15 AM", 33.7100, 73.0700),
+                    com.example.bustrack_app.models.StopItem("03", "Library West Gate", "07:25 AM", 33.7200, 73.0800)
+                )
             )
-        )
+        }
 
         // ⚙️ RecyclerView aur Adapter Setup
         setupRecyclerView()
@@ -89,7 +95,11 @@ class RouteDetailActivity : AppCompatActivity() {
 
         // Save Changes Click Listener
         binding.btnSaveChanges.setOnClickListener {
-            Toast.makeText(this, "Changes saved successfully", Toast.LENGTH_SHORT).show()
+            currentRoute?.let { route ->
+                com.example.bustrack_app.data.RouteRepository.updateRoute(route)
+                Toast.makeText(this, "Changes saved successfully", Toast.LENGTH_SHORT).show()
+                finish()
+            }
         }
     }
 
