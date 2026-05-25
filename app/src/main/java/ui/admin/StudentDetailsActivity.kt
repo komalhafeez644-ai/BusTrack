@@ -46,6 +46,8 @@ class StudentDetailsActivity : AppCompatActivity() {
             binding.tvBusNumber.text = data.busNo ?: "Not Assigned"
             binding.tvFatherName.text = data.fatherName
             binding.tvPhoneNumber.text = data.phoneNumber
+            binding.tvPickupTime.text = data.pickupTime
+            binding.tvInsuranceStatus.text = data.insuranceStatus
 
 
             if (data.profileImage != 0) {
