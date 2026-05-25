@@ -156,7 +156,7 @@
                         android:layout_height="56dp"
                         android:layout_marginTop="24dp"
                         android:backgroundTint="@color/primaryDark"
-                        android:text="Sign In"
+                        android:text="@string/sign_in"
                         android:textAllCaps="false"
                         android:textColor="@color/white"
                         android:textSize="18sp"
