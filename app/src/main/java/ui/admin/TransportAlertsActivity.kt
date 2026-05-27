@@ -3,18 +3,21 @@ package ui.admin
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bustrack_app.R
 import com.example.bustrack_app.adapters.AlertsAdapter
 import com.example.bustrack_app.databinding.ActivityTransportAlertsBinding
 import com.example.bustrack_app.viewmodels.AlertsViewModel
+import utils.NavigationUtils
 
 class TransportAlertsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityTransportAlertsBinding
-    private val viewModel: AlertsViewModel by viewModels()
+    private val viewModel: AlertsViewModel by lazy {
+        ViewModelProvider(this)[AlertsViewModel::class.java]
+    }
     private lateinit var adapter: AlertsAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,7 +26,6 @@ class TransportAlertsActivity : AppCompatActivity() {
         binding = ActivityTransportAlertsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // ✅ FIX IMPORT ISSUE
         window.statusBarColor = Color.parseColor("#051024")
 
         // BACK BUTTON
@@ -52,7 +54,7 @@ class TransportAlertsActivity : AppCompatActivity() {
             adapter.update(list)
         }
 
-        // ✅ CHIPS FILTER (FIXED)
+        // ✅ CHIPS FILTER
         binding.chipAll.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             updateChipUI("ALL")
@@ -70,30 +72,27 @@ class TransportAlertsActivity : AppCompatActivity() {
             updateChipUI("IMPORTANT")
             viewModel.filterByType("IMPORTANT")
         }
-
-        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
-    private fun updateChipUI(selectedType: String) {
-        val chips = listOf(binding.chipAll, binding.chipCritical, binding.chipImportant)
+    override fun onResume() {
+        super.onResume()
+        NavigationUtils.setupBottomNavigation(this)
+    }
+
+    private fun updateChipUI(type: String) {
+        val selectedBg = R.drawable.bg_chip_selected
+        val unselectedBg = R.drawable.bg_chip_unselected
         
-        chips.forEach { chip ->
-            val type = when (chip.id) {
-                R.id.chipAll -> "ALL"
-                R.id.chipCritical -> "CRITICAL"
-                R.id.chipImportant -> "IMPORTANT"
-                else -> ""
-            }
-            
-            if (type == selectedType) {
-                chip.setBackgroundResource(R.drawable.bg_chip_selected)
-                chip.setTextColor(Color.parseColor("#0F172A"))
-                chip.setTypeface(null, android.graphics.Typeface.BOLD)
-            } else {
-                chip.setBackgroundResource(R.drawable.bg_chip_unselected)
-                chip.setTextColor(Color.parseColor("#64748B"))
-                chip.setTypeface(null, android.graphics.Typeface.NORMAL)
-            }
-        }
+        val selectedText = Color.parseColor("#0F172A")
+        val unselectedText = Color.parseColor("#64748B")
+
+        binding.chipAll.setBackgroundResource(if (type == "ALL") selectedBg else unselectedBg)
+        binding.chipAll.setTextColor(if (type == "ALL") selectedText else unselectedText)
+
+        binding.chipCritical.setBackgroundResource(if (type == "CRITICAL") selectedBg else unselectedBg)
+        binding.chipCritical.setTextColor(if (type == "CRITICAL") selectedText else unselectedText)
+
+        binding.chipImportant.setBackgroundResource(if (type == "IMPORTANT") selectedBg else unselectedBg)
+        binding.chipImportant.setTextColor(if (type == "IMPORTANT") selectedText else unselectedText)
     }
 }

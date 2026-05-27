@@ -2,6 +2,7 @@ package utils
 
 import android.app.Activity
 import android.content.Intent
+import android.view.View
 import android.widget.LinearLayout
 import com.example.bustrack_app.R
 import ui.admin.*
@@ -15,51 +16,62 @@ object NavigationUtils {
         val navAlerts = activity.findViewById<LinearLayout>(R.id.navAlerts)
         val navProfile = activity.findViewById<LinearLayout>(R.id.navProfile)
 
-        // Set selected state
-        navDashboard?.isSelected = activity is AdminDashboardActivity
-        navLiveTracking?.isSelected = activity is LiveTrackingActivity
-        navAttendance?.isSelected = activity is AttendanceActivity
-        navAlerts?.isSelected = activity is TransportAlertsActivity
-        navProfile?.isSelected = activity is ProfileActivity
+        // Reset all states first to ensure a clean UI
+        val navs = listOf(navDashboard, navLiveTracking, navAttendance, navAlerts, navProfile)
+        navs.forEach { it?.isSelected = false }
 
-        // Dashboard click
+        // Set the correct selected state based on the current activity
+        when (activity) {
+            is AdminDashboardActivity -> navDashboard?.isSelected = true
+            is LiveTrackingActivity -> navLiveTracking?.isSelected = true
+            is AttendanceActivity -> navAttendance?.isSelected = true
+            is TransportAlertsActivity -> navAlerts?.isSelected = true
+            is ProfileActivity -> navProfile?.isSelected = true
+        }
+
+        // --- CLICK LISTENERS ---
+
         navDashboard?.setOnClickListener {
             if (activity !is AdminDashboardActivity) {
-                activity.startActivity(Intent(activity, AdminDashboardActivity::class.java))
-                activity.finish()
+                navigateTo(activity, AdminDashboardActivity::class.java)
             }
         }
 
-        // Live Tracking click
         navLiveTracking?.setOnClickListener {
             if (activity !is LiveTrackingActivity) {
-                activity.startActivity(Intent(activity, LiveTrackingActivity::class.java))
-                if (activity !is AdminDashboardActivity) activity.finish()
+                navigateTo(activity, LiveTrackingActivity::class.java)
             }
         }
 
-        // Attendance click
         navAttendance?.setOnClickListener {
             if (activity !is AttendanceActivity) {
-                activity.startActivity(Intent(activity, AttendanceActivity::class.java))
-                if (activity !is AdminDashboardActivity) activity.finish()
+                navigateTo(activity, AttendanceActivity::class.java)
             }
         }
 
-        // Alerts click
         navAlerts?.setOnClickListener {
             if (activity !is TransportAlertsActivity) {
-                activity.startActivity(Intent(activity, TransportAlertsActivity::class.java))
-                if (activity !is AdminDashboardActivity) activity.finish()
+                navigateTo(activity, TransportAlertsActivity::class.java)
             }
         }
 
-        // Profile click
         navProfile?.setOnClickListener {
             if (activity !is ProfileActivity) {
-                activity.startActivity(Intent(activity, ProfileActivity::class.java))
-                if (activity !is AdminDashboardActivity) activity.finish()
+                navigateTo(activity, ProfileActivity::class.java)
             }
         }
+    }
+
+    /**
+     * Common navigation logic to ensure screens don't flicker and memory is saved
+     */
+    private fun navigateTo(activity: Activity, target: Class<*>) {
+        val intent = Intent(activity, target)
+        // FLAG_ACTIVITY_REORDER_TO_FRONT: Brings an existing activity instance to top instead of creating new
+        // FLAG_ACTIVITY_SINGLE_TOP: Avoids creating multiple instances if it's already at top
+        intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        activity.startActivity(intent)
+        // Remove standard "Slide in" animations for a professional "static" tab feel
+        activity.overridePendingTransition(0, 0)
     }
 }

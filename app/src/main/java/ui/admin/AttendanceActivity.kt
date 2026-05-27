@@ -1,23 +1,22 @@
 package ui.admin
 
 import android.app.DatePickerDialog
-import android.graphics.Color
 import android.os.Bundle
-import android.view.LayoutInflater
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.AttendanceRecordModel
 import com.example.bustrack_app.viewmodels.AttendanceViewModel
+import utils.NavigationUtils
 import java.util.*
 
 class AttendanceActivity : AppCompatActivity() {
 
     private lateinit var viewModel: AttendanceViewModel
     private lateinit var tableLayout: TableLayout
-
-    private var selectedDate: String = ""
+    private var selectedDate: String = "Select Date"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +54,7 @@ class AttendanceActivity : AppCompatActivity() {
 
             override fun onItemSelected(
                 parent: AdapterView<*>?,
-                view: android.view.View?,
+                view: View?,
                 position: Int,
                 id: Long
             ) {
@@ -95,7 +94,6 @@ class AttendanceActivity : AppCompatActivity() {
             ).show()
         }
 
-        utils.NavigationUtils.setupBottomNavigation(this)
         val btnBack = findViewById<ImageView>(R.id.btnBack)
 
         btnBack.setOnClickListener {
@@ -103,45 +101,22 @@ class AttendanceActivity : AppCompatActivity() {
         }
     }
 
-    // ⭐ TABLE RENDER
-    private fun populateTable(records: List<AttendanceRecordModel>) {
+    override fun onResume() {
+        super.onResume()
+        NavigationUtils.setupBottomNavigation(this)
+    }
 
-        if (tableLayout.childCount > 1) {
-            tableLayout.removeViews(1, tableLayout.childCount - 1)
-        }
+    private fun populateTable(records: List<AttendanceRecordModel>) {
+        tableLayout.removeAllViews()
 
         for (record in records) {
-
-            val row = LayoutInflater.from(this)
-                .inflate(R.layout.item_attendance_row, null) as TableRow
-
-            // Avatar
-            val avatarTxt = row.findViewById<TextView>(R.id.txtAvatar)
-            val initials = record.studentName.split(" ")
-                .filter { it.isNotBlank() }
-                .map { it[0] }
-                .joinToString("")
-                .uppercase()
-
-            avatarTxt?.text = initials
-
-            // Data
-            row.findViewById<TextView>(R.id.txtStudentName)?.text = record.studentName
-            row.findViewById<TextView>(R.id.txtRollNo)?.text = record.rollNo
-            row.findViewById<TextView>(R.id.txtBusStop)?.text = record.busStop
-            row.findViewById<TextView>(R.id.txtRoute)?.text = record.route
-            row.findViewById<TextView>(R.id.txtArrivalTime)?.text = record.arrivalTime
-
-            // Status color
-            val statusView = row.findViewById<TextView>(R.id.txtStatus)
-            statusView?.text = record.status
-
-            when (record.status.uppercase()) {
-                "LATE" -> statusView?.setTextColor(Color.RED)
-                "PRESENT" -> statusView?.setTextColor(Color.parseColor("#2E7D32"))
-                "ABSENT" -> statusView?.setTextColor(Color.parseColor("#BA1A1A"))
-                else -> statusView?.setTextColor(Color.GRAY)
-            }
+            val row = layoutInflater.inflate(R.layout.item_attendance_row, null) as TableRow
+            row.findViewById<TextView>(R.id.txtStudentName).text = record.studentName
+            row.findViewById<TextView>(R.id.txtRollNo).text = record.rollNo
+            row.findViewById<TextView>(R.id.txtBusStop).text = record.busStop
+            row.findViewById<TextView>(R.id.txtRoute).text = record.route
+            row.findViewById<TextView>(R.id.txtArrivalTime).text = record.arrivalTime
+            row.findViewById<TextView>(R.id.txtStatus).text = record.status
 
             tableLayout.addView(row)
         }

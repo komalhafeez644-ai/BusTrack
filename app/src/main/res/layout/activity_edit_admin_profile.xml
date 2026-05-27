@@ -248,6 +248,7 @@
                     android:layout_marginTop="32dp"
                     android:backgroundTint="#071B46"
                     android:text="Save Changes"
+                    android:textColor="@color/white"
                     app:cornerRadius="16dp"
                     app:icon="@drawable/check_circle"
                     app:iconGravity="textStart" />
@@ -259,18 +260,12 @@
                     android:layout_height="60dp"
                     android:layout_marginTop="12dp"
                     android:text="CANCEL"
+                    android:textColor="#071B46"
                     app:cornerRadius="16dp"
-                    app:strokeColor="#071B46" />
+                    app:strokeColor="#071B46"
+                    app:strokeWidth="1.5dp" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </androidx.core.widget.NestedScrollView>
-    <include
-        android:id="@+id/bottomNavInclude"
-        layout="@layout/layout_bottom_navigation"
-        android:layout_width="0dp"
-        android:layout_height="70dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

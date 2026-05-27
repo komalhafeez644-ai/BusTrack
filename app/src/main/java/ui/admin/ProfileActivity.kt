@@ -4,11 +4,11 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.databinding.ActivityProfileBinding
 import com.example.bustrack_app.viewmodels.ProfileViewModel
+import utils.NavigationUtils
 
 class ProfileActivity : AppCompatActivity() {
 
@@ -25,7 +25,11 @@ class ProfileActivity : AppCompatActivity() {
 
         setupObservers()
         setupClickListeners()
-        utils.NavigationUtils.setupBottomNavigation(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupObservers() {
@@ -35,28 +39,15 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvInfoEmail.text = admin.email
             binding.tvInfoDept.text = admin.department
             binding.tvInfoEmpID.text = admin.employeeId
-
-            binding.switchBus.isChecked = admin.isBusDelayNotifyEnabled
-            binding.switchEmergency.isChecked = admin.isEmergencyNotifyEnabled
-            binding.switchDriver.isChecked = admin.isDriverNotifyEnabled
         }
     }
 
     private fun setupClickListeners() {
         binding.btnBack.setOnClickListener { finish() }
 
-        // EDIT BUTTON CLICKED - Navigating to Edit Profile
         binding.btnEditProfile.setOnClickListener {
             val intent = Intent(this, EditAdminProfileActivity::class.java)
             startActivity(intent)
-        }
-
-        binding.switchBus.setOnCheckedChangeListener { _, isChecked ->
-            viewModel.updateBusDelayNotification(isChecked)
-        }
-
-        binding.btnLogout.setOnClickListener {
-            Toast.makeText(this, "Logging out...", Toast.LENGTH_SHORT).show()
         }
     }
 }

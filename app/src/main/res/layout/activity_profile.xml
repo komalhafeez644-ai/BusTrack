@@ -1,534 +1,335 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F4F5F9"
-    android:fillViewport="true">
+    android:background="#F8FAFC">
 
+    <!-- Top Bar -->
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp">
+        android:padding="16dp"
+        app:layout_constraintTop_toTopOf="parent">
 
         <ImageView
             android:id="@+id/btnBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
             android:src="@drawable/outline_arrow_back_24"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="#051024" />
 
         <TextView
-            android:id="@+id/tvHeader"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Profile"
-            android:textColor="#111827"
+            android:textColor="#051024"
             android:textSize="20sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btnBack"
+            android:layout_marginStart="16dp"
             app:layout_constraintTop_toTopOf="parent" />
 
         <ImageView
             android:id="@+id/btnEditProfile"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
             android:src="@drawable/outline_edit_24"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardProfile"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            app:cardBackgroundColor="#071B46"
-            app:cardCornerRadius="24dp"
-            app:layout_constraintTop_toBottomOf="@id/btnBack">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:padding="24dp">
-
-                <com.google.android.material.imageview.ShapeableImageView
-                    android:id="@+id/imgProfile"
-                    android:layout_width="100dp"
-                    android:layout_height="100dp"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/admin"
-                    app:shapeAppearanceOverlay="@style/CircleImage"
-                    app:strokeColor="#4DA3FF"
-                    app:strokeWidth="3dp" />
-
-                <TextView
-                    android:id="@+id/tvAdminName"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="John Admin"
-                    android:textColor="@android:color/white"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="TRANSPORT ADMINISTRATOR"
-                    android:textColor="#B7C4D8"
-                    android:textSize="12sp" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardAdminInfo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="@color/white"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:layout_constraintTop_toBottomOf="@id/cardProfile">
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="20dp">
-
-                <View
-                    android:id="@+id/viewIndicator"
-                    android:layout_width="4dp"
-                    android:layout_height="20dp"
-                    android:background="#1565C0"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/tvAdminInfoTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:text="Admin Info"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    app:layout_constraintStart_toEndOf="@id/viewIndicator"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/lblFullName"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="Full Name"
-                    android:textColor="#757575"
-                    android:textSize="12sp"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvAdminInfoTitle" />
-
-                <TextView
-                    android:id="@+id/tvInfoFullName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="John Admin"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    app:layout_constraintTop_toBottomOf="@id/lblFullName" />
-
-                <View
-                    android:id="@+id/Admindivider1"
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="12dp"
-                    android:background="#F0F0F0"
-                    app:layout_constraintTop_toBottomOf="@id/tvInfoFullName" />
-
-                <TextView
-                    android:id="@+id/lblEmail"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Official Email"
-                    android:textColor="#757575"
-                    android:textSize="12sp"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/Admindivider1" />
-
-                <TextView
-                    android:id="@+id/tvInfoEmail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="admin@punjabcollege.edu"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    app:layout_constraintTop_toBottomOf="@id/lblEmail" />
-
-                <View
-                    android:id="@+id/Admindivider2"
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="12dp"
-                    android:background="#F0F0F0"
-                    app:layout_constraintTop_toBottomOf="@id/tvInfoEmail" />
-
-                <TextView
-                    android:id="@+id/lblDept"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Department"
-                    android:textColor="#757575"
-                    android:textSize="12sp"
-                    app:layout_constraintEnd_toStartOf="@id/lblEmpID"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/Admindivider2" />
-
-                <TextView
-                    android:id="@+id/tvInfoDept"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Logistics"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/lblDept" />
-
-                <TextView
-                    android:id="@+id/lblEmpID"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Employee ID"
-                    android:textColor="#757575"
-                    android:textSize="12sp"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toEndOf="@id/lblDept"
-                    app:layout_constraintTop_toTopOf="@id/lblDept" />
-
-                <TextView
-                    android:id="@+id/tvInfoEmpID"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="CF-ADM-24"
-                    android:textColor="#1565C0"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toEndOf="@id/tvInfoDept"
-                    app:layout_constraintTop_toTopOf="@id/tvInfoDept" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </com.google.android.material.card.MaterialCardView>
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardNotifications"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="2dp"
-            app:cardBackgroundColor="@android:color/white"
-            app:layout_constraintTop_toBottomOf="@id/cardAdminInfo">
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="20dp">
-
-                <View
-                    android:id="@+id/redIndicator"
-                    android:layout_width="4dp"
-                    android:layout_height="20dp"
-                    android:background="#D32F2F"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/tvNotifTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:text="Notification Alerts"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    app:layout_constraintStart_toEndOf="@id/redIndicator"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/tvBusTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:text="Bus Delay Alerts"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    app:layout_constraintEnd_toStartOf="@id/switchBus"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvNotifTitle" />
-
-                <TextView
-                    android:id="@+id/tvBusDesc"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Notify when buses are 5+ mins late"
-                    android:textSize="12sp"
-                    android:textColor="#757575"
-                    app:layout_constraintEnd_toStartOf="@id/switchBus"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvBusTitle" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchBus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/tvBusTitle"
-                    app:layout_constraintBottom_toBottomOf="@id/tvBusDesc" />
-
-                <TextView
-                    android:id="@+id/tvEmerTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="Emergency Alerts"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    app:layout_constraintEnd_toStartOf="@id/switchEmergency"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvBusDesc" />
-
-                <TextView
-                    android:id="@+id/tvEmerDesc"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Critical safety and breakdown alerts"
-                    android:textSize="12sp"
-                    android:textColor="#757575"
-                    app:layout_constraintEnd_toStartOf="@id/switchEmergency"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvEmerTitle" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchEmergency"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/tvEmerTitle"
-                    app:layout_constraintBottom_toBottomOf="@id/tvEmerDesc" />
-
-                <TextView
-                    android:id="@+id/tvDriverTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="Driver Alerts"
-                    android:textStyle="bold"
-                    android:textSize="15sp"
-                    app:layout_constraintEnd_toStartOf="@id/switchDriver"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvEmerDesc" />
-
-                <TextView
-                    android:id="@+id/tvDriverDesc"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:text="Activity reports and check-ins"
-                    android:textSize="12sp"
-                    android:textColor="#757575"
-                    app:layout_constraintEnd_toStartOf="@id/switchDriver"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/tvDriverTitle" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchDriver"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:layout_constraintEnd_toEndOf="parent"
-
-                    app:layout_constraintTop_toTopOf="@id/tvDriverTitle"
-                    app:layout_constraintBottom_toBottomOf="@id/tvDriverDesc" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </com.google.android.material.card.MaterialCardView>
-        <TextView
-            android:id="@+id/tvGeneralSettingsTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:layout_marginStart="4dp"
-            android:text="General Settings"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#111827"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/cardNotifications" />
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardGeneralSettings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="2dp"
-            app:cardBackgroundColor="@android:color/white"
-            app:layout_constraintTop_toBottomOf="@id/tvGeneralSettingsTitle">
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp">
-
-                <ImageView
-                    android:id="@+id/imgLock"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:src="@drawable/lock_reset"
-                    app:tint="#424242"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/tvPassword"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:text="Change Password"
-                    android:textColor="#111827"
-                    android:textSize="16sp"
-                    app:layout_constraintStart_toEndOf="@id/imgLock"
-                    app:layout_constraintTop_toTopOf="@id/imgLock"
-                    app:layout_constraintBottom_toBottomOf="@id/imgLock" />
-
-                <ImageView
-                    android:id="@+id/arrow1"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginEnd="16dp"
-                    android:src="@drawable/outline_arrow_forward_ios_24"
-                    app:tint="#9E9E9E"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/imgLock"
-                    app:layout_constraintBottom_toBottomOf="@id/imgLock" />
-
-                <View
-                    android:id="@+id/settingdivider1"
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginStart="56dp"
-                    android:background="#F0F0F0"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/imgLock" />
-
-                <ImageView
-                    android:id="@+id/imgHelp"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:src="@drawable/help"
-                    app:tint="#424242"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/settingdivider1" />
-
-                <TextView
-                    android:id="@+id/tvHelp"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:text="Help and Support"
-                    android:textColor="#111827"
-                    android:textSize="16sp"
-                    app:layout_constraintStart_toEndOf="@id/imgHelp"
-                    app:layout_constraintTop_toTopOf="@id/imgHelp"
-                    app:layout_constraintBottom_toBottomOf="@id/imgHelp" />
-
-                <ImageView
-                    android:id="@+id/arrow2"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginEnd="16dp"
-                    android:src="@drawable/outline_arrow_forward_ios_24"
-                    app:tint="#9E9E9E"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/imgHelp"
-                    app:layout_constraintBottom_toBottomOf="@id/imgHelp" />
-
-                <View
-                    android:id="@+id/settingdivider2"
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginStart="56dp"
-                    android:background="#F0F0F0"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/imgHelp" />
-
-                <ImageView
-                    android:id="@+id/imgSecure"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:src="@drawable/security_shield"
-                    app:tint="#424242"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@id/settingdivider2" />
-
-                <TextView
-                    android:id="@+id/tvPrivacy"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:text="Privacy Policy"
-                    android:textColor="#111827"
-                    android:textSize="16sp"
-                    app:layout_constraintStart_toEndOf="@id/imgSecure"
-                    app:layout_constraintTop_toTopOf="@id/imgSecure"
-                    app:layout_constraintBottom_toBottomOf="@id/imgSecure" />
-
-                <ImageView
-                    android:id="@+id/arrow3"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginEnd="16dp"
-                    android:src="@drawable/outline_arrow_forward_ios_24"
-                    app:tint="#9E9E9E"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@id/imgSecure"
-                    app:layout_constraintBottom_toBottomOf="@id/imgSecure" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLogout"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="40dp"
-            android:backgroundTint="#C91414"
-            android:text="Logout"
-            android:textSize="16sp"
-            app:cornerRadius="16dp"
-            app:layout_constraintTop_toBottomOf="@id/cardGeneralSettings" />
-
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="#051024" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-</androidx.core.widget.NestedScrollView>
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
+            <!-- Profile Header Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#051024"
+                app:cardCornerRadius="28dp"
+                app:cardElevation="4dp">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="24dp">
 
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.imageview.ShapeableImageView
+                            android:id="@+id/imgProfile"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:padding="4dp"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/admin"
+                            app:shapeAppearanceOverlay="@style/CircleImage"
+                            app:strokeColor="#2563EB"
+                            app:strokeWidth="2dp" />
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="bottom|end"
+                            android:layout_margin="4dp"
+                            android:background="@drawable/bg_profile_circle"
+                            android:contentDescription="Verified"
+                            android:padding="2dp"
+                            android:src="@drawable/check_circle"
+                            app:tint="#2563EB" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/tvAdminName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="John Admin"
+                        android:textColor="@color/white"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TRANSPORT ADMINISTRATOR"
+                        android:textColor="#94A3B8"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.05" />
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        app:cardBackgroundColor="#1E293B"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="0dp">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="8dp">
+
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@drawable/groups"
+                                app:tint="#CBD5E1"
+                                android:contentDescription="Institution"/>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="Punjab College"
+                                android:textColor="#CBD5E1"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Admin Info Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="4dp"
+                            android:layout_height="20dp"
+                            android:background="#2563EB" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="Admin Info"
+                            android:textColor="#051024"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- Full Name -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:text="Full Name"
+                        android:textColor="#64748B"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvInfoFullName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="John Admin"
+                        android:textColor="#051024"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:background="#F1F5F9" />
+
+                    <!-- Official Email -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="Official Email"
+                        android:textColor="#64748B"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvInfoEmail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="admin@punjabcollege.edu"
+                        android:textColor="#051024"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:background="#F1F5F9" />
+
+                    <!-- Phone Number -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="Phone Number"
+                        android:textColor="#64748B"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvInfoPhone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="+92 300 1234567"
+                        android:textColor="#051024"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:background="#F1F5F9" />
+
+                    <!-- Bottom Info Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Department"
+                                android:textColor="#64748B"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvInfoDept"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Logistics"
+                                android:textColor="#051024"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Employee ID"
+                                android:textColor="#64748B"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvInfoEmpID"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="CF-ADM-24"
+                                android:textColor="#2563EB"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

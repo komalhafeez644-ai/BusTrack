@@ -14,6 +14,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BusTrack_App">
         <activity
+            android:name="ui.admin.FaqActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.TermsConditionsActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.PrivacyPolicyActivityActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.PreferencesActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.NotificationSettingsActivity"
+            android:exported="false" />
+        <activity
             android:name="ui.admin.ViewDriverProfileActivity"
             android:exported="false" />
         <activity
