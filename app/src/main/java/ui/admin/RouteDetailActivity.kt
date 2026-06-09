@@ -4,19 +4,19 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.net.toUri
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.example.bustrack_app.adapter.StopAdapter // 👈 StopAdapter ka import
+import com.example.bustrack_app.adapter.StopAdapter
 import com.example.bustrack_app.databinding.ActivityRouteDetailBinding
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StopItem
+import ui.admin.RouteMapActivity
 import java.util.Locale
 
 class RouteDetailActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRouteDetailBinding
     private var currentRoute: RouteModel? = null
-    private lateinit var stopAdapter: StopAdapter // 👈 Adapter ka global variable declare kiya
+    private lateinit var stopAdapter: StopAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,7 +28,6 @@ class RouteDetailActivity : AppCompatActivity() {
         val routeId = intent.getStringExtra("ROUTE_ID")
         currentRoute = com.example.bustrack_app.data.RouteRepository.routeList.value?.find { it.id == routeId }
         
-        // If not found, use a fallback (for testing)
         if (currentRoute == null) {
             currentRoute = com.example.bustrack_app.models.RouteModel(
                 id = "1",
@@ -47,114 +46,64 @@ class RouteDetailActivity : AppCompatActivity() {
             )
         }
 
-        // ⚙️ RecyclerView aur Adapter Setup
         setupRecyclerView()
 
-        // Back Action
-        binding.btnBack.setOnClickListener { finish() }
+        // Full Screen Map Navigation
+        binding.btnViewOnMap.setOnClickListener {
+            val intent = Intent(this, RouteMapActivity::class.java)
+            intent.putExtra("ROUTE_ID", currentRoute?.id)
+            startActivity(intent)
+        }
 
-        // Preview data display load karna
+        binding.btnBack.setOnClickListener { finish() }
         setupDataDisplay()
 
-        // Map Button Click Listener
-        binding.btnViewOnMap.setOnClickListener {
+        binding.btnSaveChanges.setOnClickListener {
             currentRoute?.let { route ->
-                if (route.stopsList.isNotEmpty()) {
-                    val firstStop = route.stopsList[0]
-                    val mapUri = "geo:${firstStop.latitude},${firstStop.longitude}?q=${firstStop.latitude},${firstStop.longitude}(${firstStop.stopName})".toUri()
-                    val intent = Intent(Intent.ACTION_VIEW, mapUri)
-                    intent.setPackage("com.google.android.apps.maps")
-
-                    if (intent.resolveActivity(packageManager) != null) {
-                        startActivity(intent)
+                binding.btnSaveChanges.isEnabled = false
+                binding.btnSaveChanges.text = "Saving..."
+                
+                com.example.bustrack_app.data.RouteRepository.updateRoute(route) { success ->
+                    if (success) {
+                        Toast.makeText(this, "Changes saved to Cloud", Toast.LENGTH_SHORT).show()
+                        finish()
                     } else {
-                        val browserUri = "http://maps.google.com/?q=${firstStop.latitude},${firstStop.longitude}".toUri()
-                        startActivity(Intent(Intent.ACTION_VIEW, browserUri))
+                        binding.btnSaveChanges.isEnabled = true
+                        binding.btnSaveChanges.text = "Save Changes"
+                        Toast.makeText(this, "Failed to update", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Toast.makeText(this, "No stops available to show on map", Toast.LENGTH_SHORT).show()
                 }
             }
         }
-
-        // Add Stop Click Listener
-        binding.btnAddNewStopAction.setOnClickListener {
-            val stopName = binding.etSearchOrAddStop.text.toString().trim()
-            if (stopName.isNotEmpty()) {
-                val nextId = String.format(Locale.getDefault(), "%02d", (currentRoute?.stopsList?.size ?: 0) + 1)
-                val newStop = StopItem(nextId, stopName, "07:35 AM", 33.7000, 73.0600)
-
-                currentRoute?.stopsList?.add(newStop)
-                Toast.makeText(this, "$stopName added successfully!", Toast.LENGTH_SHORT).show()
-                binding.etSearchOrAddStop.text?.clear()
-
-                // 🔄 List aur counter dono ko live update karna
-                updateStopsList()
-            }
-        }
-
-        // Save Changes Click Listener
-        binding.btnSaveChanges.setOnClickListener {
-            currentRoute?.let { route ->
-                com.example.bustrack_app.data.RouteRepository.updateRoute(route)
-                Toast.makeText(this, "Changes saved successfully", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-        }
     }
 
-    // RecyclerView aur Adapter ko initial settings dena
     private fun setupRecyclerView() {
         binding.rvStopsList.layoutManager = LinearLayoutManager(this)
-
-        // Adapter initialize kiya aur cross icon click par onDeleteStopClicked run kiya
-        stopAdapter = StopAdapter(mutableListOf()) { deletedStop ->
-            onDeleteStopClicked(deletedStop)
-        }
+        stopAdapter = StopAdapter(mutableListOf())
         binding.rvStopsList.adapter = stopAdapter
     }
 
-    // Text data aur initially list load karne ke liye
     private fun setupDataDisplay() {
         currentRoute?.let { route ->
             binding.tvMainRouteName.text = "${route.routeName} -\nRoute ${route.routeCode}"
             binding.tvBusNo.text = route.busNo
             binding.tvDriverName.text = route.driverName
             binding.tvStudentsCount.text = route.studentsCount.toString()
-
-            // Initial load for stops list
             updateStopsList()
         }
     }
 
-    // counter aur adapter dono ko ek sath refresh karne ka standard function
     private fun updateStopsList() {
         currentRoute?.let { route ->
-            // 1. Counter text change hoga
             binding.tvTotalStopsCount.text = "${route.stopsList.size} STOPS TOTAL"
-
-            // 2. Adapter ke paas naya data jayega aur list re-render hogi
             stopAdapter.updateStops(route.stopsList)
         }
     }
 
-    // Stop delete function jo adapter se trigger hoga
-    fun onDeleteStopClicked(stop: StopItem) {
-        currentRoute?.stopsList?.remove(stop)
-        Toast.makeText(this, "${stop.stopName} removed", Toast.LENGTH_SHORT).show()
-
-        // 🔄 Delete ke baad serial numbers aur list sync karne ke liye refresh
-        fixStopSequences()
+    override fun onResume() {
+        super.onResume()
+        // Refresh if changes made on full screen map
         updateStopsList()
-    }
-
-    // Stop delete hone ke baad serial numbers (01, 02, 03) ko sahi karne ke liye logic
-    private fun fixStopSequences() {
-        currentRoute?.stopsList?.forEachIndexed { index, stopItem ->
-            // index 0 hai to "01" banayega, 1 hai to "02" banayega
-            val newId = String.format(Locale.getDefault(), "%02d", index + 1)
-            // Model ke andar id field update karne ke liye agar id variable writable (var) ho
-            // Agar aapke StopItem mein id 'val' hai to aap ise skip bhi kar sakte hain.
-        }
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 }

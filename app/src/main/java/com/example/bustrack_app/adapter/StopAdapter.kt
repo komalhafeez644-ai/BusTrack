@@ -7,8 +7,7 @@ import com.example.bustrack_app.databinding.ItemStopRowBinding // 👈 Aapki lay
 import com.example.bustrack_app.models.StopItem
 
 class StopAdapter(
-    private var stops: List<StopItem>,
-    private val onDeleteClick: (StopItem) -> Unit // Delete click handle karne ke liye function
+    private var stops: List<StopItem>
 ) : RecyclerView.Adapter<StopAdapter.StopViewHolder>() {
 
     fun updateStops(newStops: List<StopItem>) {
@@ -32,11 +31,6 @@ class StopAdapter(
             binding.tvStopNumber.text = stop.id
             binding.tvStopName.text = stop.stopName
             binding.tvStopTime.text = stop.time
-
-            // Delete action button layout ke id ke mutabik
-            binding.btnDeleteStop.setOnClickListener {
-                onDeleteClick(stop)
-            }
         }
     }
 }

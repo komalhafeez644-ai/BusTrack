@@ -242,7 +242,7 @@
 
                     <com.google.android.material.card.MaterialCardView
                         android:layout_width="match_parent"
-                        android:layout_height="110dp"
+                        android:layout_height="120dp"
                         android:layout_below="@id/rowDriverBus"
                         android:layout_marginTop="20dp"
                         app:cardCornerRadius="16dp"
@@ -253,6 +253,13 @@
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:background="#CBD5E1">
+
+                            <ImageView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:src="@drawable/map"
+                                android:scaleType="centerCrop"
+                                android:alpha="0.6"/>
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnViewOnMap"
@@ -325,49 +332,6 @@
                         android:nestedScrollingEnabled="false"
                         tools:listitem="@layout/item_stop_row"
                         tools:itemCount="3" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="12dp"
-                        android:gravity="center_vertical">
-
-                        <EditText
-                            android:id="@+id/etSearchOrAddStop"
-                            android:layout_width="0dp"
-                            android:layout_height="48dp"
-                            android:layout_weight="1"
-                            android:background="@android:drawable/editbox_background_normal"
-                            android:hint="Search or add new stop..."
-                            android:paddingHorizontal="16dp"
-                            android:textSize="14sp"
-                            android:textColorHint="#94A3B8"
-                            android:autofillHints="none"
-                            android:inputType="text"
-                            tools:ignore="TextFieldTextFieldStatus,HardcodedText" />
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:id="@+id/btnAddNewStopAction"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginStart="12dp"
-                            app:cardBackgroundColor="#005DB7"
-                            app:cardCornerRadius="12dp"
-                            app:strokeWidth="0dp"
-                            app:cardElevation="0dp"
-                            android:clickable="true"
-                            android:focusable="true">
-                            <ImageView
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:layout_gravity="center"
-                                android:src="@android:drawable/ic_input_add"
-                                app:tint="@android:color/white"
-                                android:contentDescription="Add Stop" />
-                        </com.google.android.material.card.MaterialCardView>
-                    </LinearLayout>
-
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>

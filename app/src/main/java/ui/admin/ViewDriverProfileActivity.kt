@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.DriverRepository
 import com.example.bustrack_app.models.DriverModel
@@ -57,10 +58,15 @@ class ViewDriverProfileActivity : AppCompatActivity() {
         txtCnic.text = driver.cnic
         txtPhone.text = driver.phone
         txtEmail.text = driver.email
-        txtRoute.text = driver.route
-        txtBus.text = driver.assignedBus
+        txtRoute.text = driver.route ?: "Not Assigned"
+        txtBus.text = driver.assignedBus ?: "Not Assigned"
 
-        if (driver.profileImage != 0) {
+        if (driver.profileImageUrl.isNotEmpty()) {
+            Glide.with(this)
+                .load(driver.profileImageUrl)
+                .placeholder(R.drawable.ic_person)
+                .into(imgAvatar)
+        } else if (driver.profileImage != 0) {
             imgAvatar.setImageResource(driver.profileImage)
         }
     }

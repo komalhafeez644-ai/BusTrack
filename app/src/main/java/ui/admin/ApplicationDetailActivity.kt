@@ -3,6 +3,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.example.bustrack_app.R
 import com.example.bustrack_app.viewmodels.ApplicationDetailViewModel
 import com.example.bustrack_app.databinding.ActivityApplicationDetailBinding
 
@@ -47,7 +48,12 @@ class ApplicationDetailActivity : AppCompatActivity() {
             binding.tvDistance.text = applicationData.distance
             binding.tvNearestStop.text = applicationData.nearestStop
 
-            if (applicationData.image != 0) {
+            if (applicationData.profileImageUrl.isNotEmpty()) {
+                com.bumptech.glide.Glide.with(this)
+                    .load(applicationData.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .into(binding.ivStudentProfile)
+            } else if (applicationData.image != 0) {
                 binding.ivStudentProfile.setImageResource(applicationData.image)
                 binding.ivStudentProfile.setPadding(0, 0, 0, 0)
             }
@@ -56,13 +62,28 @@ class ApplicationDetailActivity : AppCompatActivity() {
             if (applicationData.status == "Approved") {
                 binding.tvStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#E8F5E9"))
                 binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
+                binding.cardAssignmentDetails.visibility = android.view.View.VISIBLE
+                binding.cardNotAssigned.visibility = android.view.View.GONE
+                
+                binding.btnApprove.text = "Close"
+                binding.btnApprove.setIconResource(R.drawable.ic_close)
+                binding.btnReject.text = "Edit"
+                binding.btnReject.setIconResource(R.drawable.outline_edit_24)
             } else {
+                // Pending status (Matches badge color from item list)
                 binding.tvStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FEF3C7"))
-                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#D97706"))
+                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#92400E"))
+                binding.cardAssignmentDetails.visibility = android.view.View.GONE
+                binding.cardNotAssigned.visibility = android.view.View.VISIBLE
+
+                binding.btnApprove.text = "Reject"
+                binding.btnApprove.setIconResource(R.drawable.ic_close)
+                binding.btnReject.text = "View Analytic"
+                binding.btnReject.setIconResource(R.drawable.logistics) // Using logistics icon for analytics
             }
             
             // Optionally still load more details if needed
-            viewModel.loadApplicationDetail(applicationData.studentName)
+            viewModel.loadApplicationDetail(applicationData.studentName, applicationData.status)
         } else {
             val studentName = intent.getStringExtra("STUDENT_NAME")
             viewModel.loadApplicationDetail(studentName)
@@ -88,6 +109,29 @@ class ApplicationDetailActivity : AppCompatActivity() {
             binding.tvRouteName.text = data.routeName
             binding.tvDistance.text = data.distance
             binding.tvNearestStop.text = data.nearestStop
+
+            // Handle Assignment Card Visibility in Live Observer
+            if (data.status == "Approved") {
+                binding.cardAssignmentDetails.visibility = android.view.View.VISIBLE
+                binding.cardNotAssigned.visibility = android.view.View.GONE
+                binding.tvStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#E8F5E9"))
+                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
+                
+                binding.btnApprove.text = "Close"
+                binding.btnApprove.setIconResource(R.drawable.ic_close)
+                binding.btnReject.text = "Edit"
+                binding.btnReject.setIconResource(R.drawable.outline_edit_24)
+            } else {
+                binding.cardAssignmentDetails.visibility = android.view.View.GONE
+                binding.cardNotAssigned.visibility = android.view.View.VISIBLE
+                binding.tvStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#FEF3C7"))
+                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#92400E"))
+
+                binding.btnApprove.text = "Reject"
+                binding.btnApprove.setIconResource(R.drawable.ic_close)
+                binding.btnReject.text = "View Analytic"
+                binding.btnReject.setIconResource(R.drawable.logistics)
+            }
         }
     }
 
@@ -95,34 +139,33 @@ class ApplicationDetailActivity : AppCompatActivity() {
 
         binding.btnApprove.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            // Add to Student Repository on Approval
-            val originalData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
-            originalData?.let { app ->
-                val student = com.example.bustrack_app.models.StudentModel(
-                    id = "#SR-${1000 + app.id}",
-                    name = app.studentName,
-                    grade = app.studentClass,
-                    location = app.nearestStop,
-                    route = app.bestRoute,
-                    busNo = com.example.bustrack_app.data.RouteRepository.getBusForRoute(app.bestRoute),
-                    status = "ASSIGNED",
-                    profileImage = app.image,
-                    fatherName = app.parentName,
-                    phoneNumber = app.contactNumber
-                )
-                com.example.bustrack_app.data.StudentRepository.updateStudent(student)
+            val applicationData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+
+            if (applicationData?.status == "Pending") {
+                // Logic for Rejection
+                Toast.makeText(this, "Application Rejected", Toast.LENGTH_SHORT).show()
+                finish()
+            } else {
+                // Logic for Close (Approved state)
+                finish()
             }
-            Toast.makeText(this, "Application Approved & Student Added", Toast.LENGTH_SHORT).show()
-            finish()
         }
 
         binding.btnReject.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            // Opening Edit Assignment screen
             val applicationData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
-            val intent = android.content.Intent(this, EditAssignmentActivity::class.java)
-            intent.putExtra("APPLICATION_DATA", applicationData)
-            startActivity(intent)
+            
+            if (applicationData?.status == "Pending") {
+                // Open Analytics for Pending applications
+                val intent = android.content.Intent(this, RouteAnalysisActivity::class.java)
+                intent.putExtra("APPLICATION_DATA", applicationData)
+                startActivity(intent)
+            } else {
+                // Opening Edit Assignment screen for Approved applications
+                val intent = android.content.Intent(this, EditAssignmentActivity::class.java)
+                intent.putExtra("APPLICATION_DATA", applicationData)
+                startActivity(intent)
+            }
         }
 
         binding.btnBack.setOnClickListener {

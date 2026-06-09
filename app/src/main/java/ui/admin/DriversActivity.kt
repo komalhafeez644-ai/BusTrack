@@ -27,8 +27,6 @@ class DriversActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[DriverViewModel::class.java]
 
-        utils.NavigationUtils.setupBottomNavigation(this)
-
         // Observe Repository list - Updates automatically on any change
         viewModel.drivers.observe(this) { list ->
             fullDriverList = list
@@ -40,14 +38,21 @@ class DriversActivity : AppCompatActivity() {
 
         // Back Button
         binding.btnBack.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             onBackPressedDispatcher.onBackPressed()
         }
 
         // FAB Add
         binding.fabAddDriver.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, AddDriverActivity::class.java)
             startActivity(intent)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupRecyclerView() {
@@ -78,9 +83,9 @@ class DriversActivity : AppCompatActivity() {
             fullDriverList
         } else {
             fullDriverList.filter {
-                it.name.lowercase().contains(query) ||
-                        it.assignedBus.lowercase().contains(query) ||
-                        it.id.lowercase().contains(query)
+                it.name.contains(query, ignoreCase = true) ||
+                        it.assignedBus?.contains(query, ignoreCase = true) == true ||
+                        it.id.contains(query, ignoreCase = true)
             }
         }
         driverAdapter.setDrivers(filtered)

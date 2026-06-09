@@ -13,11 +13,11 @@ object NavigationUtils {
         val navDashboard = activity.findViewById<LinearLayout>(R.id.navDashboard)
         val navLiveTracking = activity.findViewById<LinearLayout>(R.id.navLiveTracking)
         val navAttendance = activity.findViewById<LinearLayout>(R.id.navAttendance)
+        val navRequests = activity.findViewById<LinearLayout>(R.id.navRequests)
         val navAlerts = activity.findViewById<LinearLayout>(R.id.navAlerts)
-        val navProfile = activity.findViewById<LinearLayout>(R.id.navProfile)
 
         // Reset all states first to ensure a clean UI
-        val navs = listOf(navDashboard, navLiveTracking, navAttendance, navAlerts, navProfile)
+        val navs = listOf(navDashboard, navLiveTracking, navAttendance, navRequests, navAlerts)
         navs.forEach { it?.isSelected = false }
 
         // Set the correct selected state based on the current activity
@@ -25,8 +25,8 @@ object NavigationUtils {
             is AdminDashboardActivity -> navDashboard?.isSelected = true
             is LiveTrackingActivity -> navLiveTracking?.isSelected = true
             is AttendanceActivity -> navAttendance?.isSelected = true
+            is TrackingRequestsActivity -> navRequests?.isSelected = true
             is TransportAlertsActivity -> navAlerts?.isSelected = true
-            is ProfileActivity -> navProfile?.isSelected = true
         }
 
         // --- CLICK LISTENERS ---
@@ -49,15 +49,15 @@ object NavigationUtils {
             }
         }
 
-        navAlerts?.setOnClickListener {
-            if (activity !is TransportAlertsActivity) {
-                navigateTo(activity, TransportAlertsActivity::class.java)
+        navRequests?.setOnClickListener {
+            if (activity !is TrackingRequestsActivity) {
+                navigateTo(activity, TrackingRequestsActivity::class.java)
             }
         }
 
-        navProfile?.setOnClickListener {
-            if (activity !is ProfileActivity) {
-                navigateTo(activity, ProfileActivity::class.java)
+        navAlerts?.setOnClickListener {
+            if (activity !is TransportAlertsActivity) {
+                navigateTo(activity, TransportAlertsActivity::class.java)
             }
         }
     }

@@ -136,8 +136,8 @@
         android:layout_margin="18dp"
         app:backgroundTint="#051024"
         app:tint="#FFFFFF"
-        app:srcCompat="@android:drawable/ic_input_add"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:srcCompat="@drawable/notifications"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude"
         app:layout_constraintEnd_toEndOf="parent"/>
 
     <!-- BOTTOM NAV -->

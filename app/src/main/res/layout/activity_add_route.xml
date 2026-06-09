@@ -1,148 +1,308 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FB"
+    android:background="#F8FAFC"
     tools:context="ui.admin.AddRouteActivity">
 
-    <!-- Top Header -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp">
 
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/topBar"
-        android:layout_width="0dp"
-        android:layout_height="80dp"
-        app:cardCornerRadius="0dp"
-        app:cardElevation="0dp"
-        app:cardBackgroundColor="#0A1D37"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
+            android:layout_height="70dp"
+            android:background="@color/primaryDark"
             android:paddingHorizontal="16dp">
 
             <ImageView
                 android:id="@+id/btnBack"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:padding="6dp"
                 android:src="@drawable/outline_arrow_back_24"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
                 app:tint="@color/white" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Add Route"
-                android:textColor="@android:color/white"
-                android:textSize="20sp"
+                android:layout_marginStart="16dp"
+                android:text="Create New Route"
+                android:textColor="@color/white"
+                android:textSize="22sp"
                 android:textStyle="bold"
-                android:layout_marginStart="16dp"/>
-        </LinearLayout>
+                android:letterSpacing="0.02"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@id/btnBack"
+                app:layout_constraintTop_toTopOf="parent" />
 
-    </com.google.android.material.card.MaterialCardView>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
-
-    <!-- Google Map Container -->
-
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/mapFragment"
-        android:name="com.google.android.gms.maps.SupportMapFragment"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/topBar"
-        app:layout_constraintBottom_toTopOf="@id/bottomCard"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-
-
-    <!-- Bottom Controls -->
-
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/bottomCard"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_margin="12dp"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="6dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="20dp">
 
-            <!-- Route Name -->
-
-            <EditText
-                android:id="@+id/etRouteName"
-                android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:background="@android:color/transparent"
-                android:hint="Enter Route Name"
-                android:padding="14dp"
-                android:textSize="16sp"/>
-
-            <!-- Status Text -->
-
-            <TextView
-                android:id="@+id/tvInstruction"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Tap on map to add route point"
-                android:textColor="#64748B"
-                android:textSize="14sp"
-                android:layout_marginTop="8dp"/>
-
-            <!-- Buttons -->
-
+            <!-- Section Label -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:weightSum="4"
-                android:layout_marginTop="16dp">
-
-                <Button
-                    android:id="@+id/btnUndo"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="Undo"
-                    />
-
-                <Button
-                    android:id="@+id/btnClear"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="Clear"/>
-
-                <Button
-                    android:id="@+id/btnAddStop"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="Stop"/>
-
-                <Button
-                    android:id="@+id/btnSave"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_weight="1"
-                    android:text="Save"/>
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="18dp"
+                    android:background="@color/primaryBlue" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="BASIC INFORMATION"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
             </LinearLayout>
 
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="6dp"
+                app:cardBackgroundColor="@color/white"
+                app:strokeWidth="1dp"
+                app:strokeColor="#EEF2F6">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Route Name"
+                        app:startIconDrawable="@drawable/directions_bus"
+                        app:startIconTint="@color/primaryBlue"
+                        app:boxStrokeColor="@color/primaryBlue"
+                        app:boxCornerRadiusBottomEnd="16dp"
+                        app:boxCornerRadiusBottomStart="16dp"
+                        app:boxCornerRadiusTopEnd="16dp"
+                        app:boxCornerRadiusTopStart="16dp"
+                        app:hintTextColor="@color/primaryDark"
+                        app:placeholderTextColor="#64748B"
+                        app:boxStrokeWidthFocused="2dp"
+                        app:boxStrokeWidth="1dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etRouteName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapWords"
+                            android:textColor="@color/black"
+                            android:textSize="15sp"
+                            android:textStyle="bold"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="Route Code (e.g. R-01)"
+                        app:boxStrokeColor="@color/primaryBlue"
+                        app:boxCornerRadiusBottomEnd="16dp"
+                        app:boxCornerRadiusBottomStart="16dp"
+                        app:boxCornerRadiusTopEnd="16dp"
+                        app:boxCornerRadiusTopStart="16dp"
+                        app:hintTextColor="@color/primaryDark"
+                        app:placeholderTextColor="#64748B"
+                        app:boxStrokeWidthFocused="2dp"
+                        app:boxStrokeWidth="1dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etRouteCode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapCharacters"
+                            android:textColor="@color/black"
+                            android:textSize="15sp"
+                            android:textStyle="bold"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="Route Description"
+                        app:boxStrokeColor="@color/primaryBlue"
+                        app:boxCornerRadiusBottomEnd="16dp"
+                        app:boxCornerRadiusBottomStart="16dp"
+                        app:boxCornerRadiusTopEnd="16dp"
+                        app:boxCornerRadiusTopStart="16dp"
+                        app:hintTextColor="@color/primaryDark"
+                        app:placeholderTextColor="#64748B"
+                        app:boxStrokeWidthFocused="2dp"
+                        app:boxStrokeWidth="1dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etDescription"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapSentences"
+                            android:lines="2"
+                            android:textColor="@color/black"
+                            android:textSize="15sp"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Path Details Section -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="12dp">
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="18dp"
+                    android:background="#22C55E" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="ROUTE PATH DETAILS"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
+            </LinearLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="6dp"
+                app:cardBackgroundColor="@color/white"
+                app:strokeWidth="1dp"
+                app:strokeColor="#EEF2F6">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Starting Point (Auto-filled)"
+                        app:startIconDrawable="@drawable/outline_location"
+                        app:startIconTint="#22C55E"
+                        app:boxStrokeColor="#22C55E"
+                        app:boxCornerRadiusBottomEnd="16dp"
+                        app:boxCornerRadiusBottomStart="16dp"
+                        app:boxCornerRadiusTopEnd="16dp"
+                        app:boxCornerRadiusTopStart="16dp"
+                        app:hintTextColor="#22C55E"
+                        app:placeholderTextColor="#64748B"
+                        app:boxStrokeWidthFocused="2dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etStartPoint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapWords"
+                            android:textColor="@color/black"
+                            android:textSize="14sp"
+                            android:textStyle="bold"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:hint="Destination Point (Auto-filled)"
+                        app:startIconDrawable="@drawable/outline_location"
+                        app:startIconTint="#EF4444"
+                        app:boxStrokeColor="#EF4444"
+                        app:boxCornerRadiusBottomEnd="16dp"
+                        app:boxCornerRadiusBottomStart="16dp"
+                        app:boxCornerRadiusTopEnd="16dp"
+                        app:boxCornerRadiusTopStart="16dp"
+                        app:hintTextColor="#EF4444"
+                        app:placeholderTextColor="#64748B"
+                        app:boxStrokeWidthFocused="2dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etEndPoint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapWords"
+                            android:textColor="@color/black"
+                            android:textSize="14sp"
+                            android:textStyle="bold"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDrawRoute"
+                        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="58dp"
+                        android:layout_marginTop="24dp"
+                        android:text="OPEN MAP TO DRAW PATH"
+                        android:textAllCaps="true"
+                        android:textColor="@color/primaryBlue"
+                        android:backgroundTint="#F1F5F9"
+                        android:letterSpacing="0.05"
+                        app:cornerRadius="16dp"
+                        app:icon="@android:drawable/ic_dialog_map"
+                        app:iconTint="@color/primaryBlue"
+                        app:iconGravity="textStart"
+                        app:strokeColor="#E2E8F0"
+                        app:strokeWidth="1dp"/>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSaveRoute"
+                android:layout_width="match_parent"
+                android:layout_height="65dp"
+                android:layout_marginTop="48dp"
+                android:layout_marginBottom="40dp"
+                android:text="CONFIRM &amp; CREATE ROUTE"
+                android:textAllCaps="true"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:backgroundTint="@color/primaryDark"
+                android:textColor="@color/white"
+                app:cornerRadius="20dp"
+                android:stateListAnimator="@animator/button_press_anim"
+                app:elevation="8dp"/>
+
         </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
-    </com.google.android.material.card.MaterialCardView>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

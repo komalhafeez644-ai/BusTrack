@@ -36,9 +36,6 @@ class BusApplicationsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_bus_application)
 
-        // Navigation
-        NavigationUtils.setupBottomNavigation(this)
-
         val btnBack = findViewById<ImageView>(R.id.btnBack)
         btnBack.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
@@ -57,15 +54,9 @@ class BusApplicationsActivity : AppCompatActivity() {
         filteredList.addAll(applicationsList)
 
         adapter = ApplicationAdapter(filteredList) { application ->
-            if (application.status == "Approved") {
-                val intent = Intent(this, ApplicationDetailActivity::class.java)
-                intent.putExtra("APPLICATION_DATA", application)
-                startActivity(intent)
-            } else {
-                val intent = Intent(this, RouteAnalysisActivity::class.java)
-                intent.putExtra("APPLICATION_DATA", application)
-                startActivity(intent)
-            }
+            val intent = Intent(this, ApplicationDetailActivity::class.java)
+            intent.putExtra("APPLICATION_DATA", application)
+            startActivity(intent)
         }
 
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -73,6 +64,11 @@ class BusApplicationsActivity : AppCompatActivity() {
 
         setupSearch(searchBox)
         setupTabs()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupDummyData() {
@@ -138,7 +134,7 @@ class BusApplicationsActivity : AppCompatActivity() {
         if (query.isEmpty()) {
             filteredList.addAll(temp)
         } else {
-            val searchResults = temp.filter { 
+            val searchResults = temp.filter {
                 it.studentName.contains(query, ignoreCase = true) || 
                 it.pickupPoint.contains(query, ignoreCase = true) 
             }

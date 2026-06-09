@@ -6,9 +6,11 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityProfileBinding
 import com.example.bustrack_app.viewmodels.ProfileViewModel
 import utils.NavigationUtils
+import com.bumptech.glide.Glide
 
 class ProfileActivity : AppCompatActivity() {
 
@@ -34,11 +36,25 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun setupObservers() {
         viewModel.adminData.observe(this) { admin ->
-            binding.tvAdminName.text = admin.fullName
-            binding.tvInfoFullName.text = admin.fullName
-            binding.tvInfoEmail.text = admin.email
-            binding.tvInfoDept.text = admin.department
-            binding.tvInfoEmpID.text = admin.employeeId
+            val name = admin.fullName.ifEmpty { "System Admin" }
+            val empId = admin.employeeId.ifEmpty { "ADMIN-2024-001" }
+            val dept = "Transport" // Fixed as per requirement
+            
+            binding.tvAdminName.text = name
+            binding.tvInfoFullName.text = name
+            binding.tvInfoEmail.text = admin.email.ifEmpty { "admin@gmail.com" }
+            binding.tvInfoPhone.text = admin.phone.ifEmpty { "+92 300 1234567" }
+            binding.tvInfoDept.text = dept
+            binding.tvInfoEmpID.text = empId
+
+            // Load Image from URL
+            if (admin.profileImageUrl.isNotEmpty()) {
+                Glide.with(this)
+                    .load(admin.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .circleCrop()
+                    .into(binding.imgProfile)
+            }
         }
     }
 

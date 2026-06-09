@@ -10,6 +10,7 @@ import android.widget.*
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
+import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.data.StudentRepository
@@ -48,7 +49,12 @@ class StudentDetailsActivity : AppCompatActivity() {
             binding.tvPhoneNumber.text = data.phoneNumber
 
 
-            if (data.profileImage != 0) {
+            if (data.profileImageUrl.isNotEmpty()) {
+                Glide.with(this)
+                    .load(data.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .into(binding.imgStudentProfile)
+            } else if (data.profileImage != 0) {
                 binding.imgStudentProfile.setImageResource(data.profileImage)
             }
         }

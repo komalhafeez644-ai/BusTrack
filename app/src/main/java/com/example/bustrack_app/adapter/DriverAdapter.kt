@@ -4,6 +4,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ItemDriverCardBinding
 import com.example.bustrack_app.models.DriverModel
 
@@ -28,24 +30,43 @@ class DriverAdapter(
     inner class DriverViewHolder(private val itemBinding: ItemDriverCardBinding) : RecyclerView.ViewHolder(itemBinding.root) {
         fun bind(driver: DriverModel) {
             itemBinding.txtDriverName.text = driver.name
-            itemBinding.txtBusInfo.text = "Bus: ${driver.assignedBus}"
-            itemBinding.txtRouteInfo.text = "Route: ${driver.route}"
+            
+            val busInfo = if (driver.assignedBus.isNullOrEmpty() || driver.assignedBus == "Not Assigned") {
+                "Not Assigned Yet"
+            } else {
+                driver.assignedBus
+            }
+            
+            val routeInfo = if (driver.route.isNullOrEmpty() || driver.route == "Not Assigned") {
+                "Not Assigned Yet"
+            } else {
+                driver.route
+            }
 
-            if (driver.profileImage == 0) {
+            itemBinding.txtBusInfo.text = "Bus: $busInfo"
+            itemBinding.txtRouteInfo.text = "Route: $routeInfo"
+
+            // Image Loading Logic (URL first, then Drawable, then Initials)
+            if (driver.profileImageUrl.isNotEmpty()) {
+                itemBinding.imgDriver.visibility = View.VISIBLE
+                itemBinding.txtAvatar.visibility = View.GONE
+                Glide.with(itemBinding.root.context)
+                    .load(driver.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .into(itemBinding.imgDriver)
+            } else if (driver.profileImage != 0) {
+                itemBinding.imgDriver.visibility = View.VISIBLE
+                itemBinding.txtAvatar.visibility = View.GONE
+                itemBinding.imgDriver.setImageResource(driver.profileImage)
+            } else {
                 itemBinding.imgDriver.visibility = View.GONE
                 itemBinding.txtAvatar.visibility = View.VISIBLE
-
-                // Initials Logic
                 val initials = driver.name.split(" ")
                     .filter { it.isNotEmpty() }
                     .map { it[0] }
                     .take(2)
                     .joinToString("")
                 itemBinding.txtAvatar.text = initials.uppercase()
-            } else {
-                itemBinding.imgDriver.visibility = View.VISIBLE
-                itemBinding.txtAvatar.visibility = View.GONE
-                itemBinding.imgDriver.setImageResource(driver.profileImage)
             }
 
             itemBinding.btnViewProfile.setOnClickListener { onEditClick(driver) }

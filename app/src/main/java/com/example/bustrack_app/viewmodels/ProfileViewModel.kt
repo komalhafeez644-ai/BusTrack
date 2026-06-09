@@ -17,19 +17,23 @@ class ProfileViewModel : ViewModel() {
     private val auth = Firebase.auth
 
     init {
-        loadAdminProfile()
+        loadUserProfile()
     }
 
-    fun loadAdminProfile() {
-        val currentUserId = auth.currentUser?.uid ?: "test_admin_id"
+    fun loadUserProfile() {
+        val uid = auth.currentUser?.uid ?: return
 
-        db.collection("admins").document(currentUserId).addSnapshotListener { snapshot, e ->
+        db.collection("users").document(uid).addSnapshotListener { snapshot, e ->
             if (snapshot != null && snapshot.exists()) {
                 val admin = AdminModel(
-                    fullName = snapshot.getString("fullName") ?: "John Admin",
-                    email = snapshot.getString("email") ?: "admin@pjc.edu",
-                    department = snapshot.getString("department") ?: "Logistics",
-                    employeeId = snapshot.getString("employeeId") ?: "CF-ADM-24",
+                    id = snapshot.id,
+                    fullName = snapshot.getString("fullName") ?: "",
+                    email = snapshot.getString("email") ?: "",
+                    department = snapshot.getString("department") ?: "",
+                    employeeId = snapshot.getString("employeeId") ?: "",
+                    phone = snapshot.getString("phone") ?: "",
+                    address = snapshot.getString("address") ?: "",
+                    profileImageUrl = snapshot.getString("profileImageUrl") ?: "",
                     campusName = "Punjab College",
                     isBusDelayNotifyEnabled = snapshot.getBoolean("busDelay") ?: true,
                     isEmergencyNotifyEnabled = snapshot.getBoolean("emergency") ?: true,
@@ -40,18 +44,16 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    fun updateBusDelayNotification(isEnabled: Boolean) {
-        val currentUserId = auth.currentUser?.uid ?: "test_admin_id"
-        db.collection("admins").document(currentUserId).update("busDelay", isEnabled)
-    }
+    fun updateProfile(userData: Map<String, Any>, onResult: (Boolean, String) -> Unit) {
+        val uid = auth.currentUser?.uid ?: return
 
-    fun updateEmergencyNotification(isEnabled: Boolean) {
-        val currentUserId = auth.currentUser?.uid ?: "test_admin_id"
-        db.collection("admins").document(currentUserId).update("emergency", isEnabled)
-    }
-
-    fun updateDriverNotification(isEnabled: Boolean) {
-        val currentUserId = auth.currentUser?.uid ?: "test_admin_id"
-        db.collection("admins").document(currentUserId).update("driverAlert", isEnabled)
+        db.collection("users").document(uid)
+            .set(userData, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                onResult(true, "Profile updated successfully")
+            }
+            .addOnFailureListener { e ->
+                onResult(false, e.message ?: "Update failed")
+            }
     }
 }

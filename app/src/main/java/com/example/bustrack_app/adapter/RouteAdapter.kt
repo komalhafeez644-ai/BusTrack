@@ -35,56 +35,47 @@ class RouteAdapter(
         fun bind(route: RouteModel) {
             binding.tvRouteCode.text = route.routeCode
             binding.tvRouteName.text = route.routeName
-            binding.tvBusValue.text = route.busNo
-            binding.tvDriverValue.text = route.driverName
-            binding.tvMetaInfo.text = "📍 ${route.stopsCount} Stops      👥 ${route.studentsCount} Students"
+            binding.tvBusValue.text = if (route.busNo.isNullOrEmpty()) "Unassigned" else route.busNo
+            binding.tvDriverValue.text = if (route.driverName.isNullOrEmpty()) "Unassigned" else route.driverName
+            binding.tvMetaInfo.text = "📍 ${route.stopsCount}  •  👥 ${route.studentsCount}"
 
-            // 1. Initial State Setting (Bina kisi listener ke taake card load hote waqt popup na aaye)
+            // 1. Initial State Setting
             binding.switchRouteStatus.setOnCheckedChangeListener(null)
             binding.switchRouteStatus.isChecked = (route.status == "ACTIVE")
 
             // 2. Click Listener with Confirmation Popup Logic
             binding.switchRouteStatus.setOnClickListener {
-                val currentSwitchState = binding.switchRouteStatus.isChecked
+                val isCurrentlyActive = (route.status == "ACTIVE")
+                val targetState = !isCurrentlyActive
 
-                // Temporarily switch ko purani state par revert karein jab tak confirmation na mile
-                binding.switchRouteStatus.isChecked = !currentSwitchState
-
-                val message = if (currentSwitchState) {
-                    "Are you sure you want to ENABLE ${route.routeCode}?"
+                val message = if (targetState) {
+                    "Are you sure you want to ACTIVATE ${route.routeName}?"
                 } else {
-                    "Are you sure you want to DISABLE ${route.routeCode}?"
+                    "Are you sure you want to DEACTIVATE ${route.routeName}?"
                 }
 
-                // Custom Alert Dialog Box
                 AlertDialog.Builder(itemView.context)
-                    .setTitle("Change Route Status")
+                    .setTitle("Route Status")
                     .setMessage(message)
-                    .setCancelable(false) // Taake user bahr click karke skip na kare
-                    .setPositiveButton("Yes") { dialog, _ ->
-                        // Confirmation milne par switch ko user ki requested state par set karein
-                        binding.switchRouteStatus.isChecked = currentSwitchState
-
-                        // Local data model ko bhi update karein
-                        route.status = if (currentSwitchState) "ACTIVE" else "INACTIVE"
-
-                        Toast.makeText(itemView.context, "Status Updated Successfully", Toast.LENGTH_SHORT).show()
-                        dialog.dismiss()
+                    .setPositiveButton("Yes") { _, _ ->
+                        route.status = if (targetState) "ACTIVE" else "INACTIVE"
+                        binding.switchRouteStatus.isChecked = targetState
+                        Toast.makeText(itemView.context, "Status Updated", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Cancel") { dialog, _ ->
-                        // Cancel karne par switch apni safe default position par hi rahega
+                        binding.switchRouteStatus.isChecked = isCurrentlyActive
                         dialog.dismiss()
                     }
                     .show()
             }
 
-            // Unassigned fields visual styles adjust
-            if (route.driverName == "Unassigned" || route.busNo == "TBD") {
-                binding.tvDriverValue.setTextColor("#64748B".toColorInt())
-                binding.tvBusValue.setTextColor("#64748B".toColorInt())
+            // Visual styles for Unassigned fields
+            if (binding.tvDriverValue.text == "Unassigned" || binding.tvBusValue.text == "Unassigned") {
+                binding.tvDriverValue.setTextColor(Color.parseColor("#94A3B8"))
+                binding.tvBusValue.setTextColor(Color.parseColor("#94A3B8"))
             } else {
-                binding.tvDriverValue.setTextColor("#0A1D37".toColorInt())
-                binding.tvBusValue.setTextColor("#0A1D37".toColorInt())
+                binding.tvDriverValue.setTextColor(Color.parseColor("#1E293B"))
+                binding.tvBusValue.setTextColor(Color.parseColor("#1E293B"))
             }
 
             binding.btnViewDetails.setOnClickListener { onDetailsClick(route) }

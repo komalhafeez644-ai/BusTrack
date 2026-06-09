@@ -186,6 +186,14 @@
                                 android:textColor="@color/primaryDark"/>
 
                             <TextView
+                            android:id="@+id/tvRegistrationNo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="R.no: GCW-228"
+                            android:textColor="@color/lightGray"
+                            android:textSize="14sp"/>
+                            <TextView
                                 android:id="@+id/tvStudentInfo"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -268,6 +276,7 @@
 
             <!-- SYSTEM ANALYSIS CARD -->
             <androidx.cardview.widget.CardView
+                android:id="@+id/cardAssignmentDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -347,12 +356,58 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- NOT ASSIGNED CARD -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardNotAssigned"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="#F1F5F9">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="32dp">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/warning"
+                        app:tint="#94A3B8"
+                        android:contentDescription="Not Assigned Icon" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="Not Assigned Yet"
+                        android:textColor="#475569"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="This application is still pending review. No transport route or stop has been assigned."
+                        android:textColor="#64748B"
+                        android:textSize="14sp"
+                        android:gravity="center" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- BUTTONS -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="32dp"
                 android:layout_marginBottom="24dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
@@ -366,6 +421,8 @@
                     android:textColor="@color/primaryBlue"
                     android:textSize="16sp"
                     android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     app:backgroundTint="@color/white"
                     app:cornerRadius="20dp"
                     app:strokeWidth="2dp"
@@ -388,6 +445,8 @@
                     android:textColor="@color/white"
                     android:textSize="16sp"
                     android:textStyle="bold"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
                     app:backgroundTint="@color/primaryDark"
                     app:cornerRadius="20dp"
                     app:strokeWidth="2dp"

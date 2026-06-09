@@ -23,12 +23,15 @@ class ManageRouteActivity : AppCompatActivity() {
         binding = ActivityManageRouteBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        utils.NavigationUtils.setupBottomNavigation(this)
-
         setupRecyclerView()
         setupObservers()
         setupSearchEngine()
         setupActionListeners()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupRecyclerView() {
@@ -62,11 +65,13 @@ class ManageRouteActivity : AppCompatActivity() {
 
     private fun setupActionListeners() {
         binding.btnBack.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             finish()
         }
 
         binding.fabAddRoute.setOnClickListener {
-            Toast.makeText(this, "Redirecting to Add New Route Form...", Toast.LENGTH_SHORT).show()
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, AddRouteActivity::class.java))
         }
     }
 }

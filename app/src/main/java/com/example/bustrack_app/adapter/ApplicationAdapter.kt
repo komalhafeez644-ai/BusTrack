@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.ApplicationModel
 import com.google.android.material.card.MaterialCardView
@@ -20,6 +21,7 @@ class ApplicationAdapter(
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val txtName: TextView = itemView.findViewById(R.id.txtName)
         val txtClass: TextView = itemView.findViewById(R.id.txtClass)
+        val txtRegNo: TextView = itemView.findViewById(R.id.txtRegNo)
         val txtPickup: TextView = itemView.findViewById(R.id.txtPickup)
         val txtRoute: TextView = itemView.findViewById(R.id.txtRoute)
         val txtStatus: TextView = itemView.findViewById(R.id.txtStatus)
@@ -48,6 +50,7 @@ class ApplicationAdapter(
         val item = list[position]
         holder.txtName.text = item.studentName
         holder.txtClass.text = item.studentClass
+        holder.txtRegNo.text = "Reg: #${item.regNo}"
         holder.txtPickup.text = item.pickupPoint
         holder.txtRoute.text = item.contactNumber
         holder.txtStatus.text = item.status
@@ -62,26 +65,23 @@ class ApplicationAdapter(
             // Default Pending (Yellow)
             holder.statusBadge.setCardBackgroundColor(Color.parseColor("#FFF9C4"))
             holder.statusDot.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FBC02D"))
-            holder.txtStatus.setTextColor(Color.parseColor("#5D4037"))
-            holder.btnView.text = "View Analytic"
+            holder.txtStatus.setTextColor(Color.parseColor("#92400E"))
+            holder.btnView.text = "View Detail"
         }
 
         holder.btnView.setOnClickListener {
             val originalBg = holder.btnView.backgroundTintList
             val originalText = holder.btnView.textColors
 
-            // 1. Color change to Primary Dark
             holder.btnView.backgroundTintList = androidx.core.content.ContextCompat.getColorStateList(it.context, R.color.primaryDark)
             holder.btnView.setTextColor(Color.WHITE)
 
-            // 2. Push Effect (In and Out)
             it.animate()
                 .scaleX(0.92f)
                 .scaleY(0.92f)
                 .setDuration(100)
                 .withEndAction {
                     it.animate().scaleX(1f).scaleY(1f).setDuration(100).withEndAction {
-                        // 3. Revert back to original style
                         holder.btnView.backgroundTintList = originalBg
                         holder.btnView.setTextColor(originalText)
                         
@@ -91,11 +91,16 @@ class ApplicationAdapter(
                 .start()
         }
 
-        // Display image
-        // holder.imgStudent.setImageResource(item.image)
-        // If image is a resource ID in item.image
-        if (item.image != 0) {
+        // Image Loading Logic (URL first, then Drawable, then fallback)
+        if (item.profileImageUrl.isNotEmpty()) {
+            Glide.with(holder.itemView.context)
+                .load(item.profileImageUrl)
+                .placeholder(R.drawable.ic_person)
+                .into(holder.imgStudent)
+        } else if (item.image != 0) {
             holder.imgStudent.setImageResource(item.image)
+        } else {
+            holder.imgStudent.setImageResource(R.drawable.ic_person)
         }
     }
 }

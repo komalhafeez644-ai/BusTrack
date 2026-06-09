@@ -1,45 +1,61 @@
 package com.example.bustrack_app.data
 
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StopItem
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ktx.toObjects
 
 object RouteRepository {
+    private val db = FirebaseFirestore.getInstance()
+    private val routesCollection = db.collection("routes")
+
     private val _routeList = MutableLiveData<List<RouteModel>>()
     val routeList: LiveData<List<RouteModel>> get() = _routeList
 
     init {
-        // Initial Dummy Data
-        val stopsForRoute1 = mutableListOf(
-            StopItem("01", "Sunrise Apartments", "07:00 AM", 33.7000, 73.0600),
-            StopItem("02", "Green Park", "07:15 AM", 33.7100, 73.0700)
-        )
-        
-        val stopsForRoute2 = mutableListOf(
-            StopItem("01", "Oakwood Entry", "07:30 AM", 33.6844, 73.0479),
-            StopItem("02", "Blue Tower", "07:45 AM", 33.6900, 73.0500)
-        )
+        fetchRoutesFromFirestore()
+    }
 
-        _routeList.value = mutableListOf(
-            RouteModel("1", "ROUTE 01", "Route 1", "ACTIVE", "BUS-102", "John Doe", 2, 45, stopsForRoute1),
-            RouteModel("2", "ROUTE 02", "Route 2", "PARTIAL", "BUS-088", "Sarah Smith", 2, 112, stopsForRoute2),
-            RouteModel("3", "ROUTE 03", "Route 3", "ACTIVE", "BUS-105", "Mike Ross", 5, 32, mutableListOf())
-        )
+    private fun fetchRoutesFromFirestore() {
+        routesCollection.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("RouteRepository", "Listen failed.", error)
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null) {
+                val routes = snapshot.toObjects<RouteModel>()
+                _routeList.value = routes
+                Log.d("RouteRepository", "Fetched ${routes.size} routes from Firestore")
+                
+                // Refresh BusRepository to sync with new route data
+                BusRepository.refreshBusList()
+            }
+        }
     }
 
     fun getBusForRoute(routeName: String): String {
         return _routeList.value?.find { it.routeName.equals(routeName, true) || it.routeCode.equals(routeName, true) }?.busNo ?: ""
     }
 
-    fun updateRoute(updatedRoute: RouteModel) {
-        val current = _routeList.value?.toMutableList() ?: mutableListOf()
-        val index = current.indexOfFirst { it.id == updatedRoute.id }
-        if (index != -1) {
-            current[index] = updatedRoute
-            _routeList.value = current
-            // Also notify Bus Repository to refresh its mapping
-            BusRepository.refreshBusList()
-        }
+    fun updateRoute(updatedRoute: RouteModel, onComplete: (Boolean) -> Unit = {}) {
+        routesCollection.document(updatedRoute.id).set(updatedRoute)
+            .addOnSuccessListener {
+                Log.d("RouteRepository", "Route successfully updated in Firestore!")
+                onComplete(true)
+            }
+            .addOnFailureListener { e ->
+                Log.e("RouteRepository", "Error updating route", e)
+                onComplete(false)
+            }
+    }
+
+    fun deleteRoute(routeId: String, onComplete: (Boolean) -> Unit = {}) {
+        routesCollection.document(routeId).delete()
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
     }
 }

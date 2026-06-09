@@ -15,9 +15,7 @@ class SplashActivity : AppCompatActivity() {
         // Hide action bar
         supportActionBar?.hide()
 
-        // Initialize Repositories with persistence
-        com.example.bustrack_app.data.DriverRepository.init(this)
-        com.example.bustrack_app.data.StudentRepository.init(this)
+        // Repositories now use Firestore with automatic snapshot listeners
 
         // Delay for 3 seconds then go to IntroActivity
         Handler(Looper.getMainLooper()).postDelayed({

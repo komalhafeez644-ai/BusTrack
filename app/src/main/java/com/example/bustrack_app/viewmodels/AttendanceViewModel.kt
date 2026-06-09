@@ -58,7 +58,7 @@ class AttendanceViewModel : ViewModel() {
             }
         }
 
-        if (selectedDate.isNotEmpty()) {
+        if (selectedDate.isNotEmpty() && selectedDate != "Select Date") {
             filtered = filtered.filter {
                 it.date.trim().equals(selectedDate.trim(), ignoreCase = true)
             }

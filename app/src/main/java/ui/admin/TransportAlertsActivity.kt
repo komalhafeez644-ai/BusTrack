@@ -30,6 +30,7 @@ class TransportAlertsActivity : AppCompatActivity() {
 
         // BACK BUTTON
         binding.btnBack.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             finish()
         }
 
@@ -71,6 +72,12 @@ class TransportAlertsActivity : AppCompatActivity() {
             utils.ViewUtils.applyClickEffect(it)
             updateChipUI("IMPORTANT")
             viewModel.filterByType("IMPORTANT")
+        }
+
+        // FAB ANNOUNCE / BROADCAST
+        binding.fabAnnounce.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, BroadcastNotificationActivity::class.java))
         }
     }
 

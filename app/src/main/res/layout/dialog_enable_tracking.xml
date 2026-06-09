@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@color/white"
+    android:layout_margin="16dp">
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Dialog Header -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:background="@drawable/bg_header_blue">
+
+                <ImageView
+                    android:id="@+id/ivGradIcon"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_marginTop="24dp"
+                    android:src="@drawable/admin_panel_settings"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:id="@+id/tvDialogTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Enable Child Bus Tracking"
+                    android:textColor="@color/white"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/ivGradIcon" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginHorizontal="32dp"
+                    android:text="Submit your details to activate live tracking for your child's assigned route."
+                    android:textAlignment="center"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="12sp"
+                    app:layout_constraintTop_toBottomOf="@id/tvDialogTitle" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <!-- Parental Information Section -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <View
+                        android:layout_width="3dp"
+                        android:layout_height="16dp"
+                        android:background="#2563EB"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Parental Information"
+                        android:textColor="#475569"
+                        android:textSize="13sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Parent Full Name"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <EditText
+                    android:id="@+id/etParentName"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:hint="John Doe"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp"
+                    android:textColor="@color/primaryDark"
+                    android:textColorHint="#94A3B8"
+                    android:inputType="textPersonName"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Parent CNIC"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <EditText
+                    android:id="@+id/etParentCNIC"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:hint="XXXXX-XXXXXXX-X"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp"
+                    android:textColor="@color/primaryDark"
+                    android:textColorHint="#94A3B8"
+                    android:inputType="number"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Registered Phone Number"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <EditText
+                    android:id="@+id/etPhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:hint="03XX-XXXXXXX"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp"
+                    android:textColor="@color/primaryDark"
+                    android:textColorHint="#94A3B8"
+                    android:inputType="phone"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Relationship"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <Spinner
+                    android:id="@+id/spinnerRelationship"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:paddingHorizontal="8dp"/>
+
+                <!-- Student Details Section -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <View
+                        android:layout_width="3dp"
+                        android:layout_height="16dp"
+                        android:background="#2563EB"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Student Details"
+                        android:textColor="#475569"
+                        android:textSize="13sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Child / Student Name"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:paddingHorizontal="12dp">
+                    <ImageView
+                        android:id="@+id/icSearch"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/search"
+                        app:tint="#94A3B8"/>
+                    <EditText
+                        android:id="@+id/etStudentName"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_toEndOf="@id/icSearch"
+                        android:layout_marginStart="8dp"
+                        android:background="@null"
+                        android:hint="Search Student Name"
+                        android:textSize="14sp"
+                        android:textColor="@color/primaryDark"
+                        android:textColorHint="#94A3B8"
+                        android:inputType="textPersonName"/>
+                </RelativeLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Student ID"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <EditText
+                    android:id="@+id/etStudentId"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:hint="STD-2024-001"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp"
+                    android:textColor="@color/primaryDark"
+                    android:textColorHint="#94A3B8"
+                    android:inputType="text"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Reason for Access"
+                    android:textColor="#64748B"
+                    android:textSize="12sp" />
+                <EditText
+                    android:id="@+id/etReason"
+                    android:layout_width="match_parent"
+                    android:layout_height="80dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rounded_border"
+                    android:gravity="top"
+                    android:padding="12dp"
+                    android:hint="Monitor child transportation safety"
+                    android:textSize="14sp"
+                    android:textColor="@color/primaryDark"
+                    android:textColorHint="#94A3B8"
+                    android:inputType="textMultiLine"/>
+
+                <!-- Confirmation Checkbox Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:background="#F0F7FF"
+                    android:padding="12dp"
+                    android:orientation="horizontal">
+                    <CheckBox
+                        android:id="@+id/cbConfirm"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#2563EB"/>
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="I confirm that provided information is correct and I request access to my child's live bus tracking. I understand this data is sensitive and for personal monitoring only."
+                        android:textColor="#1E40AF"
+                        android:textSize="11sp"/>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSubmitRequest"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="24dp"
+                    android:text="Submit Request"
+                    android:textAllCaps="false"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp"
+                    app:backgroundTint="#051024"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancel"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Cancel"
+                    android:textAllCaps="false"
+                    android:textColor="#64748B"
+                    app:strokeColor="#CBD5E1"
+                    app:cornerRadius="8dp"/>
+
+                <!-- Footer Encryption Info -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="32dp"
+                    android:layout_marginBottom="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/security_shield"
+                        app:tint="#94A3B8"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="End-to-End Encrypted Data Processing"
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.cardview.widget.CardView>

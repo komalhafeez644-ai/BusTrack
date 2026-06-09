@@ -9,8 +9,6 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.TransportAlert
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 
 class AlertsAdapter(
     private var list: List<TransportAlert>,
@@ -21,10 +19,9 @@ class AlertsAdapter(
         val title: TextView = view.findViewById(R.id.tvAlertTitle)
         val subtitle: TextView = view.findViewById(R.id.tvAlertSubtitle)
         val icon: ImageView = view.findViewById(R.id.ivAlertIcon)
-        val iconBg: View = view.findViewById(R.id.ivIconBackground)
+        val cvIconBg: androidx.cardview.widget.CardView = view.findViewById(R.id.cvIconBg)
         val tagText: TextView = view.findViewById(R.id.tvTagText)
-        val cardTag: MaterialCardView = view.findViewById(R.id.cardTag)
-        val btn: MaterialButton = view.findViewById(R.id.btnViewDetails)
+        val timeText: TextView = view.findViewById(R.id.tvTime)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -41,50 +38,34 @@ class AlertsAdapter(
         holder.title.text = item.title
         holder.subtitle.text = item.subtitle
         holder.icon.setImageResource(item.iconResId)
-        holder.tagText.text = item.type
+        holder.tagText.text = item.type.uppercase()
+        holder.timeText.text = "Now" // Mocking time
 
         // Dynamic Colors based on Type
         when (item.type.uppercase()) {
             "CRITICAL" -> {
-                holder.cardTag.setCardBackgroundColor(Color.parseColor("#FEE2E2"))
+                holder.cvIconBg.setCardBackgroundColor(Color.parseColor("#FEE2E2"))
+                holder.tagText.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#FEE2E2")))
                 holder.tagText.setTextColor(Color.parseColor("#EF4444"))
                 holder.icon.setColorFilter(Color.parseColor("#EF4444"))
             }
             "IMPORTANT" -> {
-                holder.cardTag.setCardBackgroundColor(Color.parseColor("#FEF3C7"))
+                holder.cvIconBg.setCardBackgroundColor(Color.parseColor("#FEF3C7"))
+                holder.tagText.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#FEF3C7")))
                 holder.tagText.setTextColor(Color.parseColor("#D97706"))
                 holder.icon.setColorFilter(Color.parseColor("#D97706"))
             }
             "GENERAL" -> {
-                holder.cardTag.setCardBackgroundColor(Color.parseColor("#E0F2FE"))
+                holder.cvIconBg.setCardBackgroundColor(Color.parseColor("#E0F2FE"))
+                holder.tagText.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#E0F2FE")))
                 holder.tagText.setTextColor(Color.parseColor("#0284C7"))
                 holder.icon.setColorFilter(Color.parseColor("#0284C7"))
             }
         }
 
-        holder.btn.setOnClickListener {
-            val originalBg = holder.btn.backgroundTintList
-            val originalText = holder.btn.textColors
-
-            // 1. Color change to Primary Dark
-            holder.btn.backgroundTintList = androidx.core.content.ContextCompat.getColorStateList(it.context, R.color.primaryDark)
-            holder.btn.setTextColor(Color.WHITE)
-
-            // 2. Push Effect (In and Out)
-            it.animate()
-                .scaleX(0.92f)
-                .scaleY(0.92f)
-                .setDuration(100)
-                .withEndAction {
-                    it.animate().scaleX(1f).scaleY(1f).setDuration(100).withEndAction {
-                        // 3. Revert back to original style
-                        holder.btn.backgroundTintList = originalBg
-                        holder.btn.setTextColor(originalText)
-                        
-                        onClick(item)
-                    }.start()
-                }
-                .start()
+        holder.itemView.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            onClick(item)
         }
     }
 

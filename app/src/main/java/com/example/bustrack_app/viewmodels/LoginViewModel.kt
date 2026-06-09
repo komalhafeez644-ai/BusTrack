@@ -5,22 +5,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.utils.Resource
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class LoginViewModel : ViewModel() {
 
     private val repository = AuthRepository()
 
-    val loginState = MutableLiveData<Resource<Boolean>>()
+    val loginState = MutableLiveData<Resource<String>>()
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
             loginState.value = Resource.Loading()
             val result = repository.login(email, password)
-            if (result) {
-                loginState.value = Resource.Success(true)
+            if (result == "admin" || result == "user" || result == "principal") {
+                loginState.value = Resource.Success(result)
             } else {
-                loginState.value = Resource.Error("Invalid Email or Password")
+                loginState.value = Resource.Error(result ?: "Invalid Email or Password")
             }
         }
     }
@@ -28,9 +32,21 @@ class LoginViewModel : ViewModel() {
     fun loginWithGoogle() {
         viewModelScope.launch {
             loginState.value = Resource.Loading()
-            // Mocking Google Sign In Delay
-            kotlinx.coroutines.delay(1500)
-            loginState.value = Resource.Success(true)
+            
+            // Handle Firestore entry for Google login
+            val user = Firebase.auth.currentUser
+            if (user != null) {
+                val db = Firebase.firestore
+                val userData = mapOf(
+                    "email" to user.email,
+                    "fullName" to (user.displayName ?: "Parent Name"),
+                    "role" to "user"
+                )
+                db.collection("users").document(user.uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
+            }
+            
+            delay(1000)
+            loginState.value = Resource.Success("user") 
         }
     }
 }

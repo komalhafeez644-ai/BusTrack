@@ -137,4 +137,6 @@
     <string name="term_8_num">8.</string>
     <string name="term_8_text">The administration is not liable for any personal belongings left behind in the transport vehicle.</string>
     <string name="btn_agree">I Agree</string>
+    <string name="welcome_principal">WELCOME PRINCIPAL, 👋</string>
+    <string name="profile">Profile</string>
 </resources>

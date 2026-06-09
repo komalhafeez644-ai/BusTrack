@@ -3,19 +3,25 @@ package ui.admin
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.example.bustrack_app.R
+import com.example.bustrack_app.viewmodels.ProfileViewModel
+import com.bumptech.glide.Glide
 import ui_authentication.LoginActivity
 import utils.NavigationUtils
 
 class AdminDashboardActivity : AppCompatActivity() {
 
     private lateinit var drawerLayout: DrawerLayout
+    private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,6 +36,33 @@ class AdminDashboardActivity : AppCompatActivity() {
 
         setupClickListeners()
         setupDrawerListeners()
+        observeProfileData()
+    }
+
+    private fun observeProfileData() {
+        profileViewModel.adminData.observe(this) { admin ->
+            // Update Dashboard Header
+            findViewById<TextView>(R.id.tvAdminName)?.text = admin.fullName
+            
+            // Update Drawer Header
+            findViewById<TextView>(R.id.drawerName)?.text = admin.fullName
+            findViewById<TextView>(R.id.drawerEmail)?.text = admin.email
+            
+            val profileImageView = findViewById<ImageView>(R.id.ivProfile)
+            val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
+            
+            if (admin.profileImageUrl.isNotEmpty()) {
+                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(profileImageView)
+                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
+            } else {
+                profileImageView.setImageResource(R.drawable.ic_person)
+                drawerImageView.setImageResource(R.drawable.ic_person)
+            }
+        }
+    }
+
+    private fun setupDrawerHeader() {
+        // This is now handled in observeProfileData()
     }
 
     override fun onResume() {
@@ -52,20 +85,24 @@ class AdminDashboardActivity : AppCompatActivity() {
         }
 
         findViewById<CardView>(R.id.cardLiveTracking)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, LiveTrackingActivity::class.java))
             overridePendingTransition(0, 0)
         }
 
         findViewById<CardView>(R.id.cardApplications)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, BusApplicationsActivity::class.java))
         }
 
         findViewById<CardView>(R.id.cardAttendanceHub)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, AttendanceActivity::class.java))
             overridePendingTransition(0, 0)
         }
 
         findViewById<CardView>(R.id.cardSystemAlerts)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, TransportAlertsActivity::class.java))
             overridePendingTransition(0, 0)
         }
@@ -93,42 +130,58 @@ class AdminDashboardActivity : AppCompatActivity() {
 
     private fun setupDrawerListeners() {
         findViewById<View>(R.id.drawerImgProfile)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, ProfileActivity::class.java))
             overridePendingTransition(0, 0)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerSettings)?.setOnClickListener {
-            startActivity(Intent(this, NotificationSettingsActivity::class.java))
+            utils.ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, NotificationSettingsActivity::class.java)
+            intent.putExtra("FROM_USER", "admin")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerPreferences)?.setOnClickListener {
-            startActivity(Intent(this, PreferencesActivity::class.java))
+            utils.ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, PreferencesActivity::class.java)
+            intent.putExtra("FROM_USER", "admin")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener {
-            startActivity(Intent(this, PrivacyPolicyActivityActivity::class.java))
+            utils.ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, PrivacyPolicyActivityActivity::class.java)
+            intent.putExtra("FROM_USER", "admin")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerTerms)?.setOnClickListener {
-            startActivity(Intent(this, TermsConditionsActivity::class.java))
+            utils.ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, TermsConditionsActivity::class.java)
+            intent.putExtra("FROM_USER", "admin")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerFaq)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, FaqActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
-            Toast.makeText(this, "Change Password clicked", Toast.LENGTH_SHORT).show()
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, ChangePasswordActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.drawerLogout)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             showLogoutDialog()
         }
     }

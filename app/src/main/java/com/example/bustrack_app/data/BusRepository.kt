@@ -1,51 +1,72 @@
 package com.example.bustrack_app.data
 
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.example.bustrack_app.models.BusModel
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ktx.toObjects
 
 object BusRepository {
+    private val db = FirebaseFirestore.getInstance()
+    private val busesCollection = db.collection("buses")
+
     private val _busList = MutableLiveData<List<BusModel>>()
     val busList: LiveData<List<BusModel>> get() = _busList
 
     init {
-        refreshBusList()
+        fetchBusesFromFirestore()
     }
 
-    fun refreshBusList() {
-        val routes = RouteRepository.routeList.value ?: listOf()
-        val initialBuses = mutableListOf(
-            BusModel("BUS-102", 40, "John Doe", findRouteForBus("BUS-102", routes), "ACTIVE"),
-            BusModel("BUS-088", 32, "Sarah Smith", findRouteForBus("BUS-088", routes), "INACTIVE"),
-            BusModel("BUS-215", 55, null, findRouteForBus("BUS-215", routes), "INACTIVE"),
-            BusModel("BUS-105", 40, "Mike Ross", findRouteForBus("BUS-105", routes), "ACTIVE")
-        )
-        _busList.value = initialBuses
-    }
+    private fun fetchBusesFromFirestore() {
+        busesCollection.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("BusRepository", "Listen failed.", error)
+                return@addSnapshotListener
+            }
 
-    private fun findRouteForBus(busNo: String, routes: List<com.example.bustrack_app.models.RouteModel>): String? {
-        return routes.find { it.busNo == busNo }?.routeName
-    }
-
-    fun updateBusDetails(originalNumber: String, updatedBus: BusModel) {
-        val current = _busList.value?.toMutableList() ?: mutableListOf()
-        val index = current.indexOfFirst { it.busNumber == originalNumber }
-        if (index != -1) {
-            current[index] = updatedBus
-            _busList.value = current
+            if (snapshot != null) {
+                val buses = snapshot.toObjects<BusModel>()
+                _busList.value = buses
+                Log.d("BusRepository", "Fetched ${buses.size} buses from Firestore")
+            }
         }
     }
 
-    fun deleteBus(busNumber: String) {
-        val current = _busList.value?.toMutableList() ?: mutableListOf()
-        current.removeAll { it.busNumber == busNumber }
-        _busList.value = current
+    fun refreshBusList() {
+        val currentBuses = _busList.value ?: return
+        val routes = RouteRepository.routeList.value ?: listOf()
+        
+        val updatedBuses = currentBuses.map { bus ->
+            val assignedRoute = routes.find { it.busNo == bus.busNumber }
+            bus.copy(
+                routeName = assignedRoute?.routeName,
+                driverName = assignedRoute?.driverName ?: bus.driverName,
+                status = if (assignedRoute != null) "ACTIVE" else "UNASSIGNED"
+            )
+        }
+        
+        // This is a local refresh, but we should probably save these back to Firestore 
+        // if we want them to persist across all apps.
+        _busList.value = updatedBuses
     }
 
-    fun addBus(newBus: BusModel) {
-        val current = _busList.value?.toMutableList() ?: mutableListOf()
-        current.add(newBus)
-        _busList.value = current
+    fun updateBusDetails(originalNumber: String, updatedBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
+        busesCollection.document(originalNumber).set(updatedBus)
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
+    }
+
+    fun deleteBus(busNumber: String, onComplete: (Boolean) -> Unit = {}) {
+        busesCollection.document(busNumber).delete()
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
+    }
+
+    fun addBus(newBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
+        busesCollection.document(newBus.busNumber).set(newBus)
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
     }
 
     fun getBusByNumber(busNumber: String): BusModel? {

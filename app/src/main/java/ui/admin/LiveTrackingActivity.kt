@@ -5,15 +5,18 @@ import android.os.Bundle
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.material.button.MaterialButton
-import utils.NavigationUtils
+import com.mapbox.geojson.Point
+import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 
-class LiveTrackingActivity : AppCompatActivity(), OnMapReadyCallback {
+class LiveTrackingActivity : AppCompatActivity() {
 
-    private var mMap: GoogleMap? = null
+    private var mapView: MapView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,27 +24,69 @@ class LiveTrackingActivity : AppCompatActivity(), OnMapReadyCallback {
 
         supportActionBar?.hide()
 
-        // Initialize Map
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        // Initialize Mapbox Map
+        mapView = findViewById(R.id.mapView)
+        mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+            setupMap()
+        }
 
         findViewById<MaterialButton>(R.id.btnTrackDriver)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, TrackDriverActivity::class.java)
             startActivity(intent)
         }
+
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             finish()
+        }
+
+        findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fabAlert)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, BroadcastNotificationActivity::class.java))
         }
     }
 
     override fun onResume() {
         super.onResume()
-        NavigationUtils.setupBottomNavigation(this)
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
-    override fun onMapReady(googleMap: GoogleMap) {
-        mMap = googleMap
-        // Add map settings here
+    private fun setupMap() {
+        // Default location (Islamabad)
+        val defaultPoint = Point.fromLngLat(73.0479, 33.6844)
+        
+        // Set camera
+        mapView?.mapboxMap?.setCamera(
+            CameraOptions.Builder()
+                .center(defaultPoint)
+                .zoom(12.0)
+                .build()
+        )
+
+        // Add Marker
+        val annotationApi = mapView?.annotations
+        val pointAnnotationManager = annotationApi?.createPointAnnotationManager()
+        
+        val pointAnnotationOptions = PointAnnotationOptions()
+            .withPoint(defaultPoint)
+            .withTextField("Bus #442-RT")
+        
+        pointAnnotationManager?.create(pointAnnotationOptions)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mapView?.onStart()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapView?.onStop()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mapView?.onDestroy()
     }
 }

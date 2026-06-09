@@ -35,8 +35,6 @@ class ManageStudentActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[StudentViewModel::class.java]
 
-        utils.NavigationUtils.setupBottomNavigation(this)
-
         setupRecyclerView()
         setupObservers()
         setupSearch()
@@ -51,6 +49,7 @@ class ManageStudentActivity : AppCompatActivity() {
         super.onResume()
         // Re-generate dynamic chips in case routes were added/removed
         setupDynamicFilters()
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupRecyclerView() {

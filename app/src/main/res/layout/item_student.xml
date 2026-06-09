@@ -7,18 +7,19 @@
     android:layout_marginHorizontal="16dp"
     android:layout_marginVertical="8dp"
     app:cardBackgroundColor="#FFFFFF"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="20dp"
+    app:cardElevation="3dp">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="16dp">
 
+        <!-- Student Avatar/Initial -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/imageContainer"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -37,19 +38,20 @@
                 android:id="@+id/imgStudent"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:padding="2dp"
+                android:padding="1.5dp"
                 android:scaleType="centerCrop"
                 app:shapeAppearanceOverlay="@style/CircleImage"
-                app:strokeColor="#D1D9E6"
+                app:strokeColor="#E2E8F0"
                 app:strokeWidth="2dp" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <!-- Student Name -->
         <TextView
             android:id="@+id/txtStudentName"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
-            android:textColor="#1B2B48"
+            android:textColor="#0F172A"
             android:textSize="17sp"
             android:textStyle="bold"
             app:layout_constraintEnd_toStartOf="@+id/statusBadge"
@@ -57,95 +59,115 @@
             app:layout_constraintTop_toTopOf="@id/imageContainer"
             tools:text="Elena Rodriguez" />
 
+        <!-- ID & Grade Detail -->
         <TextView
             android:id="@+id/txtStudentDetail"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#666666"
+            android:textColor="#64748B"
             android:textSize="12sp"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/txtStudentName"
             tools:text="Grade 11 • #SR-9921" />
 
+        <!-- Top Right Status Badge (Route / Unassigned) -->
         <TextView
             android:id="@+id/statusBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
             android:textSize="10sp"
             android:textStyle="bold"
+            android:background="@drawable/bg_filter_row"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/txtStudentName"
-            tools:text="● UNASSIGNED" />
+            tools:text="● ROUTE 1" />
 
+        <!-- Middle Divider -->
         <View
             android:id="@+id/divider"
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_marginTop="12dp"
-            android:background="#F0F0F0"
+            android:layout_marginTop="16dp"
+            android:background="#F1F5F9"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/txtStudentDetail" />
 
-        <ImageView
-            android:id="@+id/icLocation"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
+        <!-- Location Info (Shown for Unassigned) -->
+        <LinearLayout
+            android:id="@+id/layoutLocation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:src="@drawable/outline_location"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/divider"
-            app:tint="#666666" />
+            app:layout_constraintEnd_toStartOf="@id/btnAction">
 
-        <TextView
-            android:id="@+id/txtLocationInfo"
-            android:layout_width="wrap_content"
+            <ImageView
+                android:id="@+id/icLocation"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/outline_location"
+                app:tint="#64748B" />
+
+            <TextView
+                android:id="@+id/txtLocationInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textColor="#64748B"
+                android:textSize="12sp"
+                tools:text="North District" />
+        </LinearLayout>
+
+        <!-- Bus Info (Shown for Assigned) -->
+        <LinearLayout
+            android:id="@+id/layoutBus"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:textColor="#666666"
-            android:textSize="12sp"
-            app:layout_constraintBottom_toBottomOf="@id/icLocation"
-            app:layout_constraintStart_toEndOf="@id/icLocation"
-            app:layout_constraintTop_toTopOf="@id/icLocation"
-            tools:text="North District" />
-
-        <ImageView
-            android:id="@+id/icBus"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
             android:layout_marginTop="12dp"
-            android:src="@drawable/directions_bus"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:visibility="gone"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/divider"
-            app:tint="#666666" />
+            app:layout_constraintEnd_toStartOf="@id/btnAction">
 
-        <TextView
-            android:id="@+id/txtBusInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:textColor="#666666"
-            android:textSize="12sp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="@id/icBus"
-            app:layout_constraintStart_toEndOf="@id/icBus"
-            app:layout_constraintTop_toTopOf="@id/icBus"
-            tools:text="Bus #102" />
+            <ImageView
+                android:id="@+id/icBus"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/directions_bus"
+                app:tint="#64748B" />
 
+            <TextView
+                android:id="@+id/txtBusInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textColor="#64748B"
+                android:textSize="12sp"
+                tools:text="Bus #102" />
+        </LinearLayout>
+
+        <!-- Bottom Right Action Button -->
         <TextView
             android:id="@+id/btnAction"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#1E88E5"
-            android:textSize="13sp"
+            android:background="?attr/selectableItemBackground"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:textColor="#2563EB"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:paddingVertical="4dp"
-            app:layout_constraintBottom_toBottomOf="@id/icLocation"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@id/icLocation"
+            app:layout_constraintTop_toTopOf="@id/layoutLocation"
             tools:text="View Details" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>

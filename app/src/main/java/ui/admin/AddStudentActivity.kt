@@ -13,18 +13,20 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.databinding.ActivityAddStudentBinding
 import com.example.bustrack_app.models.StudentModel
+import utils.StorageUtils
 import utils.ViewUtils
 
 class AddStudentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAddStudentBinding
+    private var selectedImageUri: Uri? = null
 
     // Photo Picker Launcher
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
+            selectedImageUri = it
             binding.imgStudentUpload.setImageURI(it)
             binding.imgStudentUpload.setPadding(0, 0, 0, 0)
-            Toast.makeText(this, "Photo uploaded successfully", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -63,21 +65,27 @@ class AddStudentActivity : AppCompatActivity() {
         binding.btnOnlyAdd.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             if (validateForm()) {
-                saveStudent() // Only add
-                Toast.makeText(this, "Student Added Successfully!", Toast.LENGTH_SHORT).show()
-                finish()
+                if (selectedImageUri != null) {
+                    uploadAndSave(false)
+                } else {
+                    saveStudent("") {
+                        Toast.makeText(this, "Student Added Successfully!", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                }
             }
         }
 
         binding.btnAddAndNext.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             if (validateForm()) {
-                val newStudent = saveStudent()
-                // Navigation to Route Analysis
-                val intent = Intent(this, RouteAnalysisActivity::class.java)
-                intent.putExtra("APPLICATION_DATA", mapStudentToAppModel(newStudent))
-                startActivity(intent)
-                finish()
+                if (selectedImageUri != null) {
+                    uploadAndSave(true)
+                } else {
+                    saveStudent("") { newStudent ->
+                        navigateToAnalysis(newStudent)
+                    }
+                }
             }
         }
 
@@ -99,7 +107,30 @@ class AddStudentActivity : AppCompatActivity() {
         return true
     }
 
-    private fun saveStudent(): StudentModel {
+    private fun uploadAndSave(goNext: Boolean) {
+        binding.btnOnlyAdd.isEnabled = false
+        binding.btnAddAndNext.isEnabled = false
+        Toast.makeText(this, "Uploading photo...", Toast.LENGTH_SHORT).show()
+
+        StorageUtils.uploadImage("student_profiles", selectedImageUri!!) { url ->
+            if (url != null) {
+                saveStudent(url) { student ->
+                    Toast.makeText(this, "Student Added Successfully!", Toast.LENGTH_SHORT).show()
+                    if (goNext) {
+                        navigateToAnalysis(student)
+                    } else {
+                        finish()
+                    }
+                }
+            } else {
+                binding.btnOnlyAdd.isEnabled = true
+                binding.btnAddAndNext.isEnabled = true
+                Toast.makeText(this, "Photo upload failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun saveStudent(imageUrl: String, onComplete: (StudentModel) -> Unit) {
         val student = StudentModel(
             id = binding.etEmployeeId.text.toString().trim(),
             name = binding.etFullName.text.toString().trim(),
@@ -109,13 +140,31 @@ class AddStudentActivity : AppCompatActivity() {
             busNo = null,
             status = "UNASSIGNED",
             profileImage = 0,
+            profileImageUrl = imageUrl,
             fatherName = binding.etParentName.text.toString().trim(),
             phoneNumber = binding.etEmergencyContact.text.toString().trim(),
             pickupTime = "TBD",
             insuranceStatus = "Pending"
         )
-        StudentRepository.addStudent(student)
-        return student
+        
+        // Save to Firestore via FirebaseRepository
+        com.example.bustrack_app.data.FirebaseRepository.saveStudent(student) { success ->
+            if (success) {
+                StudentRepository.addStudent(student)
+                onComplete(student)
+            } else {
+                binding.btnOnlyAdd.isEnabled = true
+                binding.btnAddAndNext.isEnabled = true
+                Toast.makeText(this, "Failed to save student to Firestore", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun navigateToAnalysis(student: StudentModel) {
+        val intent = Intent(this, RouteAnalysisActivity::class.java)
+        intent.putExtra("APPLICATION_DATA", mapStudentToAppModel(student))
+        startActivity(intent)
+        finish()
     }
 
     private fun mapStudentToAppModel(s: StudentModel): com.example.bustrack_app.models.ApplicationModel {
@@ -128,6 +177,7 @@ class AddStudentActivity : AppCompatActivity() {
             time = "Now",
             status = "Pending",
             image = s.profileImage,
+            profileImageUrl = s.profileImageUrl,
             parentName = s.fatherName
         )
     }

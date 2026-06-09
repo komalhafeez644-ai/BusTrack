@@ -94,9 +94,11 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilFullName"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
                         android:background="@drawable/bg_google"
                         app:boxBackgroundMode="none"
                         app:hintEnabled="false"
@@ -127,9 +129,11 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilEmail"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
                         android:background="@drawable/bg_google"
                         app:boxBackgroundMode="none"
                         app:hintEnabled="false"
@@ -160,9 +164,11 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilPassword"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
                         android:background="@drawable/bg_google"
                         app:boxBackgroundMode="none"
                         app:hintEnabled="false"
@@ -195,9 +201,11 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilConfirmPassword"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
                         android:background="@drawable/bg_google"
                         app:boxBackgroundMode="none"
                         app:hintEnabled="false"
@@ -219,6 +227,41 @@
                             android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Phone Number -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="Phone Number"
+                        android:textColor="@color/labelColor"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilPhone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
+                        android:background="@drawable/bg_google"
+                        app:boxBackgroundMode="none"
+                        app:hintEnabled="false"
+                        app:startIconDrawable="@drawable/phone_24"
+                        app:startIconTint="#9E9E9E">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etPhone"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@android:color/transparent"
+                            android:hint="+92 300 1234567"
+                            android:inputType="phone"
+                            android:paddingVertical="14dp"
+                            android:textColorHint="@color/textColorHint"
+                            android:textColor="@color/DarkGrey"
+                            android:textSize="15sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <!-- Student Registration Number -->
                     <TextView
                         android:layout_width="wrap_content"
@@ -230,9 +273,11 @@
                         android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilRegNumber"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        app:errorEnabled="true"
                         android:background="@drawable/bg_google"
                         app:boxBackgroundMode="none"
                         app:hintEnabled="false"
@@ -251,6 +296,19 @@
                             android:textColor="@color/DarkGrey"
                             android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Sign Up Button -->
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnCreateAccount"
+                        android:layout_width="match_parent"
+                        android:layout_height="60dp"
+                        android:layout_marginTop="32dp"
+                        android:background="@drawable/bg_button"
+                        android:text="Create Account"
+                        android:textAllCaps="false"
+                        android:textColor="@color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

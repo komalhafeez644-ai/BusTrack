@@ -2,6 +2,7 @@ package ui_authentication
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Patterns
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -12,7 +13,9 @@ import com.example.bustrack_app.login.ForgotPasswordActivity
 import com.example.bustrack_app.utils.Resource
 import com.example.bustrack_app.viewmodels.LoginViewModel
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import ui.admin.AdminDashboardActivity
+import ui.principal.PrincipalDashboardActivity
 // IMPORT ADD KIYA: Taake intent ko pata chale Signup Activity kahan hai
 
 class LoginActivity : AppCompatActivity() {
@@ -23,6 +26,8 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
+        val tilEmail = findViewById<TextInputLayout>(R.id.tilEmail)
+        val tilPassword = findViewById<TextInputLayout>(R.id.tilPassword)
         val etEmail = findViewById<TextInputEditText>(R.id.etEmail)
         val etPassword = findViewById<TextInputEditText>(R.id.etPassword)
         val btnLogin = findViewById<Button>(R.id.btnLogin)
@@ -34,8 +39,18 @@ class LoginActivity : AppCompatActivity() {
             val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString().trim()
 
-            if (email.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "Enter all fields", Toast.LENGTH_SHORT).show()
+            // Reset errors
+            tilEmail.error = null
+            tilPassword.error = null
+
+            if (email.isEmpty()) {
+                tilEmail.error = "Email is required"
+            } else if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                tilEmail.error = "Invalid email format"
+            } else if (password.isEmpty()) {
+                tilPassword.error = "Password is required"
+            } else if (password.length < 6) {
+                tilPassword.error = "Password must be at least 6 characters"
             } else {
                 viewModel.login(email, password)
             }
@@ -63,13 +78,30 @@ class LoginActivity : AppCompatActivity() {
         viewModel.loginState.observe(this) { resource ->
             when (resource) {
                 is Resource.Loading -> {
-                    Toast.makeText(this, "Connecting to Google...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Logging in...", Toast.LENGTH_SHORT).show()
                 }
                 is Resource.Success -> {
-                    Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
-                    val intent = Intent(this, AdminDashboardActivity::class.java)
-                    startActivity(intent)
-                    finish()
+                    val role = resource.data
+                    when (role) {
+                        "admin" -> {
+                            Toast.makeText(this, "Admin Login Successful", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this, AdminDashboardActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        }
+                        "principal" -> {
+                            Toast.makeText(this, "Principal Login Successful", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this, PrincipalDashboardActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        }
+                        else -> {
+                            Toast.makeText(this, "Parent Login Successful", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this, ui.parent.ParentDashboardActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        }
+                    }
                 }
                 is Resource.Error -> {
                     Toast.makeText(this, resource.message ?: "Login Failed", Toast.LENGTH_SHORT).show()

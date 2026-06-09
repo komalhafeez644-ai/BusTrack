@@ -4,11 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bustrack_app.adapter.BusAdapter
+import com.example.bustrack_app.data.RouteRepository
+import com.example.bustrack_app.data.DriverRepository
 import com.example.bustrack_app.databinding.ActivityManageBusesBinding
 import com.example.bustrack_app.databinding.DialogAddNewBusBinding
 import com.example.bustrack_app.models.BusModel
@@ -28,8 +31,6 @@ class ManageBusesActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityManageBusesBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        utils.NavigationUtils.setupBottomNavigation(this)
 
         viewModel = ViewModelProvider(this)[BusViewModel::class.java]
 
@@ -51,6 +52,7 @@ class ManageBusesActivity : AppCompatActivity() {
         super.onResume()
         // Refresh mapping from Route Management
         com.example.bustrack_app.data.BusRepository.refreshBusList()
+        utils.NavigationUtils.setupBottomNavigation(this)
     }
 
     private fun setupRecyclerViewList() {
@@ -67,7 +69,7 @@ class ManageBusesActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onStatusChanged = { bus, isChecked ->
-                val isUnassigned = bus.driverName.isNullOrEmpty() || bus.routeName.isNullOrEmpty()
+                val isUnassigned = bus.routeName.isNullOrEmpty()
                 val newStatus = when {
                     isUnassigned -> "UNASSIGNED"
                     isChecked -> "ACTIVE"
@@ -99,53 +101,83 @@ class ManageBusesActivity : AppCompatActivity() {
         val dialogBinding = DialogAddNewBusBinding.inflate(LayoutInflater.from(this))
         bottomSheetDialog.setContentView(dialogBinding.root)
 
-        // REQUIREMENT: Route select karne ki logic remove karni thi, to hum runtime layout fields ko completely hide kar dete hain
-        // Is se aapko layout XML file se dropdown manually delete bhi nahi karna parega!
-        // Note: spinnerRouteSelection dropdown se upar jo textview labels hain, unke paas direct unique IDs nahi thin, isliye layout structure ko maintain rakhte hue dropdown view control handle kiya gaya hai.
-        dialogBinding.spinnerRouteSelection.parent.parent?.let { routeContainer ->
-            if (routeContainer is View) {
-                routeContainer.visibility = View.GONE
-            }
-        }
-        // Route dropdown ke labels ko programmatic structure hide settings
-        dialogBinding.spinnerRouteSelection.visibility = View.GONE
+        // Setup Route Dropdown from RouteRepository
+        val routes = RouteRepository.routeList.value ?: listOf()
+        val routeNames = routes.map { it.routeName }.toMutableList()
+        routeNames.add(0, "Select Route")
 
-        // CANCEL BUTTON ACTIONS (Popup cross icon & text action handling)
+        val routeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, routeNames)
+        dialogBinding.spinnerRouteSelection.setAdapter(routeAdapter)
+        dialogBinding.spinnerRouteSelection.setText("Select Route", false)
+
+        // Setup Driver Dropdown from DriverRepository
+        val drivers = DriverRepository.driverList.value ?: listOf()
+        val driverNames = drivers.map { it.name }.toMutableList()
+        driverNames.add(0, "Select Driver")
+
+        val driverAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, driverNames)
+        dialogBinding.spinnerDriverSelection.setAdapter(driverAdapter)
+        dialogBinding.spinnerDriverSelection.setText("Select Driver", false)
+
+        // CANCEL BUTTON ACTIONS
         dialogBinding.btnCancelCross.setOnClickListener { bottomSheetDialog.dismiss() }
         dialogBinding.tvCancelFormAction.setOnClickListener { bottomSheetDialog.dismiss() }
 
-        // SAVE BUTTON CLICK LOGIC (XML matching IDs)
+        // SAVE BUTTON CLICK LOGIC
         dialogBinding.btnSaveBusSubmit.setOnClickListener {
             val busNo = dialogBinding.etBusNumberInput.text.toString().trim()
             val capacityStr = dialogBinding.etCapacityInput.text.toString().trim()
-            val selectedDriver = dialogBinding.spinnerDriverSelection.text.toString().trim()
+            val selectedRouteName = dialogBinding.spinnerRouteSelection.text.toString().trim()
+            val selectedDriverName = dialogBinding.spinnerDriverSelection.text.toString().trim()
 
-            // 1. MUST VALIDATION: Bus number aur capacity mandatory filled honi chahiye
             if (busNo.isEmpty() || capacityStr.isEmpty()) {
                 Toast.makeText(this, "Bus Number and Capacity are required!", Toast.LENGTH_SHORT).show()
             } else {
                 val capacity = capacityStr.toIntOrNull() ?: 0
+                val routeValue = if (selectedRouteName == "Select Route") null else selectedRouteName
+                val driverValue = if (selectedDriverName == "Select Driver") null else selectedDriverName
 
-                // 2. OPTIONAL DRIVER LOGIC: Agar input empty hai to null pass hoga warna framework input content pass karega
-                val driverValue = selectedDriver.ifEmpty { null }
+                // 1. Dependency Logic: Update Repositories if route/driver is selected
+                assignBusToRouteAndDriver(busNo, routeValue ?: "", driverValue ?: "")
 
-                // 3. New Bus Object Data Matrix
+                // 2. New Bus Object
                 val newBus = BusModel(
                     busNumber = busNo,
                     totalSeats = capacity,
-                    driverName = driverValue, // Optional Driver input string/null handle
-                    routeName = null,         // Route option permanent disabled array configuration
-                    status = "UNASSIGNED"     // Default status code
+                    driverName = driverValue,
+                    routeName = routeValue,
+                    status = if (routeValue != null) "ACTIVE" else "UNASSIGNED"
                 )
 
                 viewModel.addNewBus(newBus)
-
-                // Button click event handling acknowledgment toast display
                 Toast.makeText(this, "Bus Added Successfully!", Toast.LENGTH_SHORT).show()
                 bottomSheetDialog.dismiss()
             }
         }
 
         bottomSheetDialog.show()
+    }
+
+    private fun assignBusToRouteAndDriver(busNo: String, routeName: String, driverName: String) {
+        val finalRoute = if (routeName == "Select Route") "" else routeName
+        val finalDriver = if (driverName == "Select Driver") "" else driverName
+
+        // 1. Update Driver Repository
+        if (finalDriver.isNotEmpty()) {
+            val drivers = DriverRepository.driverList.value ?: listOf()
+            val targetDriver = drivers.find { it.name == finalDriver }
+            targetDriver?.let {
+                DriverRepository.updateDriver(it.copy(assignedBus = busNo, route = finalRoute))
+            }
+        }
+
+        // 2. Update Route Repository
+        if (finalRoute.isNotEmpty()) {
+            val allRoutes = RouteRepository.routeList.value ?: return
+            val targetRoute = allRoutes.find { it.routeName == finalRoute }
+            targetRoute?.let {
+                RouteRepository.updateRoute(it.copy(busNo = busNo, driverName = finalDriver))
+            }
+        }
     }
 }

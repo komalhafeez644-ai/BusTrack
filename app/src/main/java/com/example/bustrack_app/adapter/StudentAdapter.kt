@@ -1,18 +1,21 @@
 package com.example.bustrack_app.adapter
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ItemStudentBinding
 import com.example.bustrack_app.models.StudentModel
 
 class StudentAdapter(
     private var students: List<StudentModel> = listOf(),
-    private val onAssignClick: (StudentModel) -> Unit,
-    private val onEditClick: (StudentModel) -> Unit
+    private val showActionButtons: Boolean = true, // Flag to hide buttons in Profile
+    private val onAssignClick: (StudentModel) -> Unit = {},
+    private val onEditClick: (StudentModel) -> Unit = {}
 ) : RecyclerView.Adapter<StudentAdapter.StudentViewHolder>() {
 
     fun setStudents(newList: List<StudentModel>) {
@@ -21,7 +24,6 @@ class StudentAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StudentViewHolder {
-        // Aapki XML file 'item_student.xml' hai, isliye ItemStudentBinding use hoga
         val itemBinding = ItemStudentBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return StudentViewHolder(itemBinding)
     }
@@ -31,60 +33,58 @@ class StudentAdapter(
 
     inner class StudentViewHolder(private val itemBinding: ItemStudentBinding) : RecyclerView.ViewHolder(itemBinding.root) {
         fun bind(student: StudentModel) {
-            // Basic Details
             itemBinding.txtStudentName.text = student.name
             itemBinding.txtStudentDetail.text = "Grade ${student.grade} • ${student.id}"
 
             val route = student.route ?: ""
 
+            // Toggle action button visibility based on flag
+            itemBinding.btnAction.visibility = if (showActionButtons) View.VISIBLE else View.GONE
+
             if (route.isEmpty()) {
-                // --- CASE 1: UNASSIGNED (Image ka pehla card) ---
                 itemBinding.statusBadge.text = "● UNASSIGNED"
-                itemBinding.statusBadge.setBackgroundResource(R.drawable.bg_status_badge_red) //
-                itemBinding.statusBadge.setTextColor(Color.parseColor("#E57373"))
+                itemBinding.statusBadge.setBackgroundResource(R.drawable.bg_status_badge_red)
+                itemBinding.statusBadge.backgroundTintList = null 
+                itemBinding.statusBadge.setTextColor(Color.parseColor("#EF4444")) 
 
-                // Show Location, Hide Bus Info
-                itemBinding.icLocation.visibility = View.VISIBLE
-                itemBinding.txtLocationInfo.visibility = View.VISIBLE
+                itemBinding.layoutLocation.visibility = View.VISIBLE
                 itemBinding.txtLocationInfo.text = student.location
+                itemBinding.layoutBus.visibility = View.GONE
 
-                itemBinding.icBus.visibility = View.GONE
-                itemBinding.txtBusInfo.visibility = View.GONE
-
-                // Button Action
                 itemBinding.btnAction.text = "Assign Route"
                 itemBinding.btnAction.setOnClickListener { onAssignClick(student) }
 
             } else {
-                // --- CASE 2: ASSIGNED (Image ka doosra card) ---
-                // 1. Status Badge par Route ka naam aayega
                 itemBinding.statusBadge.text = "● ${route.uppercase()}"
-                itemBinding.statusBadge.setBackgroundResource(R.drawable.bg_filter_row) // Blue background
-                itemBinding.statusBadge.setTextColor(Color.parseColor("#1E88E5"))
+                itemBinding.statusBadge.setBackgroundResource(R.drawable.bg_chip_selected)
+                itemBinding.statusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#F1F5F9"))
+                itemBinding.statusBadge.setTextColor(Color.parseColor("#475569")) 
 
-                // 2. Location Hide karein aur Bus Info Show karein
-                itemBinding.icLocation.visibility = View.GONE
-                itemBinding.txtLocationInfo.visibility = View.GONE
+                itemBinding.layoutLocation.visibility = View.GONE
+                itemBinding.layoutBus.visibility = View.VISIBLE
+                itemBinding.txtBusInfo.text = student.busNo ?: "Bus #102"
 
-                itemBinding.icBus.visibility = View.VISIBLE
-                itemBinding.txtBusInfo.visibility = View.VISIBLE
-                itemBinding.txtBusInfo.text = "Bus #102" // Yahan student model se bus info dein
-
-                // 3. Button change to View Details
                 itemBinding.btnAction.text = "View Details"
                 itemBinding.btnAction.setOnClickListener { onEditClick(student) }
             }
 
-            // Photo vs Initials Logic (Aapki Driver Adapter wali same logic)
-            if (student.profileImage == 0) {
+            // Image Loading Logic (URL first, then Drawable, then Initials)
+            if (student.profileImageUrl.isNotEmpty()) {
+                itemBinding.imgStudent.visibility = View.VISIBLE
+                itemBinding.txtAvatar.visibility = View.GONE
+                Glide.with(itemBinding.root.context)
+                    .load(student.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .into(itemBinding.imgStudent)
+            } else if (student.profileImage != 0) {
+                itemBinding.imgStudent.visibility = View.VISIBLE
+                itemBinding.txtAvatar.visibility = View.GONE
+                itemBinding.imgStudent.setImageResource(student.profileImage)
+            } else {
                 itemBinding.imgStudent.visibility = View.GONE
                 itemBinding.txtAvatar.visibility = View.VISIBLE
                 val initials = student.name.split(" ").filter { it.isNotEmpty() }.map { it[0] }.take(2).joinToString("")
                 itemBinding.txtAvatar.text = initials.uppercase()
-            } else {
-                itemBinding.imgStudent.visibility = View.VISIBLE
-                itemBinding.txtAvatar.visibility = View.GONE
-                itemBinding.imgStudent.setImageResource(student.profileImage)
             }
         }
     }

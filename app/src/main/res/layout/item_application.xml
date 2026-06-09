@@ -56,6 +56,16 @@
                 android:text="Grade 10 • Section B"
                 android:textColor="#64748B"
                 android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/txtRegNo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="Reg: #BT-8821"
+                android:textColor="#94A3B8"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <!-- Status Section -->
@@ -170,7 +180,7 @@
             <ImageView
                 android:id="@+id/ivPhoneIcon"
                 android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_height="17dp"
                 android:src="@drawable/phone_24"
                 app:tint="@color/primaryBlue"
                 app:layout_constraintEnd_toStartOf="@+id/lblPhone"

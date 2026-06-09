@@ -215,7 +215,7 @@
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Student ID"
+                        android:hint="Registration number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
                         app:boxStrokeColor="@color/box_stroke_selector"

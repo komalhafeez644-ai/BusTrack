@@ -215,13 +215,39 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="| FLEET ASSIGNMENT (READ ONLY)"
+                        android:text="| FLEET ASSIGNMENT"
                         android:textColor="#005DB7"
                         android:textSize="12sp"
                         android:textStyle="bold"
                         android:layout_marginBottom="16dp"/>
 
-                    <!-- Route Block -->
+                    <!-- Bus Assignment Dropdown -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Assigned Bus"
+                        android:textColorHint="#666666"
+                        app:hintTextColor="@color/primaryBlue"
+                        app:boxStrokeColor="@color/box_stroke_selector"
+                        android:layout_marginBottom="16dp"
+                        app:boxCornerRadiusTopStart="12dp"
+                        app:boxCornerRadiusTopEnd="12dp"
+                        app:boxCornerRadiusBottomStart="12dp"
+                        app:boxCornerRadiusBottomEnd="12dp"
+                        app:startIconDrawable="@drawable/directions_bus"
+                        app:startIconTint="#8E8E93">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/menuEditBus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:textColor="#1C1C1E"
+                            android:textSize="16sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Route Display (Auto-updated based on Bus) -->
                     <LinearLayout
                         android:id="@+id/layoutRouteBlock"
                         android:layout_width="match_parent"
@@ -230,9 +256,7 @@
                         android:gravity="center_vertical"
                         android:layout_marginBottom="20dp"
                         android:background="@drawable/bg_search_bar"
-                        android:padding="12dp"
-                        android:clickable="true"
-                        android:focusable="true">
+                        android:padding="12dp">
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
@@ -253,46 +277,7 @@
                                 android:id="@+id/txtRouteValue"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Route Info"
-                                android:textColor="#1C1C1E"
-                                android:textSize="16sp"
-                                android:layout_marginTop="2dp"/>
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- Bus Block -->
-                    <LinearLayout
-                        android:id="@+id/layoutBusBlock"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="20dp"
-                        android:background="@drawable/bg_search_bar"
-                        android:padding="12dp"
-                        android:clickable="true"
-                        android:focusable="true">
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/directions_bus"
-                            app:tint="#8E8E93"/>
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:layout_marginStart="16dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Assigned Bus"
-                                android:textColor="#8E8E93"
-                                android:textSize="12sp"/>
-                            <TextView
-                                android:id="@+id/txtBusValue"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Bus Info"
+                                android:text="No Route"
                                 android:textColor="#1C1C1E"
                                 android:textSize="16sp"
                                 android:layout_marginTop="2dp"/>

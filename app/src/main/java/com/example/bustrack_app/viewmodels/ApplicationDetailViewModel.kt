@@ -10,11 +10,11 @@ class ApplicationDetailViewModel : ViewModel() {
     private val _applicationDetail = MutableLiveData<ApplicationDetailModel>()
     val applicationDetail: LiveData<ApplicationDetailModel> = _applicationDetail
 
-    fun loadApplicationDetail(studentName: String? = null) {
+    fun loadApplicationDetail(studentName: String? = null, currentStatus: String? = "Pending") {
 
         _applicationDetail.value = ApplicationDetailModel(
             applicationId = if (studentName != null) "#APP-2025-${(100..999).random()}" else "#APP-2025-001",
-            status = "Pending",
+            status = currentStatus ?: "Pending",
             dateTime = "Today, 08:45 AM",
 
             studentName = studentName ?: "Aryan Sharma",
