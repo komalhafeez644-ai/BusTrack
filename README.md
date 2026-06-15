@@ -42,7 +42,7 @@ git clone https://github.com/komalhafeez644-ai/BusTrack
 
 5. Run the application on Android device or emulator  
 
-## ontributing
+## Contributing
 Contributions and improvements are welcome. Feel free to fork the repository and submit pull requests.
 
 ## Contact
