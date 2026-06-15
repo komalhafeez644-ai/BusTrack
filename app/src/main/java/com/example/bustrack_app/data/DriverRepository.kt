@@ -11,7 +11,7 @@ object DriverRepository {
     private val db = FirebaseFirestore.getInstance()
     private val driversCollection = db.collection("drivers")
 
-    private val _driverList = MutableLiveData<List<DriverModel>>()
+    private val _driverList = MutableLiveData<List<DriverModel>>(emptyList())
     val driverList: LiveData<List<DriverModel>> get() = _driverList
 
     init {

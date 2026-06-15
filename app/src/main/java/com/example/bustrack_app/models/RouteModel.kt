@@ -11,8 +11,8 @@ data class StopItem(
 ) : Serializable
 
 data class LatLngModel(
-    val latitude: Double,
-    val longitude: Double
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
 ) : Serializable
 
 data class RouteModel(

@@ -17,5 +17,11 @@ data class ApplicationModel(
     val bestRoute: String = "Route-01",
     val matchPercent: String = "95%",
     val nearestStop: String = "North Gate",
-    val distance: String = "0.8km away"
+    val distance: String = "0.8km away",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val studentIdString: String = "",
+    val assignedBus: String = "",
+    val assignedDriver: String = "",
+    val routeCode: String = ""
 ) : Serializable

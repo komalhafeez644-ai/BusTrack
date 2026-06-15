@@ -86,7 +86,7 @@ class SignupActivity : AppCompatActivity() {
         }
 
         if (regNum.isEmpty()) {
-            binding.tilRegNumber.error = "Registration Number is required"
+            binding.tilRegNumber.error = "Student ID is required"
             isValid = false
         }
 

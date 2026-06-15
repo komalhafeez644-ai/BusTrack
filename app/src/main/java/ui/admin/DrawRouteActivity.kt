@@ -150,12 +150,16 @@ class DrawRouteActivity : AppCompatActivity() {
     }
 
     private fun performSearch(query: String) {
-        Log.d("SearchDebug", "Searching for: $query")
+        val cleanQuery = query
+            .replace("more", "mor", ignoreCase = true)
+            .replace("morr", "mor", ignoreCase = true)
+
+        Log.d("SearchDebug", "Searching for: $cleanQuery")
         currentGeocodingCall?.cancelCall()
 
         val geocoding = MapboxGeocoding.builder()
             .accessToken(getString(R.string.mapbox_access_token))
-            .query("$query Rawalpindi")
+            .query(cleanQuery)
             .country("pk") 
             .autocomplete(true)
             .fuzzyMatch(true)
@@ -167,17 +171,20 @@ class DrawRouteActivity : AppCompatActivity() {
             override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
                 Log.d("SearchDebug", "Response Code: ${response.code()}")
                 if (response.isSuccessful) {
-                    Log.d("SearchDebug", "Full Response: ${response.body().toString()}")
                     val results = response.body()?.features() ?: emptyList()
                     Log.d("SearchDebug", "Features found: ${results.size}")
+                    
+                    results.forEach {
+                        Log.d("SearchDebug", "Name=${it.text()} Type=${it.placeType()} Address=${it.placeName()}")
+                    }
                     
                     runOnUiThread {
                         if (results.isNotEmpty()) {
                             showSearchResults(results)
                         } else {
-                            Log.d("SearchDebug", "No results for $query")
+                            Log.d("SearchDebug", "No results for $cleanQuery")
                             binding.rvSearchResults.visibility = View.GONE
-                            if (query.length > 3) {
+                            if (cleanQuery.length > 3) {
                                 Toast.makeText(this@DrawRouteActivity, "No results found. Try another query.", Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -365,7 +372,7 @@ class DrawRouteActivity : AppCompatActivity() {
             circleAnnotationManager?.create(circleOptions)
         }
 
-        val pathToDraw = if (roadPathPoints.isNotEmpty()) roadPathPoints else tapPoints
+        val pathToDraw = roadPathPoints.ifEmpty { tapPoints }
         if (pathToDraw.size > 1) {
             val polylineOptions = PolylineAnnotationOptions()
                 .withPoints(pathToDraw)

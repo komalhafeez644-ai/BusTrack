@@ -226,9 +226,12 @@
                     android:layout_height="54dp"
                     android:inputType="none"
                     android:paddingHorizontal="16dp"
-                    android:text="Select Route"
+                    android:text="None"
                     android:textColor="#000000"
-                    android:textSize="16sp" />
+                    android:textSize="16sp"
+                    android:background="@null"
+                    android:dropDownSelector="?attr/selectableItemBackground"
+                    android:popupBackground="@android:color/white" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <TextView
@@ -261,9 +264,12 @@
                     android:layout_height="54dp"
                     android:inputType="none"
                     android:paddingHorizontal="16dp"
-                    android:text="Select Driver"
+                    android:text="None"
                     android:textColor="#000000"
-                    android:textSize="16sp" />
+                    android:textSize="16sp"
+                    android:background="@null"
+                    android:dropDownSelector="?attr/selectableItemBackground"
+                    android:popupBackground="@android:color/white" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.button.MaterialButton

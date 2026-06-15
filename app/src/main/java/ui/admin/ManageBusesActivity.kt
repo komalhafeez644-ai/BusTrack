@@ -34,6 +34,14 @@ class ManageBusesActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[BusViewModel::class.java]
 
+        // Pre-fetch and observe data for dropdowns to ensure they are ready when needed
+        DriverRepository.driverList.observe(this) { drivers ->
+            // Data is kept fresh in background
+        }
+        RouteRepository.routeList.observe(this) { routes ->
+            // Data is kept fresh in background
+        }
+
         setupRecyclerViewList()
         observeViewModelStreams()
 
@@ -69,7 +77,7 @@ class ManageBusesActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onStatusChanged = { bus, isChecked ->
-                val isUnassigned = bus.routeName.isNullOrEmpty()
+                val isUnassigned = bus.routeName.isNullOrEmpty() || bus.driverName.isNullOrEmpty()
                 val newStatus = when {
                     isUnassigned -> "UNASSIGNED"
                     isChecked -> "ACTIVE"
@@ -101,23 +109,30 @@ class ManageBusesActivity : AppCompatActivity() {
         val dialogBinding = DialogAddNewBusBinding.inflate(LayoutInflater.from(this))
         bottomSheetDialog.setContentView(dialogBinding.root)
 
+        // Ensure the bottom sheet is expanded when shown to avoid layout shifts with keyboard
+        bottomSheetDialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        bottomSheetDialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
         // Setup Route Dropdown from RouteRepository
         val routes = RouteRepository.routeList.value ?: listOf()
         val routeNames = routes.map { it.routeName }.toMutableList()
-        routeNames.add(0, "Select Route")
+        routeNames.add(0, "None")
 
-        val routeAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, routeNames)
+        val routeAdapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, routeNames)
         dialogBinding.spinnerRouteSelection.setAdapter(routeAdapter)
-        dialogBinding.spinnerRouteSelection.setText("Select Route", false)
+        dialogBinding.spinnerRouteSelection.setText("None", false)
 
         // Setup Driver Dropdown from DriverRepository
         val drivers = DriverRepository.driverList.value ?: listOf()
         val driverNames = drivers.map { it.name }.toMutableList()
-        driverNames.add(0, "Select Driver")
+        driverNames.add(0, "None")
 
-        val driverAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, driverNames)
+        val driverAdapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, driverNames)
         dialogBinding.spinnerDriverSelection.setAdapter(driverAdapter)
-        dialogBinding.spinnerDriverSelection.setText("Select Driver", false)
+        dialogBinding.spinnerDriverSelection.setText("None", false)
+
+        // Formatting
+        utils.FormUtils.setupUppercaseInput(dialogBinding.etBusNumberInput)
 
         // CANCEL BUTTON ACTIONS
         dialogBinding.btnCancelCross.setOnClickListener { bottomSheetDialog.dismiss() }
@@ -134,8 +149,21 @@ class ManageBusesActivity : AppCompatActivity() {
                 Toast.makeText(this, "Bus Number and Capacity are required!", Toast.LENGTH_SHORT).show()
             } else {
                 val capacity = capacityStr.toIntOrNull() ?: 0
-                val routeValue = if (selectedRouteName == "Select Route") null else selectedRouteName
-                val driverValue = if (selectedDriverName == "Select Driver") null else selectedDriverName
+                val routeValue = if (selectedRouteName == "None") null else selectedRouteName
+                val driverValue = if (selectedDriverName == "None") null else selectedDriverName
+
+                // Validation: Check if route or driver is already assigned to another bus
+                val allBuses = viewModel.busList.value ?: emptyList()
+                
+                if (routeValue != null && allBuses.any { it.routeName == routeValue }) {
+                    Toast.makeText(this, "This route is already assigned to another bus!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                if (driverValue != null && allBuses.any { it.driverName == driverValue }) {
+                    Toast.makeText(this, "This driver is already assigned to another bus!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
 
                 // 1. Dependency Logic: Update Repositories if route/driver is selected
                 assignBusToRouteAndDriver(busNo, routeValue ?: "", driverValue ?: "")
@@ -159,8 +187,8 @@ class ManageBusesActivity : AppCompatActivity() {
     }
 
     private fun assignBusToRouteAndDriver(busNo: String, routeName: String, driverName: String) {
-        val finalRoute = if (routeName == "Select Route") "" else routeName
-        val finalDriver = if (driverName == "Select Driver") "" else driverName
+        val finalRoute = if (routeName == "None") "" else routeName
+        val finalDriver = if (driverName == "None") "" else driverName
 
         // 1. Update Driver Repository
         if (finalDriver.isNotEmpty()) {

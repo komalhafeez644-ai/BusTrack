@@ -132,7 +132,8 @@
                             android:id="@+id/etEmployeeId"
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:hint="e.g. EMP-123" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -153,7 +154,8 @@
                             android:id="@+id/etFullName"
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:hint="e.g. Ali Khan" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -174,7 +176,8 @@
                             android:id="@+id/etCnic"
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:hint="00000-0000000-0" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -195,7 +198,9 @@
                             android:id="@+id/etPhone"
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:hint="e.g. 03001234567"
+                            android:inputType="phone" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -216,7 +221,9 @@
                             android:id="@+id/etEmail"
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
+                            android:layout_height="wrap_content"
+                            android:hint="e.g. driver@example.com"
+                            android:inputType="textEmailAddress" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -228,7 +235,8 @@
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
                         app:boxStrokeColor="@color/box_stroke_selector"
-                        app:passwordToggleEnabled="true"
+                        app:endIconMode="password_toggle"
+                        app:endIconTint="#8E8E93"
                         app:startIconDrawable="@drawable/lock"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -239,7 +247,8 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword" />
+                            android:inputType="textPassword"
+                            android:hint="Min. 8 characters (A-z, 0-9)" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -251,7 +260,8 @@
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
                         app:boxStrokeColor="@color/box_stroke_selector"
-                        app:passwordToggleEnabled="true"
+                        app:endIconMode="password_toggle"
+                        app:endIconTint="#8E8E93"
                         app:startIconDrawable="@drawable/lock_reset"
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
@@ -262,7 +272,8 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textPassword" />
+                            android:inputType="textPassword"
+                            android:hint="Repeat your password" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout

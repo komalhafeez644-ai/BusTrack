@@ -15,6 +15,7 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityAddDriverBinding
 import com.example.bustrack_app.models.DriverModel
 import com.example.bustrack_app.data.DriverRepository
+import utils.FormUtils
 import utils.StorageUtils
 import utils.ViewUtils
 
@@ -36,6 +37,8 @@ class AddDriverActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityAddDriverBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        setupFormFormatting()
 
         binding.btnAddDriver.setOnClickListener {
             ViewUtils.applyClickEffect(it)
@@ -64,19 +67,53 @@ class AddDriverActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupFormFormatting() {
+        FormUtils.setupUppercaseInput(binding.etEmployeeId)
+        FormUtils.setupTitleCaseInput(binding.etFullName)
+        FormUtils.setupCnicFormatting(binding.etCnic)
+    }
+
     private fun validateForm(): Boolean {
-        val name = binding.etFullName.text.toString()
-        val empId = binding.etEmployeeId.text.toString()
+        val name = binding.etFullName.text.toString().trim()
+        val empId = binding.etEmployeeId.text.toString().trim()
+        val cnic = binding.etCnic.text.toString().trim()
+        val phone = binding.etPhone.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim()
         val pass = binding.etPassword.text.toString()
         val confirmPass = binding.etConfirmPassword.text.toString()
 
-        if (name.isEmpty() || empId.isEmpty() || pass.isEmpty()) {
-            Toast.makeText(this, "Please fill required fields", Toast.LENGTH_SHORT).show()
+        if (empId.isEmpty()) {
+            binding.etEmployeeId.error = "Employee ID is required"
+            return false
+        }
+
+        if (name.isEmpty()) {
+            binding.etFullName.error = "Full Name is required"
+            return false
+        }
+
+        if (cnic.length < 15) {
+            binding.etCnic.error = "Invalid CNIC (e.g. 00000-0000000-0)"
+            return false
+        }
+
+        if (!FormUtils.isValidPhone(phone)) {
+            binding.etPhone.error = "Invalid contact number"
+            return false
+        }
+
+        if (email.isNotEmpty() && !FormUtils.isValidEmail(email)) {
+            binding.etEmail.error = "Invalid email address"
+            return false
+        }
+
+        if (!FormUtils.isValidPassword(pass)) {
+            binding.etPassword.error = "Password must be at least 8 characters with letters and numbers"
             return false
         }
 
         if (pass != confirmPass) {
-            Toast.makeText(this, "Passwords do not match", Toast.LENGTH_SHORT).show()
+            binding.etConfirmPassword.error = "Passwords do not match"
             return false
         }
         return true
@@ -110,10 +147,9 @@ class AddDriverActivity : AppCompatActivity() {
             email = binding.etEmail.text.toString()
         )
 
-        // Save to Firestore via FirebaseRepository
-        com.example.bustrack_app.data.FirebaseRepository.saveDriver(newDriver) { success ->
+        // Save to Firestore via DriverRepository
+        DriverRepository.addDriver(newDriver) { success ->
             if (success) {
-                DriverRepository.addDriver(newDriver)
                 showSuccessDialog(newDriver.name, newDriver)
             } else {
                 binding.btnAddDriver.isEnabled = true

@@ -83,6 +83,11 @@ class ManageStudentActivity : AppCompatActivity() {
             applyFilter() // Filter data based on current selection
             binding.txtTotalCount.text = "${list.size} Students Total"
         }
+
+        // Observe Route List to update filters dynamically
+        RouteRepository.routeList.observe(this) { routes ->
+            setupDynamicFilters()
+        }
     }
 
     private fun setupDynamicFilters() {

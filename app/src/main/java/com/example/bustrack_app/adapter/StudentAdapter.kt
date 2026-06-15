@@ -13,7 +13,7 @@ import com.example.bustrack_app.models.StudentModel
 
 class StudentAdapter(
     private var students: List<StudentModel> = listOf(),
-    private val showActionButtons: Boolean = true, // Flag to hide buttons in Profile
+    private val showActionButtons: Boolean = true,
     private val onAssignClick: (StudentModel) -> Unit = {},
     private val onEditClick: (StudentModel) -> Unit = {}
 ) : RecyclerView.Adapter<StudentAdapter.StudentViewHolder>() {
@@ -34,7 +34,8 @@ class StudentAdapter(
     inner class StudentViewHolder(private val itemBinding: ItemStudentBinding) : RecyclerView.ViewHolder(itemBinding.root) {
         fun bind(student: StudentModel) {
             itemBinding.txtStudentName.text = student.name
-            itemBinding.txtStudentDetail.text = "Grade ${student.grade} • ${student.id}"
+            itemBinding.txtGrade.text = student.grade
+            itemBinding.txtStudentId.text = "ID: ${student.id}"
 
             val route = student.route ?: ""
 
@@ -48,27 +49,30 @@ class StudentAdapter(
                 itemBinding.statusBadge.setTextColor(Color.parseColor("#EF4444")) 
 
                 itemBinding.layoutLocation.visibility = View.VISIBLE
-                itemBinding.txtLocationInfo.text = student.location
+                itemBinding.txtLocationInfo.text = student.location.ifEmpty { "Location not set" }
                 itemBinding.layoutBus.visibility = View.GONE
 
-                itemBinding.btnAction.text = "Assign Route"
-                itemBinding.btnAction.setOnClickListener { onAssignClick(student) }
+                itemBinding.btnAction.text = "View Details"
+                itemBinding.btnAction.setOnClickListener { onEditClick(student) }
 
             } else {
-                itemBinding.statusBadge.text = "● ${route.uppercase()}"
+                val statusText = if (student.isActive) "ACTIVE" else "INACTIVE"
+                val statusColor = if (student.isActive) "#22C55E" else "#64748B"
+                
+                itemBinding.statusBadge.text = "● $statusText"
                 itemBinding.statusBadge.setBackgroundResource(R.drawable.bg_chip_selected)
                 itemBinding.statusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#F1F5F9"))
-                itemBinding.statusBadge.setTextColor(Color.parseColor("#475569")) 
+                itemBinding.statusBadge.setTextColor(Color.parseColor(statusColor)) 
 
                 itemBinding.layoutLocation.visibility = View.GONE
                 itemBinding.layoutBus.visibility = View.VISIBLE
-                itemBinding.txtBusInfo.text = student.busNo ?: "Bus #102"
+                itemBinding.txtBusInfo.text = "${route}: ${student.busNo ?: "No Bus"}"
 
                 itemBinding.btnAction.text = "View Details"
                 itemBinding.btnAction.setOnClickListener { onEditClick(student) }
             }
 
-            // Image Loading Logic (URL first, then Drawable, then Initials)
+            // Image Loading Logic
             if (student.profileImageUrl.isNotEmpty()) {
                 itemBinding.imgStudent.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE

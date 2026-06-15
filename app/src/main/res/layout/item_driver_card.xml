@@ -26,19 +26,22 @@
                 android:id="@+id/txtAvatar"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/circle_background_primary"
+                android:background="@drawable/circle_background_grey"
                 android:gravity="center"
-                android:textColor="@color/white"
+                android:textColor="#0B1F3A"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                tools:text="RH" />
+                tools:text="JD" />
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/imgDriver"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="centerCrop"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.MaterialComponents.MediumComponent" />
+                android:background="#F2F4F7"
+                app:shapeAppearanceOverlay="@style/CircleImage"
+                app:strokeColor="#E5E5EA"
+                app:strokeWidth="1dp" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView

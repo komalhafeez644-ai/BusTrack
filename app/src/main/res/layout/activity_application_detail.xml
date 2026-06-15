@@ -190,7 +190,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="R.no: GCW-228"
+                            android:text="ID: GCW-228"
                             android:textColor="@color/lightGray"
                             android:textSize="14sp"/>
                             <TextView

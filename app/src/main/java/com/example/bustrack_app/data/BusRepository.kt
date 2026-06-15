@@ -11,7 +11,7 @@ object BusRepository {
     private val db = FirebaseFirestore.getInstance()
     private val busesCollection = db.collection("buses")
 
-    private val _busList = MutableLiveData<List<BusModel>>()
+    private val _busList = MutableLiveData<List<BusModel>>(emptyList())
     val busList: LiveData<List<BusModel>> get() = _busList
 
     init {
@@ -39,10 +39,25 @@ object BusRepository {
         
         val updatedBuses = currentBuses.map { bus ->
             val assignedRoute = routes.find { it.busNo == bus.busNumber }
+            
+            // Sync from route if found, otherwise keep bus's own data
+            val routeName = assignedRoute?.routeName ?: bus.routeName
+            val driverName = assignedRoute?.driverName ?: bus.driverName
+            
+            // Status logic: 
+            // 1. If no route name at all -> UNASSIGNED
+            // 2. If has route but status was UNASSIGNED -> ACTIVE (First time assignment)
+            // 3. Otherwise keep current status (respects INACTIVE toggle)
+            val newStatus = when {
+                routeName.isNullOrEmpty() -> "UNASSIGNED"
+                bus.status == "UNASSIGNED" -> "ACTIVE"
+                else -> bus.status
+            }
+
             bus.copy(
-                routeName = assignedRoute?.routeName,
-                driverName = assignedRoute?.driverName ?: bus.driverName,
-                status = if (assignedRoute != null) "ACTIVE" else "UNASSIGNED"
+                routeName = routeName,
+                driverName = driverName,
+                status = newStatus
             )
         }
         

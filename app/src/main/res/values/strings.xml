@@ -91,7 +91,7 @@
     <string name="faq_q2">How to optimize route efficiency using Google Maps?</string>
     <string name="faq_a2">Access the \'Route Management\' panel. The system automatically suggests optimized paths based on real-time traffic data provided by Google Maps API.</string>
 
-    <string name="faq_q3">How to manage student registration and bus assignments?</string>
+    <string name="faq_q3">How to manage student ID and bus assignments?</string>
     <string name="faq_a3">Use the \'User Management\' module to add new students and assign them to specific routes based on their residential sectors.</string>
 
     <string name="faq_q4">How to handle emergency breakdown alerts?</string>

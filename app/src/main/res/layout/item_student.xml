@@ -59,16 +59,29 @@
             app:layout_constraintTop_toTopOf="@id/imageContainer"
             tools:text="Elena Rodriguez" />
 
-        <!-- ID & Grade Detail -->
+        <!-- Grade Info -->
         <TextView
-            android:id="@+id/txtStudentDetail"
+            android:id="@+id/txtGrade"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#64748B"
             android:textSize="12sp"
+            android:textStyle="bold"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
             app:layout_constraintTop_toBottomOf="@id/txtStudentName"
-            tools:text="Grade 11 • #SR-9921" />
+            tools:text="Grade 11" />
+
+        <!-- Student ID -->
+        <TextView
+            android:id="@+id/txtStudentId"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#8EA1B4"
+            android:textSize="11sp"
+            app:layout_constraintStart_toStartOf="@id/txtStudentName"
+            app:layout_constraintTop_toBottomOf="@id/txtGrade"
+            tools:text="ID: #SR-9921" />
 
         <!-- Top Right Status Badge (Route / Unassigned) -->
         <TextView
@@ -89,11 +102,11 @@
             android:id="@+id/divider"
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:background="#F1F5F9"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@id/txtStudentName"
-            app:layout_constraintTop_toBottomOf="@id/txtStudentDetail" />
+            app:layout_constraintTop_toBottomOf="@id/txtStudentId" />
 
         <!-- Location Info (Shown for Unassigned) -->
         <LinearLayout
@@ -154,7 +167,7 @@
                 tools:text="Bus #102" />
         </LinearLayout>
 
-        <!-- Bottom Right Action Button -->
+        <!-- Action Button (Assign / View) -->
         <TextView
             android:id="@+id/btnAction"
             android:layout_width="wrap_content"

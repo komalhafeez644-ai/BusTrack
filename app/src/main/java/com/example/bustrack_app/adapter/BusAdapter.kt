@@ -76,8 +76,10 @@ class BusAdapter(
                 binding.ivRouteMetaIcon.visibility = View.VISIBLE
 
                 // Live Active/Inactive badge UI setup
-                binding.tvStatusBadge.text = bus.status.uppercase()
-                if (bus.status.equals("ACTIVE", ignoreCase = true)) {
+                val displayStatus = if (bus.status == "UNASSIGNED") "ACTIVE" else bus.status.uppercase()
+                binding.tvStatusBadge.text = displayStatus
+                
+                if (displayStatus == "ACTIVE") {
                     binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E8F5E9")) // Modern Light Green
                     binding.tvStatusBadge.setTextColor(Color.parseColor("#2E7D32"))     // Dark Green
                 } else {
@@ -97,13 +99,13 @@ class BusAdapter(
             binding.switchBusStatus.isEnabled = !isUnassigned
 
             binding.switchBusStatus.setOnCheckedChangeListener { _, isChecked ->
-                // Instant Local UI Feedback
+                val newStatus = if (isChecked) "ACTIVE" else "INACTIVE"
+                binding.tvStatusBadge.text = newStatus
+                
                 if (isChecked) {
-                    binding.tvStatusBadge.text = "ACTIVE"
                     binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E8F5E9"))
                     binding.tvStatusBadge.setTextColor(Color.parseColor("#2E7D32"))
                 } else {
-                    binding.tvStatusBadge.text = "INACTIVE"
                     binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFEBEE"))
                     binding.tvStatusBadge.setTextColor(Color.parseColor("#C62828"))
                 }

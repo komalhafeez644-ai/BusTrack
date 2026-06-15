@@ -32,6 +32,10 @@ class EditBusDetailsActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[BusViewModel::class.java]
 
+        // Pre-fetch and observe data for dropdowns to ensure they are ready when needed
+        DriverRepository.driverList.observe(this) { }
+        RouteRepository.routeList.observe(this) { }
+
         // Intent se data receive karna
         originalBusNumber = intent.getStringExtra("BUS_NUMBER") ?: ""
         val intentCapacity = intent.getIntExtra("BUS_CAPACITY", 40)
@@ -51,6 +55,9 @@ class EditBusDetailsActivity : AppCompatActivity() {
         // Setup Driver Dropdown
         setupDriverDropdown(intentDriver)
 
+        // Formatting
+        utils.FormUtils.setupUppercaseInput(binding.etEditBusNumber)
+
         // Back Arrow Click
         binding.btnBackArrow.setOnClickListener { finish() }
 
@@ -65,6 +72,21 @@ class EditBusDetailsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Fields cannot be empty!", Toast.LENGTH_SHORT).show()
             } else {
                 val updatedCapacity = updatedCapStr.toIntOrNull() ?: 0
+                val routeValue = if (selectedRouteName == "None" || selectedRouteName.isEmpty()) null else selectedRouteName
+                val driverValue = if (selectedDriverName == "None" || selectedDriverName.isEmpty()) null else selectedDriverName
+
+                // Validation: Check if route or driver is already assigned to another bus (excluding current bus)
+                val allBuses = viewModel.busList.value ?: emptyList()
+
+                if (routeValue != null && allBuses.any { it.routeName == routeValue && it.busNumber != originalBusNumber }) {
+                    Toast.makeText(this, "This route is already assigned to another bus!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                if (driverValue != null && allBuses.any { it.driverName == driverValue && it.busNumber != originalBusNumber }) {
+                    Toast.makeText(this, "This driver is already assigned to another bus!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 
                 // 1. Update the Route Assignment logic
                 assignBusToRoute(updatedNo, selectedRouteName, selectedDriverName)
@@ -73,8 +95,8 @@ class EditBusDetailsActivity : AppCompatActivity() {
                 val updatedBus = BusModel(
                     busNumber = updatedNo,
                     totalSeats = updatedCapacity,
-                    driverName = if (selectedDriverName == "Select Driver" || selectedDriverName.isEmpty()) null else selectedDriverName,
-                    routeName = if (selectedRouteName == "Select Route" || selectedRouteName.isEmpty()) null else selectedRouteName,
+                    driverName = if (selectedDriverName == "None" || selectedDriverName.isEmpty()) null else selectedDriverName,
+                    routeName = if (selectedRouteName == "None" || selectedRouteName.isEmpty()) null else selectedRouteName,
                     status = intentStatus
                 )
 
@@ -93,46 +115,45 @@ class EditBusDetailsActivity : AppCompatActivity() {
     private fun setupRouteDropdown(currentRoute: String) {
         val routes = RouteRepository.routeList.value ?: listOf()
         val routeNames = routes.map { it.routeName }.toMutableList()
-        routeNames.add(0, "Select Route")
+        routeNames.add(0, "None")
 
-        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, routeNames)
+        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, routeNames)
         binding.menuEditRoute.setAdapter(adapter)
         
         if (currentRoute.isNotEmpty()) {
             binding.menuEditRoute.setText(currentRoute, false)
         } else {
-            binding.menuEditRoute.setText("Select Route", false)
+            binding.menuEditRoute.setText("None", false)
         }
     }
 
     private fun setupDriverDropdown(currentDriver: String) {
         val drivers = DriverRepository.driverList.value ?: listOf()
         val driverNames = drivers.map { it.name }.toMutableList()
-        driverNames.add(0, "Select Driver")
+        driverNames.add(0, "None")
 
-        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, driverNames)
+        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, driverNames)
         binding.menuEditDriver.setAdapter(adapter)
 
         if (currentDriver.isNotEmpty()) {
             binding.menuEditDriver.setText(currentDriver, false)
         } else {
-            binding.menuEditDriver.setText("Select Driver", false)
+            binding.menuEditDriver.setText("None", false)
         }
     }
 
     private fun assignBusToRoute(busNo: String, routeName: String, driverName: String) {
-        val finalDriver = if (driverName == "Select Driver") "" else driverName
+        val finalDriver = if (driverName == "None") "" else driverName
+        val finalRoute = if (routeName == "None") "" else routeName
         
         // 1. Update Driver Repository (Consistency)
         if (finalDriver.isNotEmpty()) {
             val drivers = DriverRepository.driverList.value ?: listOf()
             val targetDriver = drivers.find { it.name == finalDriver }
             targetDriver?.let {
-                DriverRepository.updateDriver(it.copy(assignedBus = busNo, route = routeName))
+                DriverRepository.updateDriver(it.copy(assignedBus = busNo, route = finalRoute))
             }
         }
-
-        if (routeName == "Select Route" || routeName.isEmpty()) return
 
         val allRoutes = RouteRepository.routeList.value ?: return
         
@@ -143,8 +164,10 @@ class EditBusDetailsActivity : AppCompatActivity() {
             }
         }
 
+        if (finalRoute.isEmpty()) return
+
         // 3. Assign this bus and driver to the selected route
-        val targetRoute = allRoutes.find { it.routeName == routeName }
+        val targetRoute = allRoutes.find { it.routeName == finalRoute }
         targetRoute?.let {
             RouteRepository.updateRoute(it.copy(busNo = busNo, driverName = finalDriver))
         }

@@ -4,7 +4,8 @@
     android:layout_width="300dp"
     android:layout_height="wrap_content"
     app:cardCornerRadius="24dp"
-    app:cardElevation="8dp">
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -55,6 +56,7 @@
             android:backgroundTint="#0B1F3A"
             android:text="Done"
             android:textAllCaps="false"
+            android:textColor="@color/white"
             app:cornerRadius="12dp" />
 
     </LinearLayout>

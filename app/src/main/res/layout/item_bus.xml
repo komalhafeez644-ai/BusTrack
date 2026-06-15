@@ -159,7 +159,7 @@
             android:checked="true"
             android:text=""
             app:thumbTint="@color/white"
-            app:trackTint="@color/primaryBlue"
+            app:trackTint="@color/switch_track_selector"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />

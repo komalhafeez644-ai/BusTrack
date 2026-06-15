@@ -262,12 +262,12 @@
                             android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Student Registration Number -->
+                    <!-- Student ID -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="18dp"
-                        android:text="Student Registration Number"
+                        android:text="Student ID"
                         android:textColor="@color/labelColor"
                         android:textSize="14sp"
                         android:textStyle="bold" />

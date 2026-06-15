@@ -75,9 +75,10 @@
                     android:layout_width="110dp"
                     android:layout_height="110dp"
                     android:scaleType="centerCrop"
-                    android:src="@drawable/driver_image_one"
+                    android:background="#F2F4F7"
+                    android:src="@drawable/ic_person"
                     app:shapeAppearanceOverlay="@style/CircleImage"
-                    app:strokeColor="#005DB7"
+                    app:strokeColor="#FFFFFF"
                     app:strokeWidth="3dp"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
@@ -244,7 +245,10 @@
                             android:layout_height="wrap_content"
                             android:inputType="none"
                             android:textColor="#1C1C1E"
-                            android:textSize="16sp" />
+                            android:textSize="16sp"
+                            android:background="@null"
+                            android:dropDownSelector="?attr/selectableItemBackground"
+                            android:popupBackground="@android:color/white" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <!-- Route Display (Auto-updated based on Bus) -->

@@ -46,19 +46,21 @@ class DriverAdapter(
             itemBinding.txtBusInfo.text = "Bus: $busInfo"
             itemBinding.txtRouteInfo.text = "Route: $routeInfo"
 
-            // Image Loading Logic (URL first, then Drawable, then Initials)
+            // Image Loading Logic (URL first, then Drawable, then Initials fallback)
             if (driver.profileImageUrl.isNotEmpty()) {
                 itemBinding.imgDriver.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE
                 Glide.with(itemBinding.root.context)
                     .load(driver.profileImageUrl)
                     .placeholder(R.drawable.ic_person)
+                    .error(R.drawable.ic_person)
                     .into(itemBinding.imgDriver)
             } else if (driver.profileImage != 0) {
                 itemBinding.imgDriver.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE
                 itemBinding.imgDriver.setImageResource(driver.profileImage)
             } else {
+                // Show Initials if no image is provided
                 itemBinding.imgDriver.visibility = View.GONE
                 itemBinding.txtAvatar.visibility = View.VISIBLE
                 val initials = driver.name.split(" ")

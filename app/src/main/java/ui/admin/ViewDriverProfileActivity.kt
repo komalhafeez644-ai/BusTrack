@@ -65,9 +65,12 @@ class ViewDriverProfileActivity : AppCompatActivity() {
             Glide.with(this)
                 .load(driver.profileImageUrl)
                 .placeholder(R.drawable.ic_person)
+                .error(R.drawable.ic_person)
                 .into(imgAvatar)
         } else if (driver.profileImage != 0) {
             imgAvatar.setImageResource(driver.profileImage)
+        } else {
+            imgAvatar.setImageResource(R.drawable.ic_person)
         }
     }
 

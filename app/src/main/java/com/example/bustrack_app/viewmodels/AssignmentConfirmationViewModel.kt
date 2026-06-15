@@ -24,11 +24,8 @@ class AssignmentConfirmationViewModel : ViewModel() {
             isAssigned = true,
             isRouteOptimized = true,
             busNumber = "Bus 42",
-            busServiceType = "Inter-Campus Express",
-            driverName = "Ahmed Ali",
-            driverRole = "Senior Operative",
+            routeName = "Route 1",
             pickupStop = "Sector 15 North",
-            stopLocationDetail = "Main Gate Entry",
             routeCoverage = 98,
             optimizationNote = "The assignment was calculated based on proximity to Sector 15 and current bus occupancy. Bus 42 provides the minimal latency for the 8:00 AM window.",
             estimatedPickup = "07:45 AM"

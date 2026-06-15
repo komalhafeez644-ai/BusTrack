@@ -85,6 +85,9 @@
             android:name="ui.admin.StudentDetailsActivity"
             android:exported="false" />
         <activity
+            android:name="ui.admin.EditStudentActivity"
+            android:exported="false" />
+        <activity
             android:name="ui.admin.AddDriverActivity"
             android:exported="false" />
         <activity
@@ -177,6 +180,9 @@
             android:exported="false" />
         <activity
             android:name="ui.admin.TrackDriverActivity"
+            android:exported="false" />
+        <activity
+            android:name="ui.admin.LocationPickerActivity"
             android:exported="false" />
     </application>
 

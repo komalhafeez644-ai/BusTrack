@@ -19,6 +19,7 @@ import com.example.bustrack_app.databinding.ActivityEditDriverBinding
 import com.example.bustrack_app.models.BusModel
 import com.example.bustrack_app.models.DriverModel
 import com.google.android.material.button.MaterialButton
+import utils.FormUtils
 import utils.StorageUtils
 import utils.ViewUtils
 
@@ -64,7 +65,10 @@ class EditDriverActivity : AppCompatActivity() {
             
             when {
                 it.profileImageUrl.isNotEmpty() -> {
-                    Glide.with(this).load(it.profileImageUrl).placeholder(R.drawable.ic_person).into(binding.imgDriverAvatar)
+                    Glide.with(this).load(it.profileImageUrl)
+                        .placeholder(R.drawable.ic_person)
+                        .error(R.drawable.ic_person)
+                        .into(binding.imgDriverAvatar)
                 }
                 it.profileImage != 0 -> {
                     binding.imgDriverAvatar.setImageResource(it.profileImage)
@@ -76,7 +80,14 @@ class EditDriverActivity : AppCompatActivity() {
         }
 
         setupBusDropdown()
+        setupFormFormatting()
         setupClickListeners()
+    }
+
+    private fun setupFormFormatting() {
+        FormUtils.setupUppercaseInput(binding.etDriverId)
+        FormUtils.setupTitleCaseInput(binding.etFullName)
+        FormUtils.setupCnicFormatting(binding.etCnic)
     }
 
     private fun setupBusDropdown() {
@@ -84,7 +95,7 @@ class EditDriverActivity : AppCompatActivity() {
         val busNumbers = buses.map { it.busNumber }.toMutableList()
         busNumbers.add(0, "Select Bus")
 
-        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, busNumbers)
+        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, busNumbers)
         binding.menuEditBus.setAdapter(adapter)
 
         binding.menuEditBus.setOnItemClickListener { parent, _, position, _ ->
@@ -149,6 +160,33 @@ class EditDriverActivity : AppCompatActivity() {
     }
 
     private fun updateDriver(imageUrl: String) {
+        val name = binding.etFullName.text.toString().trim()
+        val empId = binding.etDriverId.text.toString().trim()
+        val cnic = binding.etCnic.text.toString().trim()
+        val phone = binding.etPhone.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim()
+
+        if (empId.isEmpty()) {
+            binding.etDriverId.error = "ID required"
+            return
+        }
+        if (name.isEmpty()) {
+            binding.etFullName.error = "Name required"
+            return
+        }
+        if (cnic.length < 15) {
+            binding.etCnic.error = "Invalid CNIC"
+            return
+        }
+        if (!FormUtils.isValidPhone(phone)) {
+            binding.etPhone.error = "Invalid phone"
+            return
+        }
+        if (email.isNotEmpty() && !FormUtils.isValidEmail(email)) {
+            binding.etEmail.error = "Invalid email"
+            return
+        }
+
         driverData?.let { driver ->
             val selectedBus = binding.menuEditBus.text.toString().trim()
             val finalBus = if (selectedBus == "Select Bus") null else selectedBus

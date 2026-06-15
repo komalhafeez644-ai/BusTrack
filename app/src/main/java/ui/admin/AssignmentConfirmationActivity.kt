@@ -36,16 +36,18 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
             // Populate UI with the system suggested data from previous screen
             binding.apply {
                 tvStudentName.text = application.studentName
-                tvStudentId.text = "#SF-${1000 + application.id}"
-                tvBusNumber.text = "Bus ${application.bestRoute.split("-").lastOrNull() ?: "42"}"
+                tvStudentId.text = application.studentIdString
+                tvBusNumber.text = if (application.assignedBus.isNotEmpty()) application.assignedBus else "Bus ${application.bestRoute.split("-").lastOrNull() ?: "42"}"
+                tvRouteCode.text = application.routeCode
+                tvRouteName.text = application.bestRoute
                 tvStopName.text = application.nearestStop
                 tvCoveragePercentage.text = application.matchPercent
                 // pbCoverage expects Int
-                val progress = application.matchPercent.replace("%", "").toIntOrNull() ?: 95
+                val progress = application.matchPercent.replace("%", "").replace(" Match", "").toIntOrNull() ?: 95
                 pbCoverage.progress = progress
                 
                 // Set logic note
-                tvOptimizationLogic.text = "System optimized this assignment based on student's proximity to ${application.nearestStop} and ${application.bestRoute} capacity."
+                tvOptimizationLogic.text = "System matched ${application.studentName} with ${application.bestRoute} (${application.routeCode}) based on proximity to ${application.nearestStop}. This route is served by ${application.assignedBus}."
             
                 if (application.image != 0) {
                     ivProfile.setImageResource(application.image)
@@ -102,7 +104,7 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
         val originalData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
         originalData?.let {
             StudentRepository.assignRouteToStudent(
-                it.studentName,
+                it.studentIdString,
                 it.bestRoute,
                 com.example.bustrack_app.data.RouteRepository.getBusForRoute(it.bestRoute),
                 it.nearestStop
@@ -111,22 +113,14 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
     }
 
     private fun refreshFromSource() {
-        val originalData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
-        val application = BusApplicationsActivity.applicationsList.find { it.id == originalData?.id } ?: originalData
+        val application = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
         
         application?.let {
             binding.tvStudentName.text = it.studentName
-            val busNum = it.bestRoute.split("-").lastOrNull()?.trim() ?: it.bestRoute
-            binding.tvBusNumber.text = "Bus $busNum"
+            binding.tvBusNumber.text = if (it.assignedBus.isNotEmpty()) it.assignedBus else "Bus ${it.bestRoute.split("-").lastOrNull() ?: "42"}"
+            binding.tvRouteCode.text = it.routeCode
+            binding.tvRouteName.text = it.bestRoute
             binding.tvStopName.text = it.nearestStop
-
-            // Global Bus list se Driver Name uthana
-            val globalBuses = com.example.bustrack_app.data.BusRepository.busList.value
-            val actualBus = globalBuses?.find { bus -> bus.busNumber.contains(busNum, ignoreCase = true) }
-            
-            actualBus?.let { bus ->
-                binding.tvDriverName.text = bus.driverName ?: "No Driver Assigned"
-            }
         }
     }
 
@@ -156,13 +150,10 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
 
                     // Operational Details
                     tvBusNumber.text = it.busNumber
-                    tvBusService.text = it.busServiceType
 
-                    tvDriverName.text = it.driverName
-                    tvDriverRole.text = it.driverRole
+                    tvRouteName.text = it.routeName
 
                     tvStopName.text = it.pickupStop
-                    tvStopDetail.text = it.stopLocationDetail
 
                     // Progress & Coverage
                     tvCoveragePercentage.text = "${it.routeCoverage}%"

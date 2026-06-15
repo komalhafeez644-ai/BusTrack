@@ -162,16 +162,6 @@
                                 android:textStyle="bold"
                                 android:textColor="#212121"
                                 android:textSize="14sp" />
-
-                            <TextView
-                                android:id="@+id/tvBusService"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Inter-Campus Express"
-                                android:textSize="11sp"
-                                android:textColor="@color/primaryBlue"
-                                android:textStyle="bold" />
-
                         </LinearLayout>
 
                     </LinearLayout>
@@ -200,12 +190,12 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Route"
+                                android:text="Assigned Route"
                                 android:textSize="11sp"
                                 android:textColor="@color/lightGray"  />
 
                             <TextView
-                                android:id="@+id/tvDriverName"
+                                android:id="@+id/tvRouteCode"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Route 1"
@@ -214,10 +204,10 @@
                                 android:textSize="14sp" />
 
                             <TextView
-                                android:id="@+id/tvDriverRole"
+                                android:id="@+id/tvRouteName"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="North Gate"
+                                android:text="Main Campus Express"
                                 android:textSize="11sp"
                                 android:textColor="@color/primaryBlue"
                                 android:textStyle="bold" />
@@ -262,16 +252,6 @@
                                 android:textStyle="bold"
                                 android:textColor="#212121"
                                 android:textSize="14sp" />
-
-                            <TextView
-                                android:id="@+id/tvStopDetail"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Main Gate Entry"
-                                android:textSize="11sp"
-                                android:textColor="@color/primaryBlue"
-                                android:textStyle="bold" />
-
                         </LinearLayout>
 
                     </LinearLayout>

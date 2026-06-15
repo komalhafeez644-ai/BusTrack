@@ -55,7 +55,7 @@ object StudentRepository {
         studentsCollection.document(studentId).update(
             "route", routeName,
             "busNo", busNo,
-            "location", stop,
+            "stopName", stop,
             "status", "ASSIGNED"
         )
     }

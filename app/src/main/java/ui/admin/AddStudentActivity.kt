@@ -1,6 +1,7 @@
 package ui.admin
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -13,6 +14,7 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.databinding.ActivityAddStudentBinding
 import com.example.bustrack_app.models.StudentModel
+import utils.FormUtils
 import utils.StorageUtils
 import utils.ViewUtils
 
@@ -20,6 +22,20 @@ class AddStudentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAddStudentBinding
     private var selectedImageUri: Uri? = null
+    private var selectedLat: Double = 0.0
+    private var selectedLng: Double = 0.0
+
+    // Location Picker Launcher
+    private val pickLocationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val address = result.data?.getStringExtra("SELECTED_ADDRESS")
+            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
+            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
+            address?.let {
+                binding.etPickupAddress.setText(it)
+            }
+        }
+    }
 
     // Photo Picker Launcher
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -36,12 +52,19 @@ class AddStudentActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupGradeSpinner()
+        setupFormFormatting()
         setupClickListeners()
+    }
+
+    private fun setupFormFormatting() {
+        FormUtils.setupUppercaseInput(binding.etEmployeeId)
+        FormUtils.setupTitleCaseInput(binding.etFullName)
+        FormUtils.setupTitleCaseInput(binding.etParentName)
     }
 
     private fun setupGradeSpinner() {
         val grades = arrayOf("Grade 9", "Grade 10", "Grade 11", "Grade 12", "BS IT 7th semester")
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, grades)
+        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, grades)
         binding.spinnerGrade.setAdapter(adapter)
     }
 
@@ -59,7 +82,8 @@ class AddStudentActivity : AppCompatActivity() {
 
         binding.btnSelectOnMap.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            Toast.makeText(this, "Opening Map picker...", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, LocationPickerActivity::class.java)
+            pickLocationLauncher.launch(intent)
         }
 
         binding.btnOnlyAdd.setOnClickListener {
@@ -96,12 +120,20 @@ class AddStudentActivity : AppCompatActivity() {
     }
 
     private fun validateForm(): Boolean {
-        if (binding.etFullName.text.toString().trim().isEmpty()) {
+        val name = binding.etFullName.text.toString().trim()
+        val id = binding.etEmployeeId.text.toString().trim()
+        val phone = binding.etEmergencyContact.text.toString().trim()
+
+        if (name.isEmpty()) {
             binding.etFullName.error = "Name required"
             return false
         }
-        if (binding.etEmployeeId.text.toString().trim().isEmpty()) {
+        if (id.isEmpty()) {
             binding.etEmployeeId.error = "ID required"
+            return false
+        }
+        if (!FormUtils.isValidPhone(phone)) {
+            binding.etEmergencyContact.error = "Invalid contact number"
             return false
         }
         return true
@@ -144,7 +176,9 @@ class AddStudentActivity : AppCompatActivity() {
             fatherName = binding.etParentName.text.toString().trim(),
             phoneNumber = binding.etEmergencyContact.text.toString().trim(),
             pickupTime = "TBD",
-            insuranceStatus = "Pending"
+            insuranceStatus = "Pending",
+            latitude = selectedLat,
+            longitude = selectedLng
         )
         
         // Save to Firestore via FirebaseRepository
@@ -178,7 +212,10 @@ class AddStudentActivity : AppCompatActivity() {
             status = "Pending",
             image = s.profileImage,
             profileImageUrl = s.profileImageUrl,
-            parentName = s.fatherName
+            parentName = s.fatherName,
+            latitude = s.latitude,
+            longitude = s.longitude,
+            studentIdString = s.id
         )
     }
 }

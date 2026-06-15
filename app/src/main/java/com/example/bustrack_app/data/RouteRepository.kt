@@ -12,7 +12,7 @@ object RouteRepository {
     private val db = FirebaseFirestore.getInstance()
     private val routesCollection = db.collection("routes")
 
-    private val _routeList = MutableLiveData<List<RouteModel>>()
+    private val _routeList = MutableLiveData<List<RouteModel>>(emptyList())
     val routeList: LiveData<List<RouteModel>> get() = _routeList
 
     init {
