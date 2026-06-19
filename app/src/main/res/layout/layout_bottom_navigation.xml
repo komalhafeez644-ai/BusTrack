@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="70dp"
+    android:orientation="vertical"
+    android:background="@color/white"
+    android:elevation="20dp">
+
+    <!-- Premium Accent Top Border -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:background="@color/primaryBlue"
+        android:alpha="0.8" />
+
+    <LinearLayout
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:weightSum="5">
+
+        <!-- Dashboard -->
+        <LinearLayout
+            android:id="@+id/navDashboard"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:orientation="vertical">
+            <ImageView
+                android:id="@+id/ivDashboard"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/outline_dashboard_24"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
+            <TextView
+                android:id="@+id/tvDashboard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Dashboard"
+                android:duplicateParentState="true"
+                android:textColor="@color/nav_item_color_selector"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Live Tracking -->
+        <LinearLayout
+            android:id="@+id/navLiveTracking"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:orientation="vertical">
+            <ImageView
+                android:id="@+id/ivLiveTracking"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/outline_location"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
+            <TextView
+                android:id="@+id/tvLiveTracking"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Live"
+                android:duplicateParentState="true"
+                android:textColor="@color/nav_item_color_selector"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Attendance -->
+        <LinearLayout
+            android:id="@+id/navAttendance"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:orientation="vertical">
+            <ImageView
+                android:id="@+id/ivAttendance"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/person_check"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
+            <TextView
+                android:id="@+id/tvAttendance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Attendance"
+                android:duplicateParentState="true"
+                android:textColor="@color/nav_item_color_selector"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Tracking Requests (New) -->
+        <LinearLayout
+            android:id="@+id/navRequests"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:orientation="vertical">
+            <ImageView
+                android:id="@+id/ivRequests"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/security_shield"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
+            <TextView
+                android:id="@+id/tvRequests"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Requests"
+                android:duplicateParentState="true"
+                android:textColor="@color/nav_item_color_selector"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+
+        <!-- Alerts -->
+        <LinearLayout
+            android:id="@+id/navAlerts"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:orientation="vertical">
+            <ImageView
+                android:id="@+id/ivAlerts"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/notifications"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
+            <TextView
+                android:id="@+id/tvAlerts"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Alerts"
+                android:duplicateParentState="true"
+                android:textColor="@color/nav_item_color_selector"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

@@ -1,4 +1,5 @@
 <resources>
+<<<<<<< HEAD
     <string name="app_name">Bustrack</string>
     <string name="good_morning">GOOD MORNING, 👋</string>
     <string name="driver_name">John Driver</string>
@@ -43,4 +44,146 @@
 
     <string name="drive_safe">Drive Safe!</string>
     <string name="safety_message">Follow traffic rules and ensure student safety always.</string>
+=======
+    <string name="app_name">BusTrack_App</string>
+    <string name="sign_in">Sign In</string>
+
+    <string-array name="route_options">
+        <item>Route 1</item>
+        <item>Route 2</item>
+        <item>Route 3</item>
+    </string-array>
+
+    <string-array name="stop_options">
+        <item>Sector 15 North</item>
+        <item>Saddar Karachi</item>
+        <item>Commercial Market</item>
+    </string-array>
+
+    <string-array name="bus_options">
+        <item>Bus 42</item>
+        <item>Bus 18</item>
+        <item>Bus 05</item>
+    </string-array>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <string name="privacy_subtitle">For Students, Drivers, Admin &amp; Parents</string>
+
+    <string name="general_privacy_rules">General Privacy Rules</string>
+    <string name="general_rules_desc">
+        • No Third-Party Sharing: We never sell or share your data with external advertisers or third parties.\n
+        • Transport Only: Data is strictly used for transport operations, route optimization, and safety.\n
+        • Encrypted Storage: All sensitive data is stored using industry-standard AES encryption.\n
+        • Role-Based Access: Personnel can only access data relevant to their specific operational duties.
+    </string>
+
+    <string name="student_parents_title">Student &amp; Parents</string>
+    <string name="student_desc">Collection includes full name, student ID, and daily boarding attendance logs for safety verification. Location tracking is enabled ONLY for active bus arrival monitoring.</string>
+
+    <string name="drivers_title">Drivers</string>
+    <string name="drivers_desc">We track assigned route schedules, vehicle identification numbers, and GPS coordinates (broadcast only during active duty hours). Trip logs and fuel stops are kept for operational analytics.</string>
+
+    <string name="system_admin_title">System Administrators</string>
+    <string name="admin_desc">Administrators have full visibility for system management purposes including:\n• User Management\n• Analytics Dashboard\n• Attendance Logs\n• Fleet Management</string>
+
+    <string name="management_title">Management / Principal</string>
+    <string name="management_desc">High-level access is limited to Summary Reports. No individual personal data editing capabilities are granted to management accounts.</string>
+
+    <string name="location_policy_title">Location Policy</string>
+    <string name="location_policy_desc">Our system respects your physical boundaries. Location tracking is strictly task-oriented:\n\n• Active: During scheduled transit routes and pickup windows.\n• Disabled: Tracking immediately stops when the trip is marked as \"Completed\" or \"Duty Off\".</string>
+
+    <string name="contact_admin_msg">Contact admin for privacy concerns</string>
+    <string name="send_inquiry_btn">Send Inquiry</string>
+
+    <!-- Terms & Conditions Strings -->
+    <string name="terms_title">Terms &amp; Conditions</string>
+    <string name="terms_please_read">Please read Terms &amp; Conditions carefully</string>
+    <string name="terms_intro">By using this app, you agree to the following terms and conditions for institutional transportation management.</string>
+
+    <string name="term_1_title">1. Scope of Service.</string>
+    <string name="term_1_content">BusTrack is an institutional logistics platform specifically engineered for college transport management. This service is provided solely for the coordination of student and staff mobility within registered educational institutions. By accessing the platform, you acknowledge that the application is designed to optimize fleet operations and ensure the safety of transit within the designated academic ecosystem.</string>
+
+    <string name="term_2_title">2. GPS Tracking and Real-Time Data.</string>
+    <string name="term_2_content">To provide accurate fleet management, BusTrack utilizes high-precision Global Positioning System (GPS) technology. You hereby grant permission for the application to access and monitor location data during active trips only. This tracking is essential for route optimization, estimated arrival times, and emergency response protocols. Location services are automatically suspended once a trip is marked as complete or the application is terminated in accordance with our power-saving logistics protocols.</string>
+
+    <string name="term_3_title">3. Authentication and Data Infrastructure.</string>
+    <string name="term_3_content">Our platform leverages Google Firebase for robust user authentication and cloud storage services. This infrastructure ensures that your credentials and personal identifiers are stored in a secure, encrypted environment. We utilize industry-standard protocols to prevent unauthorized access to the database, ensuring that institutional data remains isolated and protected against external threats.</string>
+
+    <string name="term_4_title">4. Integrated Mapping Services.</string>
+    <string name="term_4_content">BusTrack integrates Google Maps APIs to provide detailed visual tracking and navigation. Your interaction with map elements is subject to both these Terms and Google\'s additional Terms of Service. This integration is strictly for the purpose of visual route representation and does not involve the permanent storage of your movement patterns beyond the operational requirements of the active academic term.</string>
+
+    <string name="term_5_title">5. Attendance and Administration Oversight.</string>
+    <string name="term_5_content">Secure attendance data is captured through the application to assist institution administrators in managing bus occupancy and rider safety. Admin control panels provide authorized personnel with oversight of fleet performance and rider logs. You agree that this data is the property of your respective institution and is managed under their specific internal governance and privacy policies.</string>
+
+    <string name="term_6_title">6. Prohibited Use and Security.</string>
+    <string name="term_6_content">Users are strictly prohibited from attempting any unauthorized access to the application\'s backend or interfering with the live data streams. Any attempt to reverse engineer the BusTrack software or bypass security layers will result in immediate termination of access and potential legal action by the institution. We maintain a zero-tolerance policy regarding third-party data sharing: your transit information will never be sold or distributed to external marketing entities.</string>
+
+    <string name="term_7_title">7. Service Limitations and Reliability.</string>
+    <string name="term_7_content">While we strive for 99.9% uptime, BusTrack performance is dependent on external factors including cellular internet connectivity and GPS satellite availability. Service interruptions may occur due to network dead zones or atmospheric interference. BusTrack is not liable for delays or inaccuracies caused by hardware failure or third-party network outages that are outside of our direct operational control.</string>
+
+    <string name="term_8_title">8. Revisions to Terms.</string>
+    <string name="term_8_content">As institutional requirements evolve, we may update these Terms and Conditions periodically. Continued use of the application following any modifications constitutes your acceptance of the revised legal framework. We recommend reviewing this document regularly to stay informed about our data handling and operational security standards.</string>
+
+    <string name="agree_terms">I agree to the Terms &amp; Conditions</string>
+    <string name="continue_btn">Continue</string>
+
+    <!-- FAQ Strings -->
+    <string name="faq_title">FAQ</string>
+    <string name="faq_header">Admin Help Center</string>
+    <string name="faq_subtitle">Documentation and resources for fleet administrators and logistics personnel.</string>
+
+    <string name="faq_q1">How to reassign a driver mid-shift?</string>
+    <string name="faq_a1">Navigate to the \'Live Map\' or \'Buses\' panel, select the active bus, and use the \'Reassign Driver\' option to update the current trip holder.</string>
+
+    <string name="faq_q2">How to optimize route efficiency using Google Maps?</string>
+    <string name="faq_a2">Access the \'Route Management\' panel. The system automatically suggests optimized paths based on real-time traffic data provided by Google Maps API.</string>
+
+    <string name="faq_q3">How to manage student ID and bus assignments?</string>
+    <string name="faq_a3">Use the \'User Management\' module to add new students and assign them to specific routes based on their residential sectors.</string>
+
+    <string name="faq_q4">How to handle emergency breakdown alerts?</string>
+    <string name="faq_a4">When a breakdown alert is received, the system notifies all affected parents. Administrators should immediately assign a backup vehicle from the \'Fleet\' tab.</string>
+
+    <string name="faq_q5">How to sync daily attendance with the central database?</string>
+    <string name="faq_a5">The sync occurs automatically at the end of each trip. Manual sync can be triggered from the \'Attendance Hub\' settings if needed.</string>
+
+    <string name="faq_q6">How to add a temporary vehicle to an existing route?</string>
+    <string name="faq_a6">Navigate to \'Fleet\' > \'Vehicles\' and add a secondary vehicle. Assign it to the desired route ID for the specified duration.</string>
+
+    <string name="faq_q7">How to broadcast an emergency announcement to all parents?</string>
+    <string name="faq_a7">Use the \'Emergency Broadcast\' tool in the \'Alerts\' section. Type your message and select \'Broadcast to All\' to reach parents instantly.</string>
+
+    <string name="faq_q8">How to create a new route using Google Maps?</string>
+    <string name="faq_a8">Navigate to \'Manage Routes\' and tap the \'+\' icon. Use the map interface to drop pins for stops, and the system will draw the path.</string>
+
+    <string name="faq_q9">How to add or delete stops on a route?</string>
+    <string name="faq_a9">Open any route in \'Route Details\'. To add a stop, tap \'Edit Points\'; to delete, swipe left on the stop name in the list.</string>
+
+    <string name="faq_support_title">Admin Technical Support</string>
+    <string name="faq_support_desc">Dedicated 24/7 technical assistance for system administrators and fleet dispatchers.</string>
+    <string name="btn_contact_support">Contact Tech Support</string>
+    <string name="btn_api_docs">Admin API Docs</string>
+
+
+    <!-- Legacy / Compatibility strings -->
+    <string name="terms_conditions_title">Terms &amp; Conditions</string>
+    <string name="term_1_num">1.</string>
+    <string name="term_1_text">By using this application, you agree to comply with all transport rules and regulations set by the administration.</string>
+    <string name="term_2_num">2.</string>
+    <string name="term_2_text">Users are responsible for maintaining the confidentiality of their account credentials and are liable for all activities under their account.</string>
+    <string name="term_3_num">3.</string>
+    <string name="term_3_text">Unauthorized access, data scraping, or attempting to compromise system security is strictly prohibited and subject to legal action.</string>
+    <string name="term_4_num">4.</string>
+    <string name="term_4_text">Real-time tracking features are provided for safety and operational efficiency; any misuse of this data will lead to immediate account suspension.</string>
+    <string name="term_5_num">5.</string>
+    <string name="term_5_text">The administration reserves the right to update or modify these terms at any time. Continued use of the app implies acceptance of the updated terms.</string>
+    <string name="term_6_num">6.</string>
+    <string name="term_6_text">All transport schedules and route timings are subject to change based on traffic, weather, or operational requirements without prior notice.</string>
+    <string name="term_7_num">7.</string>
+    <string name="term_7_text">Users must maintain respectful behavior toward transport staff and fellow passengers at all times.</string>
+    <string name="term_8_num">8.</string>
+    <string name="term_8_text">The administration is not liable for any personal belongings left behind in the transport vehicle.</string>
+    <string name="btn_agree">I Agree</string>
+    <string name="welcome_principal">WELCOME PRINCIPAL, 👋</string>
+    <string name="profile">Profile</string>
+>>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd
 </resources>
