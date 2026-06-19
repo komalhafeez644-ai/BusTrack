@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light">
+
+    <!-- Custom Toolbar -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/white"
+        app:layout_constraintTop_toTopOf="parent">
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@android:drawable/ic_menu_revert"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="#1E293B"
+                android:rotation="180"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="36dp"
+                android:text="Driver Profile"
+                android:textColor="#1E293B"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@android:drawable/ic_menu_preferences"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="#1E293B" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.appcompat.widget.Toolbar>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/navCard"
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Top Header Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#0D1B3E"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="4dp"
+                app:strokeWidth="0dp">
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:padding="20dp"
+                    android:layout_height="wrap_content">
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivProfileLarge"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:src="@drawable/ic_driver"
+                        android:background="@color/white"
+                        android:padding="2dp"
+                        app:shapeAppearanceOverlay="@style/CircleImage" />
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="16dp"
+                        android:layout_toEndOf="@id/ivProfileLarge"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ahmed Raza"
+                            android:textColor="@color/white"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Employee #9422 • Senior Operator"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </RelativeLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Personal Information Section -->
+            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Personal Information" android:textColor="#0D1B3E" android:textSize="16sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:text="Edit" android:textColor="#2563EB" android:textSize="14sp" android:textStyle="bold" />
+            </RelativeLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                    <!-- Name -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_myplaces" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Full Name" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ahmed Raza" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <!-- Email -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_dialog_email" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Email Address" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ahmed.raza@transit.com" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <!-- Phone -->
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_call" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Phone Number" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+92 300 1234567" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Assigned Transport Section -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Assigned Transport" android:textColor="#0D1B3E" android:textSize="16sp" android:textStyle="bold" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@drawable/yellow_bus" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Vehicle" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BUS-101 (Standard Transit)" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_directions" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route 1 - North" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_recent_history" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:orientation="vertical">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Shift Timing" android:textColor="#64748B" android:textSize="11sp" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Morning Shift • 06:00 - 14:00" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Security Section -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Security" android:textColor="#0D1B3E" android:textSize="16sp" android:textStyle="bold" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+                <RelativeLayout android:layout_width="match_parent" android:layout_height="64dp" android:paddingHorizontal="16dp">
+                    <com.google.android.material.card.MaterialCardView android:id="@+id/secIcon" android:layout_width="40dp" android:layout_height="40dp" android:layout_centerVertical="true" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="10dp" app:cardElevation="0dp"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_gravity="center" android:src="@android:drawable/ic_lock_idle_lock" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerVertical="true" android:layout_marginStart="16dp" android:layout_toEndOf="@id/secIcon" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Change Password" android:textColor="#1E293B" android:textSize="15sp" android:textStyle="bold" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Update your account security" android:textColor="#64748B" android:textSize="11sp" />
+                    </LinearLayout>
+                    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:layout_alignParentEnd="true" android:layout_centerVertical="true" android:src="@android:drawable/arrow_down_float" android:rotation="-90" app:tint="#94A3B8" />
+                </RelativeLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Logout Button -->
+            <com.google.android.material.button.MaterialButton
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="32dp"
+                android:text="Logout"
+                android:textColor="#EF4444"
+                android:textStyle="bold"
+                app:backgroundTint="@color/white"
+                app:cornerRadius="12dp"
+                app:icon="@android:drawable/ic_lock_power_off"
+                app:iconTint="#EF4444"
+                app:iconGravity="textStart"
+                app:strokeColor="#EF4444"
+                app:strokeWidth="1.2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="32dp"
+                android:gravity="center"
+                android:text="Driver App v2.4.1 (Stable Build)\nTransit Operations Network"
+                android:textColor="#94A3B8"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Bottom Navigation -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/navCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardElevation="16dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:background="@color/white"
+            app:itemIconTint="@color/nav_item_color"
+            app:itemTextColor="@color/nav_item_color"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/d_profile_details" />
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

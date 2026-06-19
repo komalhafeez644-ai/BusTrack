@@ -1,5 +1,24 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
+<<<<<<< HEAD
+    <style name="Base.Theme.Bustrack" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/header_bg</item>
+        <item name="android:statusBarColor">@color/header_bg</item>
+    </style>
+
+    <style name="Theme.Bustrack" parent="Base.Theme.Bustrack" />
+
+    <style name="CircleImage">
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <style name="RoundedCorner20">
+        <item name="cornerSize">20dp</item>
+    </style>
+
+    <style name="RoundedCorner12">
+        <item name="cornerSize">12dp</item>
+=======
     <style name="Base.Theme.BusTrack_App" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
@@ -31,5 +50,6 @@
         <item name="android:textStyle">bold</item>
         <item name="android:paddingLeft">16dp</item>
         <item name="android:paddingRight">16dp</item>
+>>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd
     </style>
 </resources>

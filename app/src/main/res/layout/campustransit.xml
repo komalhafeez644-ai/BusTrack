@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light">
+
+    <!-- Map Background Placeholder -->
+    <ImageView
+        android:id="@+id/mapBg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.8"
+        android:scaleType="centerCrop"
+        android:src="@android:drawable/ic_menu_mapmode" />
+
+    <!-- Top Floating Header -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/headerCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        app:cardBackgroundColor="@color/white"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="10dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:padding="14dp"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/ivDriverSmall"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_driver"
+                android:scaleType="centerCrop"
+                app:shapeAppearanceOverlay="@style/CircleImage"
+                app:strokeWidth="1dp"
+                app:strokeColor="#F1F5F9" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="16dp"
+                android:layout_toEndOf="@id/ivDriverSmall"
+                android:text="Campus Transit"
+                android:textColor="#0D1B3E"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/settings"
+                app:tint="#2563EB" />
+        </RelativeLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Main Manifest Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/manifestCard"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="220dp"
+        app:cardBackgroundColor="@color/white"
+        app:cardCornerRadius="45dp"
+        app:cardElevation="16dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toTopOf="@id/navCard"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <!-- Drag Handle -->
+            <View
+                android:layout_width="50dp"
+                android:layout_height="5dp"
+                android:layout_gravity="center_horizontal"
+                android:background="#E2E8F0"
+                android:layout_marginBottom="20dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bahria Gate Stop"
+                        android:textColor="#0D1B3E"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="🕒 07:12 AM"
+                        android:textColor="#64748B"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <!-- Arrived Rounded Rectangular Badge -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    app:cardBackgroundColor="#DCFCE7"
+                    app:cardCornerRadius="10dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#10B981"
+                    app:strokeWidth="1dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:text="● ARRIVED"
+                        android:textColor="#10B981"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </com.google.android.material.card.MaterialCardView>
+            </RelativeLayout>
+
+            <!-- Manifest Section with Bold Lines -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:layout_marginBottom="16dp">
+
+                <View
+                    android:id="@+id/lineManifestTop"
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:background="#CBD5E1"
+                    android:layout_alignParentTop="true"/>
+
+                <TextView
+                    android:id="@+id/tvManifestLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/lineManifestTop"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="16dp"
+                    android:text="MANIFEST (08)"
+                    android:textColor="#64748B"
+                    android:letterSpacing="0.1"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMarkAllPresent"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:text="MARK ALL PRESENT"
+                    android:textColor="#2563EB"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:paddingHorizontal="16dp"
+                    app:strokeColor="#2563EB"
+                    app:strokeWidth="1.5dp"
+                    app:cornerRadius="12dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp"
+                    android:background="#CBD5E1"
+                    android:layout_below="@id/tvManifestLabel"/>
+            </RelativeLayout>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Student 1 -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        app:cardBackgroundColor="@color/white"
+                        app:cardCornerRadius="24dp"
+                        app:cardElevation="6dp"
+                        app:strokeColor="#F1F5F9"
+                        app:strokeWidth="1dp">
+                        <RelativeLayout android:layout_width="match_parent" android:padding="16dp" android:layout_height="wrap_content">
+                            <com.google.android.material.imageview.ShapeableImageView
+                                android:id="@+id/ivS1"
+                                android:layout_width="65dp"
+                                android:layout_height="65dp"
+                                android:src="@drawable/ic_driver"
+                                android:scaleType="centerCrop"
+                                app:shapeAppearanceOverlay="@style/RoundedCorner12" />
+                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/ivS1" android:orientation="vertical" android:layout_centerVertical="true">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ali Hamza" android:textColor="#0D1B3E" android:textSize="18sp" android:textStyle="bold" />
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BSCS • 5th Sem" android:textColor="#64748B" android:textSize="14sp" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:orientation="vertical">
+                                <com.google.android.material.button.MaterialButton
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="110dp"
+                                    android:layout_height="40dp"
+                                    android:text="Present"
+                                    android:textSize="12sp"
+                                    android:textColor="#10B981"
+                                    app:icon="@drawable/checkcircle"
+                                    app:iconTint="#10B981"
+                                    app:iconSize="18dp"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="8dp"
+                                    android:padding="0dp"
+                                    app:backgroundTint="#DCFCE7"
+                                    app:strokeColor="#10B981"
+                                    app:strokeWidth="1.2dp"
+                                    app:cornerRadius="12dp"/>
+                                <com.google.android.material.button.MaterialButton
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="110dp"
+                                    android:layout_height="40dp"
+                                    android:layout_marginTop="8dp"
+                                    android:text="Absent"
+                                    android:textSize="12sp"
+                                    android:textColor="#EF4444"
+                                    app:icon="@drawable/crosscircle"
+                                    app:iconTint="#EF4444"
+                                    app:iconSize="18dp"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="8dp"
+                                    android:padding="0dp"
+                                    app:backgroundTint="#FEE2E2"
+                                    app:strokeColor="#EF4444"
+                                    app:strokeWidth="1.2dp"
+                                    app:cornerRadius="12dp"/>
+                            </LinearLayout>
+                        </RelativeLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <!-- Student 2 -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        app:cardBackgroundColor="@color/white"
+                        app:cardCornerRadius="24dp"
+                        app:cardElevation="6dp"
+                        app:strokeColor="#F1F5F9"
+                        app:strokeWidth="1dp">
+                        <RelativeLayout android:layout_width="match_parent" android:padding="16dp" android:layout_height="wrap_content">
+                            <com.google.android.material.imageview.ShapeableImageView
+                                android:id="@+id/ivS2"
+                                android:layout_width="65dp"
+                                android:layout_height="65dp"
+                                android:src="@drawable/ic_driver"
+                                android:scaleType="centerCrop"
+                                app:shapeAppearanceOverlay="@style/RoundedCorner12" />
+                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/ivS2" android:orientation="vertical" android:layout_centerVertical="true">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sarah Jenkins" android:textColor="#0D1B3E" android:textSize="18sp" android:textStyle="bold" />
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BBA • 3rd Sem" android:textColor="#64748B" android:textSize="14sp" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:orientation="vertical">
+                                <com.google.android.material.button.MaterialButton
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="110dp"
+                                    android:layout_height="40dp"
+                                    android:text="Present"
+                                    android:textSize="12sp"
+                                    android:textColor="#10B981"
+                                    app:icon="@drawable/checkcircle"
+                                    app:iconTint="#10B981"
+                                    app:iconSize="18dp"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="8dp"
+                                    android:padding="0dp"
+                                    app:backgroundTint="#DCFCE7"
+                                    app:strokeColor="#10B981"
+                                    app:strokeWidth="1.2dp"
+                                    app:cornerRadius="12dp"/>
+                                <com.google.android.material.button.MaterialButton
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="110dp"
+                                    android:layout_height="40dp"
+                                    android:layout_marginTop="8dp"
+                                    android:text="Absent"
+                                    android:textSize="12sp"
+                                    android:textColor="#EF4444"
+                                    app:icon="@drawable/crosscircle"
+                                    app:iconTint="#EF4444"
+                                    app:iconSize="18dp"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="8dp"
+                                    android:padding="0dp"
+                                    app:backgroundTint="#FEE2E2"
+                                    app:strokeColor="#EF4444"
+                                    app:strokeWidth="1.2dp"
+                                    app:cornerRadius="12dp"/>
+                            </LinearLayout>
+                        </RelativeLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical">
+                        <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/cloudsync" app:tint="#2563EB" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="Attendance syncing to cloud..." android:textColor="#64748B" android:textSize="14sp" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </ScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="62dp"
+                    android:layout_weight="0.4"
+                    android:text="SKIP STOP"
+                    android:textColor="#0D1B3E"
+                    android:textStyle="bold"
+                    app:strokeColor="#CBD5E1"
+                    app:strokeWidth="1.5dp"
+                    app:cornerRadius="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:layout_width="0dp"
+                    android:layout_height="62dp"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="0.6"
+                    android:backgroundTint="#0D1B3E"
+                    android:text="SAVE ATTENDANCE"
+                    android:textColor="@color/white"
+                    android:textStyle="bold"
+                    app:cornerRadius="16dp"
+                    app:icon="@android:drawable/ic_media_play"
+                    app:iconGravity="textEnd"
+                    app:iconTint="@color/white" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Bottom Navigation Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/navCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardElevation="20dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:background="@color/white"
+            app:itemIconTint="@color/nav_item_color"
+            app:itemTextColor="@color/nav_item_color"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/profile_nav_menu" />
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

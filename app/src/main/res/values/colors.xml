@@ -1,5 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+<<<<<<< HEAD
+
+    <color name="header_bg">#0D1B3E</color>
+    <color name="accent_blue">#3B82F6</color>
+    <color name="status_green_bg">#DCFCE7</color>
+    <color name="status_red">#EF4444</color>
+    <color name="bg_light">#F1F5F9</color>
+    <color name="icon_bg_blue">#EFF6FF</color>
+    <color name="icon_bg_grey">#F1F5F9</color>
+    <color name="nav_selected_bg">#E0E7FF</color>
+
+
+        <!-- Primary Theme -->
+        <color name="primary_blue">#1976D2</color>
+        <color name="primary_blue_dark">#1565C0</color>
+        <color name="primary_blue_light">#42A5F5</color>
+
+        <!-- Backgrounds -->
+        <color name="background_light">#F5F7FA</color>
+        <color name="card_white">#FFFFFF</color>
+        <color name="surface_grey">#F1F3F4</color>
+
+        <!-- Status Colors -->
+        <color name="status_green">#4CAF50</color>
+        <color name="status_green_dark">#388E3C</color>
+
+        <color name="badge_red">#F44336</color>
+        <color name="badge_red_dark">#D32F2F</color>
+
+        <color name="warning_orange">#FF9800</color>
+        <color name="warning_yellow">#FFC107</color>
+
+        <!-- Text Colors -->
+        <color name="text_primary">#212121</color>
+        <color name="text_secondary">#757575</color>
+        <color name="text_hint">#9E9E9E</color>
+
+        <!-- Basic Colors -->
+        <color name="white">#FFFFFF</color>
+        <color name="black">#000000</color>
+
+        <!-- Divider & Border -->
+        <color name="divider">#E0E0E0</color>
+        <color name="border_light">#DADCE0</color>
+
+        <!-- Attendance -->
+        <color name="present_green">#2ECC71</color>
+        <color name="absent_red">#E74C3C</color>
+
+        <!-- Route & Tracking -->
+        <color name="route_blue">#2196F3</color>
+        <color name="map_marker_red">#EA4335</color>
+
+    </resources>
+=======
     <color name="primaryDark">#08224A</color>
     <color name="primaryBlue">#1565C0</color>
     <color name="white">#FFFFFF</color>
@@ -23,3 +78,4 @@
     <color name="progress_gold">#FFB300</color>
     <color name="bottom_nav_unselected">#8E8E93</color>
 </resources>
+>>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd

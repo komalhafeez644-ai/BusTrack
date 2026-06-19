@@ -1,4 +1,50 @@
 <resources>
+<<<<<<< HEAD
+    <string name="app_name">Bustrack</string>
+    <string name="good_morning">GOOD MORNING, 👋</string>
+    <string name="driver_name">John Driver</string>
+    <string name="driver_role">DRIVER</string>
+    <string name="notification_count">3</string>
+    <string name="bus_number">BUS NUMBER</string>
+    <string name="bus_101">BUS-101</string>
+
+    <string name="current_route">CURRENT ROUTE</string>
+    <string name="route_1_north">Route 1 (North)</string>
+    <string name="plate">PLATE</string>
+    <string name="plate_number">KL 01 AB 1234</string>
+
+    <string name="stops_assigned">12 Stops Assigned</string>
+    <string name="view_route">View Route ></string>
+
+    <string name="duty_status">DUTY STATUS</string>
+    <string name="on_duty">On Duty</string>
+
+    <string name="live_location_active">Live location sharing is active</string>
+
+    <string name="live_tracking">Live Tracking</string>
+    <string name="active">ACTIVE</string>
+    <string name="gps">GPS</string>
+
+    <string name="quick_actions">Quick Actions</string>
+    <string name="see_all">SEE ALL</string>
+
+    <string name="today_trip_summary">Today's Trip Summary</string>
+
+    <string name="stops_count">0/12</string>
+    <string name="stops_label">STOPS</string>
+
+    <string name="students_count">0/48</string>
+    <string name="students_label">STUDENTS</string>
+
+    <string name="time_value">00:00</string>
+    <string name="time_label">TIME</string>
+
+    <string name="distance_value">0 km</string>
+    <string name="distance_label">DISTANCE</string>
+
+    <string name="drive_safe">Drive Safe!</string>
+    <string name="safety_message">Follow traffic rules and ensure student safety always.</string>
+=======
     <string name="app_name">BusTrack_App</string>
     <string name="sign_in">Sign In</string>
 
@@ -139,4 +185,5 @@
     <string name="btn_agree">I Agree</string>
     <string name="welcome_principal">WELCOME PRINCIPAL, 👋</string>
     <string name="profile">Profile</string>
+>>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd
 </resources>

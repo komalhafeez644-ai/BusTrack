@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light">
+
+    <!-- Custom Toolbar -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="#0D1B3E"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/btnBack"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@android:drawable/ic_menu_revert"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/white"
+                android:rotation="180"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="36dp"
+                android:text="Notification Settings"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:src="@android:drawable/ic_menu_preferences"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/white" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.appcompat.widget.Toolbar>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/btnSavePreferences"
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- General Alerts Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <!-- Route Alerts -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switch1">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive notifications about route changes, stop updates, and timing adjustments." android:textColor="#64748B" android:textSize="12sp" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                    <!-- Traffic Alerts -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switch2">
+                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Traffic Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                                <View android:layout_width="8dp" android:layout_height="8dp" android:layout_marginStart="8dp" android:background="@android:drawable/presence_online" android:backgroundTint="#3B82F6" />
+                            </LinearLayout>
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive live traffic and delay warnings (road blockages, heavy traffic)." android:textColor="#64748B" android:textSize="12sp" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                    <!-- Student Boarding -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switch3">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Student Boarding" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive confirmation when student attendance is marked." android:textColor="#64748B" android:textSize="12sp" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" />
+                    </RelativeLayout>
+
+                    <!-- Connectivity Alerts -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switch4">
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Connectivity Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive alerts if GPS is disabled or internet is disconnected." android:textColor="#64748B" android:textSize="12sp" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                    <!-- Emergency Alerts (Highlighted) -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        app:cardBackgroundColor="#FFF7ED"
+                        app:cardCornerRadius="12dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#FFEDD5"
+                        app:strokeWidth="1dp">
+                        <RelativeLayout android:layout_width="match_parent" android:padding="16dp" android:layout_height="wrap_content">
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switch5">
+                                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                    <ImageView android:layout_width="18dp" android:layout_height="18dp" android:src="@android:drawable/ic_dialog_alert" app:tint="#1E293B" />
+                                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="Emergency Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                                </LinearLayout>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive urgent admin announcements." android:textColor="#92400E" android:textSize="12sp" />
+                            </LinearLayout>
+                            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue" android:layout_centerVertical="true"/>
+                        </RelativeLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Sound & Vibration Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sound &amp; Vibration" android:textColor="#1E293B" android:textSize="18sp" android:textStyle="bold" android:layout_marginBottom="20dp" />
+
+                    <!-- Sound -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp">
+                        <ImageView android:id="@+id/iconSound" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_volume_off" app:tint="#2563EB" android:layout_centerVertical="true"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconSound" android:layout_centerVertical="true" android:text="Notification Sound" android:textColor="#1E293B" android:textSize="15sp" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                    <!-- Vibration -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp">
+                        <ImageView android:id="@+id/iconVibrate" android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/ic_lock_silent_mode_vibrate" app:tint="#2563EB" android:layout_centerVertical="true"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconVibrate" android:layout_centerVertical="true" android:text="Vibration" android:textColor="#1E293B" android:textSize="15sp" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                    <!-- Popup -->
+                    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <ImageView android:id="@+id/iconPopup" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/notification" app:tint="#2563EB" android:layout_centerVertical="true"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconPopup" android:layout_centerVertical="true" android:text="Popup Alerts" android:textColor="#1E293B" android:textSize="15sp" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                    </RelativeLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Quiet Mode Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp"
+                app:cardBackgroundColor="@color/white"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp">
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:padding="20dp"
+                    android:layout_height="wrap_content">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toStartOf="@id/switchQuiet">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Quiet Mode" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Mute non-emergency notifications during driving." android:textColor="#64748B" android:textSize="12sp" />
+                    </LinearLayout>
+                    <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchQuiet" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" android:layout_centerVertical="true"/>
+                </RelativeLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Save Preferences Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSavePreferences"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_margin="16dp"
+        android:text="Save Preferences"
+        android:textAllCaps="false"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:backgroundTint="#0D1B3E"
+        app:cornerRadius="30dp"
+        app:icon="@android:drawable/checkbox_on_background"
+        app:iconGravity="textEnd"
+        app:iconTint="@color/white"
+        app:layout_constraintBottom_toTopOf="@id/navCard" />
+
+    <!-- Bottom Navigation -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/navCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardElevation="16dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNav"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:background="@color/white"
+            app:itemIconTint="@color/nav_item_color"
+            app:itemTextColor="@color/nav_item_color"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/driver_profile_nav_menu" />
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
