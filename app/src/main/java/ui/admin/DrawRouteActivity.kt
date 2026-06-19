@@ -23,9 +23,9 @@ import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.api.geocoding.v5.MapboxGeocoding
-import com.mapbox.api.geocoding.v5.models.CarmenFeature
-import com.mapbox.api.geocoding.v5.models.GeocodingResponse
+import com.mapbox.search.*
+import com.mapbox.search.result.*
+import com.mapbox.search.common.IsoCountryCode
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
@@ -56,7 +56,7 @@ class DrawRouteActivity : AppCompatActivity() {
     private var startAddress: String = ""
     private var endAddress: String = ""
     private var searchJob: Job? = null
-    private var currentGeocodingCall: MapboxGeocoding? = null
+    private lateinit var searchEngine: SearchEngine
     
     private val routeCache = mutableMapOf<String, String>()
     
@@ -64,6 +64,10 @@ class DrawRouteActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityDrawRouteBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        searchEngine = SearchEngine.createSearchEngineWithBuiltInDataProviders(
+            SearchEngineSettings()
+        )
 
         mapView = binding.mapView
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
@@ -136,7 +140,6 @@ class DrawRouteActivity : AppCompatActivity() {
                     }
                 } else {
                     binding.rvSearchResults.visibility = View.GONE
-                    currentGeocodingCall?.cancelCall()
                 }
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -150,86 +153,72 @@ class DrawRouteActivity : AppCompatActivity() {
     }
 
     private fun performSearch(query: String) {
-        val cleanQuery = query
-            .replace("more", "mor", ignoreCase = true)
-            .replace("morr", "mor", ignoreCase = true)
-
+        val cleanQuery = query.trim()
         Log.d("SearchDebug", "Searching for: $cleanQuery")
-        currentGeocodingCall?.cancelCall()
 
-        val geocoding = MapboxGeocoding.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .query(cleanQuery)
-            .country("pk") 
-            .autocomplete(true)
-            .fuzzyMatch(true)
-            .limit(10)
-            .build()
+        // Use current map center for proximity to get results nearest to what user is looking at
+        val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
 
-        currentGeocodingCall = geocoding
-        geocoding.enqueueCall(object : Callback<GeocodingResponse> {
-            override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
-                Log.d("SearchDebug", "Response Code: ${response.code()}")
-                if (response.isSuccessful) {
-                    val results = response.body()?.features() ?: emptyList()
-                    Log.d("SearchDebug", "Features found: ${results.size}")
-                    
-                    results.forEach {
-                        Log.d("SearchDebug", "Name=${it.text()} Type=${it.placeType()} Address=${it.placeName()}")
-                    }
-                    
-                    runOnUiThread {
-                        if (results.isNotEmpty()) {
-                            showSearchResults(results)
-                        } else {
-                            Log.d("SearchDebug", "No results for $cleanQuery")
-                            binding.rvSearchResults.visibility = View.GONE
-                            if (cleanQuery.length > 3) {
-                                Toast.makeText(this@DrawRouteActivity, "No results found. Try another query.", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                } else {
-                    Log.e("SearchDebug", "Error: ${response.code()} ${response.message()}")
-                    runOnUiThread {
+        val searchOptions = SearchOptions(
+            proximity = mapCenter,
+            countries = listOf(IsoCountryCode.PAKISTAN),
+            limit = 10,
+            // Only search for addresses, POIs and neighborhoods to keep results relevant
+            types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.NEIGHBORHOOD, QueryType.PLACE)
+        )
+
+        searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
+            override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                Log.d("SearchDebug", "Suggestions found: ${suggestions.size}")
+                runOnUiThread {
+                    if (suggestions.isNotEmpty()) {
+                        showSearchResults(suggestions)
+                    } else {
                         binding.rvSearchResults.visibility = View.GONE
                     }
                 }
             }
-            override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {
-                if (call.isCanceled) {
-                    Log.d("SearchDebug", "Canceled")
-                } else {
-                    Log.e("SearchDebug", "Failed: ${t.message}")
-                    runOnUiThread {
-                        binding.rvSearchResults.visibility = View.GONE
-                    }
-                }
+
+            override fun onError(e: Exception) {
+                Log.e("SearchDebug", "Search error: ${e.message}")
+                runOnUiThread { binding.rvSearchResults.visibility = View.GONE }
             }
         })
     }
 
-    private fun showSearchResults(results: List<CarmenFeature>) {
+    private fun showSearchResults(results: List<SearchSuggestion>) {
         binding.rvSearchResults.visibility = View.VISIBLE
-        val adapter = SearchAdapter(results) { feature ->
-            val point = feature.center() ?: return@SearchAdapter
-            mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).zoom(16.0).build())
-            searchMarkerManager?.deleteAll()
-            
-            val markerIcon = getBitmapFromVectorDrawable(R.drawable.outline_location)
-            markerIcon?.let {
-                val pointAnnotationOptions = PointAnnotationOptions()
-                    .withPoint(point)
-                    .withIconImage(it)
-                    .withIconColor("#EF4444")
-                    .withTextField(feature.text() ?: "")
-                    .withTextOffset(listOf(0.0, 2.0))
-                    .withIconSize(1.5)
-                searchMarkerManager?.create(pointAnnotationOptions)
-            }
-            binding.rvSearchResults.visibility = View.GONE
-            binding.etSearchLocation.setText(feature.text())
-            Toast.makeText(this, "Tap map at red marker to add to route", Toast.LENGTH_SHORT).show()
+        val adapter = SearchAdapter(results) { suggestion ->
+            searchEngine.select(suggestion, object : SearchSelectionCallback {
+                override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
+                    val point = result.coordinate
+                    runOnUiThread {
+                        mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).zoom(16.0).build())
+                        searchMarkerManager?.deleteAll()
+                        
+                        val markerIcon = getBitmapFromVectorDrawable(R.drawable.outline_location)
+                        markerIcon?.let {
+                            val pointAnnotationOptions = PointAnnotationOptions()
+                                .withPoint(point)
+                                .withIconImage(it)
+                                .withIconColor("#EF4444")
+                                .withTextField(result.name)
+                                .withTextOffset(listOf(0.0, 2.0))
+                                .withIconSize(1.5)
+                            searchMarkerManager?.create(pointAnnotationOptions)
+                        }
+                        binding.rvSearchResults.visibility = View.GONE
+                        binding.etSearchLocation.setText(result.name)
+                        Toast.makeText(this@DrawRouteActivity, "Tap map at red marker to add to route", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onResults(suggestion: SearchSuggestion, results: List<SearchResult>, responseInfo: ResponseInfo) {}
+                override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {}
+                override fun onError(e: Exception) {
+                    Log.e("SearchDebug", "Selection error: ${e.message}")
+                }
+            })
         }
         binding.rvSearchResults.adapter = adapter
     }
@@ -246,21 +235,30 @@ class DrawRouteActivity : AppCompatActivity() {
     }
 
     private fun geocodeAndAddPoint(locationName: String) {
-        val geocoding = MapboxGeocoding.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .query(locationName)
-            .country("pk")
-            .proximity(Point.fromLngLat(73.0535, 33.5985))
-            .build()
+        val searchOptions = SearchOptions(
+            proximity = Point.fromLngLat(73.0679, 33.6007), // Central Rawalpindi
+            countries = listOf(IsoCountryCode.PAKISTAN),
+            limit = 1,
+            types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.PLACE)
+        )
 
-        geocoding.enqueueCall(object : Callback<GeocodingResponse> {
-            override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
-                response.body()?.features()?.firstOrNull()?.center()?.let {
-                    tapPoints.add(it)
-                    updateMapUI()
+        searchEngine.search(locationName, searchOptions, object : SearchSuggestionsCallback {
+            override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                suggestions.firstOrNull()?.let { suggestion ->
+                    searchEngine.select(suggestion, object : SearchSelectionCallback {
+                        override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
+                            runOnUiThread {
+                                tapPoints.add(result.coordinate)
+                                updateMapUI()
+                            }
+                        }
+                        override fun onResults(suggestion: SearchSuggestion, results: List<SearchResult>, responseInfo: ResponseInfo) {}
+                        override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {}
+                        override fun onError(e: Exception) {}
+                    })
                 }
             }
-            override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) {}
+            override fun onError(e: Exception) {}
         })
     }
 
@@ -278,34 +276,32 @@ class DrawRouteActivity : AppCompatActivity() {
         val startPoint = tapPoints.first()
         val endPoint = tapPoints.last()
 
-        val startGeocoding = MapboxGeocoding.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .query(Point.fromLngLat(startPoint.longitude(), startPoint.latitude()))
-            .country("pk")
-            .build()
+        val options = ReverseGeoOptions(
+            center = startPoint,
+            limit = 1
+        )
 
-        startGeocoding.enqueueCall(object : Callback<GeocodingResponse> {
-            override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
-                startAddress = response.body()?.features()?.firstOrNull()?.placeName() ?: "Start Point"
+        searchEngine.search(options, object : SearchCallback {
+            override fun onResults(results: List<SearchResult>, responseInfo: ResponseInfo) {
+                startAddress = results.firstOrNull()?.address?.formattedAddress() ?: "Start Point"
                 fetchEndAddressAndFinish(endPoint)
             }
-            override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) { fetchEndAddressAndFinish(endPoint) }
+            override fun onError(e: Exception) { fetchEndAddressAndFinish(endPoint) }
         })
     }
 
     private fun fetchEndAddressAndFinish(endPoint: Point) {
-        val endGeocoding = MapboxGeocoding.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .query(Point.fromLngLat(endPoint.longitude(), endPoint.latitude()))
-            .country("pk")
-            .build()
+        val options = ReverseGeoOptions(
+            center = endPoint,
+            limit = 1
+        )
 
-        endGeocoding.enqueueCall(object : Callback<GeocodingResponse> {
-            override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
-                endAddress = response.body()?.features()?.firstOrNull()?.placeName() ?: "End Point"
+        searchEngine.search(options, object : SearchCallback {
+            override fun onResults(results: List<SearchResult>, responseInfo: ResponseInfo) {
+                endAddress = results.firstOrNull()?.address?.formattedAddress() ?: "End Point"
                 finishWithResult()
             }
-            override fun onFailure(call: Call<GeocodingResponse>, t: Throwable) { finishWithResult() }
+            override fun onError(e: Exception) { finishWithResult() }
         })
     }
 
@@ -389,8 +385,8 @@ class DrawRouteActivity : AppCompatActivity() {
 }
 
 class SearchAdapter(
-    private val results: List<CarmenFeature>,
-    private val onClick: (CarmenFeature) -> Unit
+    private val results: List<SearchSuggestion>,
+    private val onClick: (SearchSuggestion) -> Unit
 ) : RecyclerView.Adapter<SearchAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -404,11 +400,10 @@ class SearchAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val feature = results[position]
-        // Smart display: If the text is generic, use a part of placeName
-        holder.tvName.text = feature.text() ?: "Unknown Location"
-        holder.tvAddress.text = feature.placeName() ?: ""
-        holder.itemView.setOnClickListener { onClick(feature) }
+        val suggestion = results[position]
+        holder.tvName.text = suggestion.name
+        holder.tvAddress.text = suggestion.fullAddress ?: ""
+        holder.itemView.setOnClickListener { onClick(suggestion) }
     }
 
     override fun getItemCount() = results.size

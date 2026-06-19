@@ -67,6 +67,8 @@ dependencies {
     implementation("com.mapbox.maps:android:11.4.0")
     implementation("com.mapbox.mapboxsdk:mapbox-sdk-services:6.15.0")
     implementation("com.mapbox.mapboxsdk:mapbox-sdk-turf:6.15.0")
+    implementation(libs.mapbox.search)
+    implementation("com.mapbox.search:mapbox-search-android-ui:2.2.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation(libs.androidx.activity)
