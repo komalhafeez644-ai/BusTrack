@@ -1,10 +1,10 @@
-package com.example.bustrack.ui.driver
+package ui.driver
 
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.bustrack.R
-import com.example.bustrack.databinding.ActivityNavigationBinding
+import com.example.bustrack_app.R
+import com.example.bustrack_app.databinding.ActivityNavigationBinding
 
 class NavigationActivity : AppCompatActivity() {
 

@@ -34,9 +34,33 @@ object DriverRepository {
     }
 
     fun deleteDriver(driverId: String, onComplete: (Boolean) -> Unit = {}) {
-        driversCollection.document(driverId).delete()
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+        driversCollection.document(driverId).get().addOnSuccessListener { snapshot ->
+            val driver = snapshot.toObject(DriverModel::class.java)
+            
+            // 1. Unassign from Bus and Route first
+            driver?.assignedBus?.let { busNo ->
+                BusRepository.getBusByNumber(busNo)?.let { bus ->
+                    BusRepository.updateBusDetails(busNo, bus.copy(driverName = null))
+                }
+                
+                RouteRepository.routeList.value?.find { it.busNo == busNo }?.let { route ->
+                    RouteRepository.updateRoute(route.copy(driverName = ""))
+                }
+            }
+
+            // 2. Delete from Auth (users collection) - We need the UID
+            db.collection("users").whereEqualTo("email", driver?.email).get()
+                .addOnSuccessListener { users ->
+                    users.documents.firstOrNull()?.id?.let { uid ->
+                        db.collection("users").document(uid).delete()
+                    }
+                }
+
+            // 3. Delete from drivers collection
+            driversCollection.document(driverId).delete()
+                .addOnSuccessListener { onComplete(true) }
+                .addOnFailureListener { onComplete(false) }
+        }
     }
 
     fun addDriver(newDriver: DriverModel, onComplete: (Boolean) -> Unit = {}) {

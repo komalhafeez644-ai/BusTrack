@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF">
+    android:background="#FFFFFF"
+    android:fitsSystemWindows="true">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutAppBar"
@@ -126,22 +127,15 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </androidx.cardview.widget.CardView>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Bus Number"
-                android:textColor="#333333"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
             <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintEnabled="false"
-                app:boxBackgroundMode="outline"
-                app:boxBackgroundColor="#F8FAFC"
+                android:hint="Bus Number"
+                android:textColorHint="#666666"
+                app:hintTextColor="@color/primaryBlue"
+                app:expandedHintEnabled="false"
                 app:boxCornerRadiusBottomEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusTopEnd="12dp"
@@ -153,30 +147,21 @@
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etEditBusNumber"
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
+                    android:layout_height="wrap_content"
                     android:inputType="textCapCharacters"
-                    android:paddingHorizontal="16dp"
-                    android:text="BUS-102"
                     android:textColor="#000000"
                     android:textSize="16sp" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Capacity"
-                android:textColor="#333333"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
             <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintEnabled="false"
-                app:boxBackgroundMode="outline"
-                app:boxBackgroundColor="#F8FAFC"
+                android:hint="Capacity"
+                android:textColorHint="#666666"
+                app:hintTextColor="@color/primaryBlue"
+                app:expandedHintEnabled="false"
                 app:boxCornerRadiusBottomEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusTopEnd="12dp"
@@ -188,30 +173,21 @@
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etEditCapacity"
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
+                    android:layout_height="wrap_content"
                     android:inputType="number"
-                    android:paddingHorizontal="16dp"
-                    android:text="40 Seats"
                     android:textColor="#000000"
                     android:textSize="16sp" />
             </com.google.android.material.textfield.TextInputLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Assign Route"
-                android:textColor="#333333"
-                android:textSize="14sp"
-                android:textStyle="bold" />
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintEnabled="false"
-                app:boxBackgroundColor="#F8FAFC"
+                android:hint="Assign Route"
+                android:textColorHint="#666666"
+                app:hintTextColor="@color/primaryBlue"
+                app:expandedHintEnabled="false"
                 app:boxCornerRadiusBottomEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusTopEnd="12dp"
@@ -223,10 +199,8 @@
                 <AutoCompleteTextView
                     android:id="@+id/menuEditRoute"
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
+                    android:layout_height="wrap_content"
                     android:inputType="none"
-                    android:paddingHorizontal="16dp"
-                    android:text="None"
                     android:textColor="#000000"
                     android:textSize="16sp"
                     android:background="@null"
@@ -234,22 +208,15 @@
                     android:popupBackground="@android:color/white" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Assign Driver"
-                android:textColor="#333333"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                app:hintEnabled="false"
-                app:boxBackgroundColor="#F8FAFC"
+                android:hint="Assign Driver"
+                android:textColorHint="#666666"
+                app:hintTextColor="@color/primaryBlue"
+                app:expandedHintEnabled="false"
                 app:boxCornerRadiusBottomEnd="12dp"
                 app:boxCornerRadiusBottomStart="12dp"
                 app:boxCornerRadiusTopEnd="12dp"
@@ -261,10 +228,8 @@
                 <AutoCompleteTextView
                     android:id="@+id/menuEditDriver"
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
+                    android:layout_height="wrap_content"
                     android:inputType="none"
-                    android:paddingHorizontal="16dp"
-                    android:text="None"
                     android:textColor="#000000"
                     android:textSize="16sp"
                     android:background="@null"

@@ -95,6 +95,12 @@ class LoginActivity : AppCompatActivity() {
                             startActivity(intent)
                             finish()
                         }
+                        "driver" -> {
+                            Toast.makeText(this, "Driver Login Successful", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this, ui.driver.DriverDashboardActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        }
                         else -> {
                             Toast.makeText(this, "Parent Login Successful", Toast.LENGTH_SHORT).show()
                             val intent = Intent(this, ui.parent.ParentDashboardActivity::class.java)

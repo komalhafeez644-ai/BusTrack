@@ -9,6 +9,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
 import com.example.bustrack_app.adapter.FaqAdapter
 import com.example.bustrack_app.models.FaqModel
+import ui.driver.DriverDashboardActivity
+import ui.parent.ParentDashboardActivity
+import androidx.lifecycle.lifecycleScope
+import com.example.bustrack_app.data.AuthRepository
+import kotlinx.coroutines.launch
 
 class FaqActivity : AppCompatActivity() {
 
@@ -34,7 +39,44 @@ class FaqActivity : AppCompatActivity() {
         recyclerView.adapter = FaqAdapter(faqList)
 
         findViewById<View>(R.id.btnMenu).setOnClickListener {
+            handleBackToDashboard()
+        }
+    }
+
+    private fun handleBackToDashboard() {
+        val fromUser = intent.getStringExtra("FROM_USER")
+        if (fromUser == "parent") {
+            val intent = Intent(this, ParentDashboardActivity::class.java)
+            intent.putExtra("OPEN_DRAWER", true)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+            finish()
+            return
+        } else if (fromUser == "admin") {
             val intent = Intent(this, AdminDashboardActivity::class.java)
+            intent.putExtra("OPEN_DRAWER", true)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+            finish()
+            return
+        } else if (fromUser == "driver") {
+            val intent = Intent(this, DriverDashboardActivity::class.java)
+            intent.putExtra("OPEN_DRAWER", true)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+            finish()
+            return
+        }
+
+        lifecycleScope.launch {
+            val role = AuthRepository().getCurrentUserRole()
+            val targetClass = when (role) {
+                "admin" -> AdminDashboardActivity::class.java
+                "driver" -> DriverDashboardActivity::class.java
+                else -> ParentDashboardActivity::class.java
+            }
+            
+            val intent = Intent(this@FaqActivity, targetClass)
             intent.putExtra("OPEN_DRAWER", true)
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)

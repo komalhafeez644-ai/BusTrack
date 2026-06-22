@@ -1,17 +1,17 @@
-package com.example.bustrack.ui.driver
+package ui.driver
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import com.example.bustrack.databinding.NotificationsettingsBinding
+import com.example.bustrack_app.databinding.DriveraccountdetailsBinding
 
-class NotificationSettingsActivity : AppCompatActivity() {
-    private lateinit var binding: NotificationsettingsBinding
+class AccountDetailsActivity : AppCompatActivity() {
+    private lateinit var binding: DriveraccountdetailsBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        binding = NotificationsettingsBinding.inflate(layoutInflater)
+        binding = DriveraccountdetailsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         binding.btnBack.setOnClickListener { finish() }

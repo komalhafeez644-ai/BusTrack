@@ -21,8 +21,9 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             loginState.value = Resource.Loading()
             val result = repository.login(email, password)
-            if (result == "admin" || result == "user" || result == "principal") {
-                loginState.value = Resource.Success(result)
+            val successRoles = listOf("admin", "principal", "driver", "parent", "user")
+            if (result in successRoles) {
+                loginState.value = Resource.Success(result!!)
             } else {
                 loginState.value = Resource.Error(result ?: "Invalid Email or Password")
             }

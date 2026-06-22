@@ -76,7 +76,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:scaleType="centerCrop"
-            android:src="@drawable/profile_photo_background"
+            android:src="@drawable/ic_driver"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
@@ -102,7 +102,7 @@
             <ImageView
                 android:layout_width="20dp"
                 android:layout_height="20dp"
-                android:src="@drawable/ic_bus_side"
+                android:src="@drawable/directions_bus"
                 app:tint="@color/accent_blue" />
 
             <LinearLayout
@@ -484,7 +484,7 @@
                 android:textStyle="bold"
                 app:backgroundTint="@color/status_red"
                 app:cornerRadius="12dp"
-                app:icon="@android:drawable/ic_media_stop"
+                app:icon="@drawable/ic_close"
                 app:iconGravity="textStart" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

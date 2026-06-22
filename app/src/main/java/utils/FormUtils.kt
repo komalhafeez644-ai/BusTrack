@@ -87,7 +87,7 @@ object FormUtils {
     }
 
     fun isValidPhone(phone: String): Boolean {
-        return Patterns.PHONE.matcher(phone).matches() && phone.length >= 10
+        return phone.length == 11 && phone.startsWith("03")
     }
 
     /**

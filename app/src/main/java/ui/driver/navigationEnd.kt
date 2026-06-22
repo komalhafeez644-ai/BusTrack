@@ -1,21 +1,21 @@
-package com.example.bustrack.ui.driver
+package ui.driver
 
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.bustrack.R
-import com.example.bustrack.databinding.Activitytracking2Binding
+import com.example.bustrack_app.R
+import com.example.bustrack_app.databinding.EndnavigationBinding
 
 class navigationEnd : AppCompatActivity() {
 
-    private lateinit var binding: Activitytracking2Binding
+    private lateinit var binding: EndnavigationBinding
     private var isMuted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Initialize ViewBinding
-        binding = Activitytracking2Binding.inflate(layoutInflater)
+        binding = EndnavigationBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setupListeners()

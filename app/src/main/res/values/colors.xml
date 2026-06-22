@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-<<<<<<< HEAD
+
 
     <color name="header_bg">#0D1B3E</color>
     <color name="accent_blue">#3B82F6</color>
@@ -39,7 +39,6 @@
 
         <!-- Basic Colors -->
         <color name="white">#FFFFFF</color>
-        <color name="black">#000000</color>
 
         <!-- Divider & Border -->
         <color name="divider">#E0E0E0</color>
@@ -53,11 +52,9 @@
         <color name="route_blue">#2196F3</color>
         <color name="map_marker_red">#EA4335</color>
 
-    </resources>
-=======
+
     <color name="primaryDark">#08224A</color>
     <color name="primaryBlue">#1565C0</color>
-    <color name="white">#FFFFFF</color>
     <color name="lightGray">#666666</color>
     <color name="textColorBlue">#B9C7E4</color>
     <color name="labelColor">#333333</color>
@@ -78,4 +75,4 @@
     <color name="progress_gold">#FFB300</color>
     <color name="bottom_nav_unselected">#8E8E93</color>
 </resources>
->>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd
+

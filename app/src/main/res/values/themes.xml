@@ -1,12 +1,20 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-<<<<<<< HEAD
-    <style name="Base.Theme.Bustrack" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/header_bg</item>
-        <item name="android:statusBarColor">@color/header_bg</item>
+    <style name="Base.Theme.BusTrack_App" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="materialButtonStyle">@style/AppButtonStyle</item>
     </style>
 
-    <style name="Theme.Bustrack" parent="Base.Theme.Bustrack" />
+    <style name="AppButtonStyle" parent="Widget.MaterialComponents.Button">
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Theme.BusTrack_App" parent="Base.Theme.BusTrack_App" />
+
+    <!-- Driver Module Theme Compatibility -->
+    <style name="Theme.Bustrack" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary_blue</item>
+        <item name="android:statusBarColor">@color/primary_blue</item>
+    </style>
 
     <style name="CircleImage">
         <item name="cornerSize">50%</item>
@@ -18,22 +26,8 @@
 
     <style name="RoundedCorner12">
         <item name="cornerSize">12dp</item>
-=======
-    <style name="Base.Theme.BusTrack_App" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
-        <item name="materialButtonStyle">@style/AppButtonStyle</item>
     </style>
 
-    <style name="AppButtonStyle" parent="Widget.MaterialComponents.Button">
-        <item name="android:stateListAnimator">@animator/button_press_anim</item>
-    </style>
-
-    <style name="Theme.BusTrack_App" parent="Base.Theme.BusTrack_App" />
-    <style name="Theme.BusTrack" parent="Theme.MaterialComponents.DayNight.NoActionBar"/>
-    <style name="CircleImage">
-        <item name="cornerSize">50%</item>
-    </style>
     <style name="ShapeAppearance.MaterialComponents.SmallComponent" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">50%</item>
@@ -50,6 +44,5 @@
         <item name="android:textStyle">bold</item>
         <item name="android:paddingLeft">16dp</item>
         <item name="android:paddingRight">16dp</item>
->>>>>>> 30877b02823e2ae42972719cea4a7ea631857fdd
     </style>
 </resources>

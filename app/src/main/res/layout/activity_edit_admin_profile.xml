@@ -4,7 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F4F5F9">
+    android:background="#F4F5F9"
+    android:fitsSystemWindows="true">
 
     <View
         android:id="@+id/blueHeader"
@@ -50,7 +51,8 @@
             android:layout_margin="16dp"
             app:cardCornerRadius="32dp"
             android:backgroundTint="@color/white"
-            app:cardElevation="8dp">
+            app:cardElevation="8dp"
+            app:strokeWidth="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -93,7 +95,8 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:layout_marginTop="8dp"
-                    android:text="Admin ID: Loading..." />
+                    android:text="Admin ID: Loading..."
+                    android:textColor="#334155" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -112,14 +115,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:hint="Full Name"
-                    app:boxBackgroundColor="@android:color/transparent"
+                    android:textColorHint="#666666"
+                    app:hintTextColor="@color/primaryBlue"
+                    app:expandedHintEnabled="false"
+                    app:boxBackgroundColor="@android:color/white"
                     app:boxCornerRadiusBottomEnd="12dp"
                     app:boxCornerRadiusBottomStart="12dp"
                     app:boxCornerRadiusTopEnd="12dp"
                     app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#B0BEC5"
+                    app:boxStrokeColor="#071B46"
                     app:boxStrokeWidth="1.5dp"
-                    app:hintTextColor="#071B46"
                     app:startIconDrawable="@drawable/ic_person"
                     app:startIconTint="#071B46">
 
@@ -128,12 +133,9 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:padding="16dp"
-                        android:hint="e.g. John Doe"
-                        android:textColor="#37474F"
+                        android:textColor="#0F172A"
                         android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
-
-
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -141,24 +143,25 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:hint="Official Email"
-                    app:boxBackgroundColor="@android:color/transparent"
+                    android:textColorHint="#666666"
+                    app:hintTextColor="@color/primaryBlue"
+                    app:expandedHintEnabled="false"
+                    app:boxBackgroundColor="@android:color/white"
                     app:boxCornerRadiusBottomEnd="12dp"
                     app:boxCornerRadiusBottomStart="12dp"
                     app:boxCornerRadiusTopEnd="12dp"
                     app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#B0BEC5"
+                    app:boxStrokeColor="#E2E8F0"
                     app:boxStrokeWidth="1.5dp"
-                    app:hintTextColor="#071B46"
                     app:startIconDrawable="@drawable/ic_mail"
-                    app:startIconTint="#071B46">
+                    app:startIconTint="#64748B">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etEmail"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:padding="16dp"
-                        android:hint="admin@example.com"
-                        android:textColor="#37474F"
+                        android:textColor="#64748B"
                         android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -168,14 +171,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:hint="Phone Number"
-                    app:boxBackgroundColor="@android:color/transparent"
+                    android:textColorHint="#666666"
+                    app:hintTextColor="@color/primaryBlue"
+                    app:expandedHintEnabled="false"
+                    app:boxBackgroundColor="@android:color/white"
                     app:boxCornerRadiusBottomEnd="12dp"
                     app:boxCornerRadiusBottomStart="12dp"
                     app:boxCornerRadiusTopEnd="12dp"
                     app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#B0BEC5"
+                    app:boxStrokeColor="#071B46"
                     app:boxStrokeWidth="1.5dp"
-                    app:hintTextColor="#071B46"
                     app:startIconDrawable="@drawable/phone_24"
                     app:startIconTint="#071B46">
 
@@ -184,8 +189,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:padding="16dp"
-                        android:hint="Phone Number"
-                        android:textColor="#37474F"
+                        android:textColor="#0F172A"
                         android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -195,24 +199,25 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:hint="Department"
-                    app:boxBackgroundColor="@android:color/transparent"
+                    android:textColorHint="#666666"
+                    app:hintTextColor="@color/primaryBlue"
+                    app:expandedHintEnabled="false"
+                    app:boxBackgroundColor="@android:color/white"
                     app:boxCornerRadiusBottomEnd="12dp"
                     app:boxCornerRadiusBottomStart="12dp"
                     app:boxCornerRadiusTopEnd="12dp"
                     app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#B0BEC5"
+                    app:boxStrokeColor="#E2E8F0"
                     app:boxStrokeWidth="1.5dp"
-                    app:hintTextColor="#071B46"
                     app:startIconDrawable="@drawable/logistics"
-                    app:startIconTint="#071B46">
+                    app:startIconTint="#64748B">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etDept"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:padding="16dp"
-                        android:hint="e.g. Logistics"
-                        android:textColor="#37474F"
+                        android:textColor="#64748B"
                         android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -222,26 +227,28 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
                     android:hint="Employee ID"
-                    app:boxBackgroundColor="@android:color/transparent"
+                    android:textColorHint="#666666"
+                    app:hintTextColor="@color/primaryBlue"
+                    app:expandedHintEnabled="false"
+                    app:boxBackgroundColor="@android:color/white"
                     app:boxCornerRadiusBottomEnd="12dp"
                     app:boxCornerRadiusBottomStart="12dp"
                     app:boxCornerRadiusTopEnd="12dp"
                     app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#B0BEC5"
+                    app:boxStrokeColor="#E2E8F0"
                     app:boxStrokeWidth="1.5dp"
-                    app:hintTextColor="#071B46"
                     app:startIconDrawable="@drawable/badge"
-                    app:startIconTint="#071B46">
+                    app:startIconTint="#64748B">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etEmpId"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:padding="16dp"
-                        android:hint="e.g. ADM-001"
-                        android:textColor="#37474F"
+                        android:textColor="#64748B"
                         android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSave"
                     android:layout_width="match_parent"

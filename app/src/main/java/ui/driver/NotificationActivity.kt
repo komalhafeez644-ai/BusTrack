@@ -1,11 +1,11 @@
-package com.example.bustrack.ui.driver
+package ui.driver
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.example.bustrack.databinding.DrivernotificationsBinding
+import com.example.bustrack_app.databinding.DrivernotificationsBinding
 
 class NotificationActivity : AppCompatActivity() {
 

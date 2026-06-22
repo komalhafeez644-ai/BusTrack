@@ -30,6 +30,9 @@ class AdminDashboardActivity : AppCompatActivity() {
         supportActionBar?.hide()
         drawerLayout = findViewById(R.id.drawerLayout)
 
+        // Set initial greeting before data loads
+        findViewById<TextView>(R.id.tvGreeting)?.text = "${getGreeting().uppercase()}, 👋"
+
         if (intent.getBooleanExtra("OPEN_DRAWER", false)) {
             drawerLayout.openDrawer(GravityCompat.END)
         }
@@ -42,10 +45,13 @@ class AdminDashboardActivity : AppCompatActivity() {
     private fun observeProfileData() {
         profileViewModel.adminData.observe(this) { admin ->
             // Update Dashboard Header
-            findViewById<TextView>(R.id.tvAdminName)?.text = admin.fullName
+            findViewById<TextView>(R.id.tvGreeting)?.text = "${getGreeting().uppercase()}, 👋"
+            
+            val nameToShow = admin.fullName.ifEmpty { "System Admin" }
+            findViewById<TextView>(R.id.tvAdminName)?.text = nameToShow
             
             // Update Drawer Header
-            findViewById<TextView>(R.id.drawerName)?.text = admin.fullName
+            findViewById<TextView>(R.id.drawerName)?.text = nameToShow
             findViewById<TextView>(R.id.drawerEmail)?.text = admin.email
             
             val profileImageView = findViewById<ImageView>(R.id.ivProfile)
@@ -69,6 +75,9 @@ class AdminDashboardActivity : AppCompatActivity() {
         super.onResume()
         // Always refresh bottom nav state when coming back
         NavigationUtils.setupBottomNavigation(this)
+        
+        // Update greeting based on current time
+        findViewById<TextView>(R.id.tvGreeting)?.text = "${getGreeting().uppercase()}, 👋"
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -209,6 +218,16 @@ class AdminDashboardActivity : AppCompatActivity() {
         }
 
         dialog.show()
+    }
+
+    private fun getGreeting(): String {
+        val calendar = java.util.Calendar.getInstance()
+        return when (calendar.get(java.util.Calendar.HOUR_OF_DAY)) {
+            in 0..11 -> "Good Morning"
+            in 12..15 -> "Good Afternoon"
+            in 16..20 -> "Good Evening"
+            else -> "Good Night"
+        }
     }
 
     @Deprecated("Deprecated in Java")

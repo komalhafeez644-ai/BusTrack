@@ -59,10 +59,14 @@ class EditBusDetailsActivity : AppCompatActivity() {
         utils.FormUtils.setupUppercaseInput(binding.etEditBusNumber)
 
         // Back Arrow Click
-        binding.btnBackArrow.setOnClickListener { finish() }
+        binding.btnBackArrow.setOnClickListener { 
+            utils.ViewUtils.applyClickEffect(it)
+            finish() 
+        }
 
         // UPDATE BUTTON CLICK
         binding.btnUpdateBus.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             val updatedNo = binding.etEditBusNumber.text.toString().trim()
             val updatedCapStr = binding.etEditCapacity.text.toString().trim()
             val selectedRouteName = binding.menuEditRoute.text.toString().trim()
@@ -108,6 +112,7 @@ class EditBusDetailsActivity : AppCompatActivity() {
 
         // DELETE BUTTON CLICK
         binding.btnDeleteBus.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             showDeleteConfirmationPopup()
         }
     }
@@ -185,11 +190,13 @@ class EditBusDetailsActivity : AppCompatActivity() {
 
         // 1. Cancel Button Click
         dialogBinding.btnCancel.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             alertDialog.dismiss()
         }
 
         // 2. Delete Button Click
         dialogBinding.btnDelete.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
             viewModel.deleteBusFromFleet(originalBusNumber)
             Toast.makeText(this, "Delete successfully", Toast.LENGTH_SHORT).show()
             alertDialog.dismiss()

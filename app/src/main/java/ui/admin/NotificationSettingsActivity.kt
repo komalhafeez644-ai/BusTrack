@@ -14,6 +14,7 @@ import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.viewmodels.NotificationViewModel
 import kotlinx.coroutines.launch
 import ui.parent.ParentDashboardActivity
+import ui.driver.DriverDashboardActivity
 
 class NotificationSettingsActivity : AppCompatActivity() {
 
@@ -46,8 +47,8 @@ class NotificationSettingsActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
             return
-        } else if (fromUser == "admin") {
-            val intent = Intent(this, AdminDashboardActivity::class.java)
+        } else if (fromUser == "driver") {
+            val intent = Intent(this, DriverDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -57,7 +58,11 @@ class NotificationSettingsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val role = authRepo.getCurrentUserRole()
-            val targetClass = if (role == "admin") AdminDashboardActivity::class.java else ParentDashboardActivity::class.java
+            val targetClass = when (role) {
+                "admin" -> AdminDashboardActivity::class.java
+                "driver" -> DriverDashboardActivity::class.java
+                else -> ParentDashboardActivity::class.java
+            }
             
             val intent = Intent(this@NotificationSettingsActivity, targetClass)
             intent.putExtra("OPEN_DRAWER", true)

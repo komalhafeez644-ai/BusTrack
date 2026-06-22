@@ -132,8 +132,12 @@ class AddStudentActivity : AppCompatActivity() {
             binding.etEmployeeId.error = "ID required"
             return false
         }
+        if (id.length > 10) {
+            binding.etEmployeeId.error = "ID too long (max 10)"
+            return false
+        }
         if (!FormUtils.isValidPhone(phone)) {
-            binding.etEmergencyContact.error = "Invalid contact number"
+            binding.etEmergencyContact.error = "Invalid contact (11 digits)"
             return false
         }
         return true

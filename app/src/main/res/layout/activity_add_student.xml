@@ -229,6 +229,7 @@
                             android:id="@+id/etEmployeeId"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="10"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -250,6 +251,7 @@
                             android:id="@+id/etFullName"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="50"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -302,6 +304,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:inputType="textCapCharacters"
+                                android:maxLength="2"
                                 android:textColor="#1C1C1E"/>
                         </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
@@ -324,6 +327,7 @@
                             android:id="@+id/etParentName"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="50"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -346,6 +350,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="phone"
+                            android:maxLength="11"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -367,6 +372,7 @@
                             android:id="@+id/etPickupAddress"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="100"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 

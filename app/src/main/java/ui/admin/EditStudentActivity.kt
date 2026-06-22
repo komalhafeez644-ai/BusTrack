@@ -201,8 +201,9 @@ class EditStudentActivity : AppCompatActivity() {
             etEditFullName.error = "Name is required"
             return false
         }
-        if (!utils.FormUtils.isValidPhone(etEditEmergencyContact.text.toString().trim())) {
-            etEditEmergencyContact.error = "Invalid contact number"
+        val phone = etEditEmergencyContact.text.toString().trim()
+        if (!utils.FormUtils.isValidPhone(phone)) {
+            etEditEmergencyContact.error = "Invalid contact (11 digits)"
             return false
         }
         return true

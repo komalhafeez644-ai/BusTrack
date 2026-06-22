@@ -103,7 +103,7 @@ class SignupActivity : AppCompatActivity() {
                         "email" to email,
                         "phone" to phone,
                         "registrationNumber" to regNum,
-                        "role" to "user" // Default role
+                        "role" to "parent" // Consistent with user instructions
                     )
                     db.collection("users").document(uid).set(userData).await()
                     Toast.makeText(this@SignupActivity, "Account Created Successfully!", Toast.LENGTH_SHORT).show()

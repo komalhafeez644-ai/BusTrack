@@ -58,6 +58,7 @@
                     app:layout_constraintTop_toTopOf="@id/ivProfile">
 
                     <TextView
+                        android:id="@+id/tvGreeting"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="GOOD MORNING, 👋"

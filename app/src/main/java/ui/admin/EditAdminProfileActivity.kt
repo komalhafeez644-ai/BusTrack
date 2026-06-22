@@ -45,9 +45,9 @@ class EditAdminProfileActivity : AppCompatActivity() {
         db.collection("users").document(currentUserId).get()
             .addOnSuccessListener { document ->
                 // Loading data with strict defaults for missing fields
-                val fullName = document.getString("fullName") ?: "System Admin"
+                val fullName = document.getString("fullName") ?: document.getString("name") ?: "System Admin"
                 val empId = document.getString("employeeId") ?: "ADMIN-2024-001"
-                val dept = "Transport" // Fixed as requested
+                val dept = document.getString("department") ?: "Transport"
                 val phone = document.getString("phone") ?: "+92 300 1234567"
                 val email = document.getString("email") ?: "admin@gmail.com"
                 
@@ -57,8 +57,13 @@ class EditAdminProfileActivity : AppCompatActivity() {
                 binding.etDept.setText(dept)
                 binding.etEmpId.setText(empId)
                 
+                // Ensure labels float
+                binding.etFullName.requestFocus()
+                binding.etFullName.clearFocus()
+
                 // Set the ID below the profile photo
-                binding.tvDisplayId.text = "User ID: $empId"
+                binding.tvDisplayId.text = "Admin ID: $empId"
+                binding.tvDisplayId.setTextColor(android.graphics.Color.parseColor("#334155"))
                 
                 // Requirement: Department and Employee ID cannot be changed
                 binding.etDept.isEnabled = false

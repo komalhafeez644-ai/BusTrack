@@ -26,12 +26,13 @@ class AuthRepository {
                 val document = db.collection("users").document(uid).get().await()
                 
                 // Force role for specific emails (to prevent database mismatches)
-                val role = if (cleanEmail == "admin@gmail.com") {
-                    "admin"
-                } else if (cleanEmail == "principal@gmail.com") {
-                    "principal"
-                } else {
-                    document.getString("role") ?: "user"
+                val role = when (cleanEmail) {
+                    "admin@gmail.com" -> "admin"
+                    "principal@gmail.com" -> "principal"
+                    else -> {
+                        val r = document.getString("role") ?: "parent"
+                        if (r == "user") "parent" else r
+                    }
                 }
 
                 // If user exists in Auth but not in Firestore OR if role is mismatched
@@ -99,9 +100,11 @@ class AuthRepository {
         
         return try {
             val doc = db.collection("users").document(user.uid).get().await()
-            doc.getString("role") ?: "user"
+            val role = doc.getString("role") ?: "user"
+            // If it's 'user', we treat it as 'parent' in our app logic
+            if (role == "user") "parent" else role
         } catch (e: Exception) {
-            "user"
+            "parent"
         }
     }
 }

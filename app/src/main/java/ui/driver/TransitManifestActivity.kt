@@ -1,10 +1,10 @@
-package com.example.bustrack.ui.driver
+package ui.driver
 
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import com.example.bustrack.databinding.CampustransitBinding
+import com.example.bustrack_app.databinding.CampustransitBinding
 
 class TransitManifestActivity : AppCompatActivity() {
     private lateinit var binding: CampustransitBinding

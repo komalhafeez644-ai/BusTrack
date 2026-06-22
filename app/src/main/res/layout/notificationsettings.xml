@@ -4,9 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_light">
+    android:background="@color/bg_light"
+    android:fitsSystemWindows="true">
 
-    <!-- Custom Toolbar -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
@@ -19,37 +19,31 @@
             android:layout_height="match_parent">
 
             <ImageView
-                android:id="@+id/btnBack"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@android:drawable/ic_menu_revert"
+                android:id="@+id/btnMenu"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_menu"
+                android:padding="8dp"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:tint="@color/white"
-                android:rotation="180"/>
+                android:background="?attr/selectableItemBackgroundBorderless"/>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="36dp"
+                android:layout_marginStart="16dp"
+                android:layout_toEndOf="@id/btnMenu"
                 android:text="Notification Settings"
                 android:textColor="@color/white"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintStart_toEndOf="@id/btnMenu"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_marginEnd="16dp"
-                android:src="@android:drawable/ic_menu_preferences"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="@color/white" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.appcompat.widget.Toolbar>
 
@@ -86,7 +80,7 @@
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive notifications about route changes, stop updates, and timing adjustments." android:textColor="#64748B" android:textSize="12sp" />
                         </LinearLayout>
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Traffic Alerts -->
@@ -98,7 +92,7 @@
                             </LinearLayout>
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive live traffic and delay warnings (road blockages, heavy traffic)." android:textColor="#64748B" android:textSize="12sp" />
                         </LinearLayout>
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Student Boarding -->
@@ -107,7 +101,7 @@
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Student Boarding" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive confirmation when student attendance is marked." android:textColor="#64748B" android:textSize="12sp" />
                         </LinearLayout>
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" />
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Connectivity Alerts -->
@@ -116,7 +110,7 @@
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Connectivity Alerts" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive alerts if GPS is disabled or internet is disconnected." android:textColor="#64748B" android:textSize="12sp" />
                         </LinearLayout>
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Emergency Alerts (Highlighted) -->
@@ -137,7 +131,7 @@
                                 </LinearLayout>
                                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Receive urgent admin announcements." android:textColor="#92400E" android:textSize="12sp" />
                             </LinearLayout>
-                            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue" android:layout_centerVertical="true"/>
+                            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector" android:layout_centerVertical="true"/>
                         </RelativeLayout>
                     </com.google.android.material.card.MaterialCardView>
 
@@ -164,23 +158,23 @@
 
                     <!-- Sound -->
                     <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp">
-                        <ImageView android:id="@+id/iconSound" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_volume_off" app:tint="#2563EB" android:layout_centerVertical="true"/>
+                        <ImageView android:id="@+id/iconSound" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/mute" app:tint="#2563EB" android:layout_centerVertical="true"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconSound" android:layout_centerVertical="true" android:text="Notification Sound" android:textColor="#1E293B" android:textSize="15sp" />
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Vibration -->
                     <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp">
-                        <ImageView android:id="@+id/iconVibrate" android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/ic_lock_silent_mode_vibrate" app:tint="#2563EB" android:layout_centerVertical="true"/>
+                        <ImageView android:id="@+id/iconVibrate" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/notifications" app:tint="#2563EB" android:layout_centerVertical="true"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconVibrate" android:layout_centerVertical="true" android:text="Vibration" android:textColor="#1E293B" android:textSize="15sp" />
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                     <!-- Popup -->
                     <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
                         <ImageView android:id="@+id/iconPopup" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/notification" app:tint="#2563EB" android:layout_centerVertical="true"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/iconPopup" android:layout_centerVertical="true" android:text="Popup Alerts" android:textColor="#1E293B" android:textSize="15sp" />
-                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/accent_blue"/>
+                        <com.google.android.material.switchmaterial.SwitchMaterial android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="true" app:trackTint="@color/switch_track_selector"/>
                     </RelativeLayout>
 
                 </LinearLayout>
@@ -205,7 +199,7 @@
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Quiet Mode" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Mute non-emergency notifications during driving." android:textColor="#64748B" android:textSize="12sp" />
                     </LinearLayout>
-                    <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchQuiet" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" android:layout_centerVertical="true"/>
+                    <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switchQuiet" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:checked="false" android:layout_centerVertical="true" app:trackTint="@color/switch_track_selector"/>
                 </RelativeLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -225,7 +219,7 @@
         android:textStyle="bold"
         app:backgroundTint="#0D1B3E"
         app:cornerRadius="30dp"
-        app:icon="@android:drawable/checkbox_on_background"
+        app:icon="@drawable/check_circle"
         app:iconGravity="textEnd"
         app:iconTint="@color/white"
         app:layout_constraintBottom_toTopOf="@id/navCard" />
@@ -239,15 +233,16 @@
         app:strokeWidth="0dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <com.google.android.material.bottomnavigation.BottomNavigationView
-            android:id="@+id/bottomNav"
-            android:layout_width="match_parent"
-            android:layout_height="68dp"
-            android:background="@color/white"
-            app:itemIconTint="@color/nav_item_color"
-            app:itemTextColor="@color/nav_item_color"
-            app:labelVisibilityMode="labeled"
-            app:menu="@menu/driver_profile_nav_menu" />
+                    <com.google.android.material.bottomnavigation.BottomNavigationView
+                        android:id="@+id/bottomNav"
+                        android:layout_width="match_parent"
+                        android:layout_height="68dp"
+                        android:background="@color/white"
+                        android:visibility="gone"
+                        app:itemIconTint="@color/nav_item_color"
+                        app:itemTextColor="@color/nav_item_color"
+                        app:labelVisibilityMode="labeled"
+                        app:menu="@menu/driver_profile_nav_menu" />
     </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

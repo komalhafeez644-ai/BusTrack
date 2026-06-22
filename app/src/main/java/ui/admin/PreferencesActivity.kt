@@ -14,6 +14,8 @@ import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.viewmodels.ThemeViewModel
 import kotlinx.coroutines.launch
 import ui.parent.ParentDashboardActivity
+import ui.driver.DriverDashboardActivity
+import utils.ViewUtils
 
 class PreferencesActivity : AppCompatActivity() {
 
@@ -27,6 +29,7 @@ class PreferencesActivity : AppCompatActivity() {
 
         // Setup Menu Button to go back and show drawer
         findViewById<ImageView>(R.id.btnMenu).setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             handleBackToDashboard()
         }
 
@@ -53,8 +56,8 @@ class PreferencesActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
             return
-        } else if (fromUser == "admin") {
-            val intent = Intent(this, AdminDashboardActivity::class.java)
+        } else if (fromUser == "driver") {
+            val intent = Intent(this, DriverDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -64,7 +67,11 @@ class PreferencesActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val role = authRepo.getCurrentUserRole()
-            val targetClass = if (role == "admin") AdminDashboardActivity::class.java else ParentDashboardActivity::class.java
+            val targetClass = when (role) {
+                "admin" -> AdminDashboardActivity::class.java
+                "driver" -> DriverDashboardActivity::class.java
+                else -> ParentDashboardActivity::class.java
+            }
             
             val intent = Intent(this@PreferencesActivity, targetClass)
             intent.putExtra("OPEN_DRAWER", true)

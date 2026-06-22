@@ -175,7 +175,7 @@ class EditDriverActivity : AppCompatActivity() {
             return
         }
         if (cnic.length < 15) {
-            binding.etCnic.error = "Invalid CNIC"
+            binding.etCnic.error = "CNIC must be 13 digits (15 with dashes)"
             return
         }
         if (!FormUtils.isValidPhone(phone)) {

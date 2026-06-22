@@ -133,6 +133,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="10"
                             android:hint="e.g. EMP-123" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -155,6 +156,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="50"
                             android:hint="e.g. Ali Khan" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -177,6 +179,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="15"
                             android:hint="00000-0000000-0" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -199,6 +202,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:maxLength="11"
                             android:hint="e.g. 03001234567"
                             android:inputType="phone" />
                     </com.google.android.material.textfield.TextInputLayout>

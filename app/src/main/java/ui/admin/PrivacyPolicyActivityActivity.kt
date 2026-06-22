@@ -14,6 +14,8 @@ import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.viewmodels.PrivacyPolicyViewModel
 import kotlinx.coroutines.launch
 import ui.parent.ParentDashboardActivity
+import ui.driver.DriverDashboardActivity
+import utils.ViewUtils
 
 class PrivacyPolicyActivityActivity : AppCompatActivity() {
 
@@ -46,6 +48,7 @@ class PrivacyPolicyActivityActivity : AppCompatActivity() {
 
         // Menu button logic - Opens Dashboard with Drawer open
         findViewById<View>(R.id.btnMenu)?.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             handleBackToDashboard()
         }
     }
@@ -59,8 +62,8 @@ class PrivacyPolicyActivityActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
             return
-        } else if (fromUser == "admin") {
-            val intent = Intent(this, AdminDashboardActivity::class.java)
+        } else if (fromUser == "driver") {
+            val intent = Intent(this, DriverDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -70,7 +73,11 @@ class PrivacyPolicyActivityActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val role = authRepo.getCurrentUserRole()
-            val targetClass = if (role == "admin") AdminDashboardActivity::class.java else ParentDashboardActivity::class.java
+            val targetClass = when (role) {
+                "admin" -> AdminDashboardActivity::class.java
+                "driver" -> DriverDashboardActivity::class.java
+                else -> ParentDashboardActivity::class.java
+            }
             
             val intent = Intent(this@PrivacyPolicyActivityActivity, targetClass)
             intent.putExtra("OPEN_DRAWER", true)

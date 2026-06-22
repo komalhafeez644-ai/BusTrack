@@ -22,7 +22,7 @@
                 android:id="@+id/btnBack"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@android:drawable/ic_menu_revert"
+                android:src="@drawable/outline_arrow_back_24"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
@@ -115,7 +115,7 @@
 
                     <!-- Voice Navigation -->
                     <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-                        <com.google.android.material.card.MaterialCardView android:id="@+id/icon3" android:layout_width="48dp" android:layout_height="48dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="12dp" app:cardElevation="0dp"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_volume_off" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
+                        <com.google.android.material.card.MaterialCardView android:id="@+id/icon3" android:layout_width="48dp" android:layout_height="48dp" app:cardBackgroundColor="#EFF6FF" app:cardCornerRadius="12dp" app:cardElevation="0dp"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/mute" app:tint="#2563EB" /></com.google.android.material.card.MaterialCardView>
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/icon3" android:layout_toStartOf="@id/switch3" android:orientation="vertical" android:layout_centerVertical="true">
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Voice Navigation" android:textColor="#1E293B" android:textSize="16sp" android:textStyle="bold" />
                             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Enable spoken instructions" android:textColor="#64748B" android:textSize="13sp" />

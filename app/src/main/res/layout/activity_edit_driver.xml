@@ -150,6 +150,7 @@
                         android:hint="Driver ID"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:expandedHintEnabled="false"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_marginBottom="16dp"
@@ -164,6 +165,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="textCapCharacters"
+                            android:maxLength="10"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -174,6 +176,7 @@
                         android:hint="Full Name"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:expandedHintEnabled="false"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_marginBottom="16dp"
@@ -186,6 +189,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="textPersonName"
+                            android:maxLength="50"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -196,6 +200,7 @@
                         android:hint="CNIC Number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:expandedHintEnabled="false"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_marginBottom="16dp"
@@ -210,6 +215,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="phone"
+                            android:maxLength="15"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -230,6 +236,7 @@
                         android:hint="Assigned Bus"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:expandedHintEnabled="false"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         android:layout_marginBottom="16dp"
                         app:boxCornerRadiusTopStart="12dp"
@@ -304,6 +311,7 @@
                         android:hint="Phone Number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:expandedHintEnabled="false"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_marginBottom="16dp"
@@ -318,6 +326,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:textColor="#1C1C1E"
+                            android:maxLength="11"
                             android:inputType="phone"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
