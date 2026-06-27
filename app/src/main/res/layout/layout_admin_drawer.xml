@@ -99,6 +99,37 @@
                     app:trackTint="@color/switch_track_selector" />
             </LinearLayout>
 
+            <!-- Attendance Tab (Evening/Daily) -->
+            <LinearLayout
+                android:id="@+id/drawerEveningAttendance"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:padding="14dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/attendance"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:text="Daily Attendance"
+                    android:textColor="@color/white"
+                    android:textSize="15sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/outline_arrow_forward_ios_24"
+                    app:tint="#4DFFFFFF" />
+            </LinearLayout>
+
             <!-- Settings -->
             <LinearLayout
                 android:id="@+id/drawerSettings"

@@ -8,6 +8,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import androidx.core.content.ContextCompat
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityRouteMapBinding
 import com.example.bustrack_app.models.RouteModel
@@ -166,15 +170,23 @@ class RouteMapActivity : AppCompatActivity() {
 
         // 2. Draw Stop Markers
         val stopPoints = mutableListOf<Point>()
+        val bitmap = bitmapFromDrawableRes(R.drawable.ic_marker_dest)
+        
         route.stopsList.forEachIndexed { index, stop ->
             val point = Point.fromLngLat(stop.longitude, stop.latitude)
             stopPoints.add(point)
 
             val pointAnnotationOptions = PointAnnotationOptions()
                 .withPoint(point)
-                .withTextField("📍 ${index + 1}. ${stop.stopName}")
-                .withTextSize(14.0)
+                .withTextField("${index + 1}. ${stop.stopName}")
+                .withTextSize(12.0)
                 .withTextColor("#DC2626")
+                .withTextOffset(listOf(0.0, 2.0))
+            
+            bitmap?.let { b ->
+                pointAnnotationOptions.withIconImage(b)
+                pointAnnotationOptions.withIconSize(1.0)
+            }
             
             pointAnnotationManager?.create(pointAnnotationOptions)
         }
@@ -195,6 +207,21 @@ class RouteMapActivity : AppCompatActivity() {
             }
             true
         }
+    }
+
+    private fun bitmapFromDrawableRes(resourceId: Int): Bitmap? {
+        val drawable = ContextCompat.getDrawable(this, resourceId)
+        if (drawable is BitmapDrawable) return drawable.bitmap
+        if (drawable != null) {
+            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 64
+            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 64
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            return bitmap
+        }
+        return null
     }
 
     private fun fetchAndDrawRoadRoute(points: List<Point>) {

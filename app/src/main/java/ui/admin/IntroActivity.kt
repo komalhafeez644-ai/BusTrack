@@ -8,9 +8,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
 import com.example.bustrack_app.adapter.IntroSlideAdapter
 import com.example.bustrack_app.databinding.ActivityIntroBinding
-import ui_authentication.LoginActivity
+import androidx.lifecycle.lifecycleScope
+import com.example.bustrack_app.data.AuthRepository
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
+import ui_authentication.LoginActivity
 
 class IntroActivity : AppCompatActivity() {
 
@@ -52,15 +57,25 @@ class IntroActivity : AppCompatActivity() {
     }
 
     private fun handleNavigation() {
-        val sharedPreferences = getSharedPreferences("BusTrackPrefs", MODE_PRIVATE)
-        val isLoggedIn = sharedPreferences.getBoolean("isLoggedIn", false)
+        val auth = Firebase.auth
+        val currentUser = auth.currentUser
 
-        val intent = if (isLoggedIn) {
-            Intent(this, AdminDashboardActivity::class.java)
+        if (currentUser != null) {
+            lifecycleScope.launch {
+                val role = AuthRepository().getCurrentUserRole()
+                val targetClass = when (role) {
+                    "admin" -> AdminDashboardActivity::class.java
+                    "principal" -> ui.principal.PrincipalDashboardActivity::class.java
+                    "driver" -> ui.driver.DriverDashboardActivity::class.java
+                    else -> ui.parent.ParentDashboardActivity::class.java
+                }
+                startActivity(Intent(this@IntroActivity, targetClass))
+                finish()
+            }
         } else {
-            Intent(this, LoginActivity::class.java)
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
+            finish()
         }
-        startActivity(intent)
-        finish()
     }
 }

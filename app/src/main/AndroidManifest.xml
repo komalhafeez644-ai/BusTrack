@@ -197,6 +197,9 @@
         <activity android:name="ui.driver.NotificationSettingsActivity" android:exported="false" />
         <activity android:name="ui.driver.NavigationPreferencesActivity" android:exported="false" />
         <activity android:name="ui.driver.EditDriverProfileActivity" android:exported="false" />
+        <activity android:name="ui.driver.EveningAttendanceActivity" android:exported="false" />
+        <activity android:name="ui.driver.DriverFaqActivity" android:exported="false" />
+        <activity android:name="ui.driver.DriverAlertDetailActivity" android:exported="false" />
     </application>
 
 </manifest>

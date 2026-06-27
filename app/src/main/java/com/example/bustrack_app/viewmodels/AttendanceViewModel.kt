@@ -12,11 +12,15 @@ class AttendanceViewModel : ViewModel() {
     private val _records = MutableLiveData<List<AttendanceRecordModel>>()
     val records: LiveData<List<AttendanceRecordModel>> = _records
 
+    private val _selectedDateText = MutableLiveData<String>()
+    val selectedDateText: LiveData<String> = _selectedDateText
+
     // Selected filters
     private var selectedRoute = "All Route"
-    private var selectedDate = ""
+    private var selectedDate = "24/05/2026"
 
     init {
+        _selectedDateText.value = selectedDate
         loadData()
     }
 
@@ -26,14 +30,13 @@ class AttendanceViewModel : ViewModel() {
 
         allRecords.addAll(
             listOf(
-
-                AttendanceRecordModel("Arjun Jayaram", "#FC-9021", "Oak Ridge Estates", "07:15 AM", "LATE", "route 1", "24/05/2026"),
-                AttendanceRecordModel("Sarah Mitchell", "#FC-9104", "Silver Springs", "07:30 AM", "PRESENT", "route 2", "24/05/2026"),
-                AttendanceRecordModel("Leo Knight", "#FC-8850", "Maple Street", "07:45 AM", "ABSENT", "route 3", "23/05/2026"),
-                AttendanceRecordModel("Emma Watson", "#FC-7721", "West Side", "07:10 AM", "PRESENT", "route 3", "24/05/2026"),
-                AttendanceRecordModel("Ali Khan", "#FC-9901", "Green Valley", "07:20 AM", "PRESENT", "route 1", "23/05/2026"),
-                AttendanceRecordModel("Hina Ali", "#FC-9902", "City Center", "07:35 AM", "LATE", "route 2", "24/05/2026"),
-                AttendanceRecordModel("Usman Tariq", "#FC-9903", "Lake View", "07:50 AM", "ABSENT", "route 3", "24/05/2026")
+                AttendanceRecordModel("FC-9901", "Ali Khan", "Route 1", "Green Valley", "07:20 AM", "08:05 AM", "02:20 PM", "03:05 PM", "24/05/2026"),
+                AttendanceRecordModel("FC-9021", "Arjun Jayaram", "Route 1", "Oak Ridge Estates", "07:15 AM", "08:00 AM", "02:35 PM", "03:20 PM", "24/05/2026"),
+                AttendanceRecordModel("FC-9104", "Sarah Mitchell", "Route 2", "Silver Springs", "07:30 AM", "08:15 AM", "02:15 PM", "03:00 PM", "24/05/2026"),
+                AttendanceRecordModel("FC-8850", "Leo Knight", "Route 3", "Maple Street", "Absent", "Absent", "Absent", "Absent", "23/05/2026"),
+                AttendanceRecordModel("FC-7721", "Emma Watson", "Route 3", "West Side", "07:10 AM", "07:55 AM", "02:40 PM", "03:25 PM", "24/05/2026"),
+                AttendanceRecordModel("FC-9902", "Hina Ali", "Route 2", "City Center", "07:35 AM", "08:20 AM", "02:45 PM", "03:30 PM", "24/05/2026"),
+                AttendanceRecordModel("FC-9903", "Usman Tariq", "Route 3", "Lake View", "Absent", "Absent", "Absent", "Absent", "24/05/2026")
             )
         )
 
@@ -44,6 +47,7 @@ class AttendanceViewModel : ViewModel() {
     fun setFilters(route: String, date: String) {
         selectedRoute = route
         selectedDate = date
+        _selectedDateText.value = if (date.isEmpty() || date == "Select Date") "All Dates" else date
         applyFilter()
     }
 
@@ -58,7 +62,7 @@ class AttendanceViewModel : ViewModel() {
             }
         }
 
-        if (selectedDate.isNotEmpty() && selectedDate != "Select Date") {
+        if (selectedDate.isNotEmpty() && selectedDate != "Select Date" && selectedDate != "All Dates") {
             filtered = filtered.filter {
                 it.date.trim().equals(selectedDate.trim(), ignoreCase = true)
             }

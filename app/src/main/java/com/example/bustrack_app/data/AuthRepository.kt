@@ -26,12 +26,19 @@ class AuthRepository {
                 val document = db.collection("users").document(uid).get().await()
                 
                 // Force role for specific emails (to prevent database mismatches)
-                val role = when (cleanEmail) {
+                var role = when (cleanEmail) {
                     "admin@gmail.com" -> "admin"
                     "principal@gmail.com" -> "principal"
-                    else -> {
-                        val r = document.getString("role") ?: "parent"
-                        if (r == "user") "parent" else r
+                    else -> document.getString("role")
+                }
+
+                // Fallback: Check 'drivers' collection if role is still not clear or not 'driver'
+                if (role != "admin" && role != "principal" && role != "driver") {
+                    val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
+                    if (!driverQuery.isEmpty) {
+                        role = "driver"
+                    } else if (role == null || role == "user") {
+                        role = "parent"
                     }
                 }
 

@@ -10,7 +10,7 @@ import java.util.regex.Pattern
 object FormUtils {
 
     /**
-     * Forces the input to be uppercase in real-time.
+      Forces the input to be uppercase in real-time.
      */
     fun setupUppercaseInput(editText: EditText) {
         editText.filters = arrayOf(InputFilter.AllCaps())

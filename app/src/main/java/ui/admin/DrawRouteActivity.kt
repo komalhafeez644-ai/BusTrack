@@ -156,15 +156,21 @@ class DrawRouteActivity : AppCompatActivity() {
         val cleanQuery = query.trim()
         Log.d("SearchDebug", "Searching for: $cleanQuery")
 
-        // Use current map center for proximity to get results nearest to what user is looking at
+        // Use current map center for proximity
         val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
 
         val searchOptions = SearchOptions(
             proximity = mapCenter,
             countries = listOf(IsoCountryCode.PAKISTAN),
             limit = 10,
-            // Only search for addresses, POIs and neighborhoods to keep results relevant
-            types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.NEIGHBORHOOD, QueryType.PLACE)
+            types = listOf(
+                QueryType.ADDRESS, 
+                QueryType.POI, 
+                QueryType.NEIGHBORHOOD, 
+                QueryType.PLACE,
+                QueryType.LOCALITY,
+                QueryType.DISTRICT
+            )
         )
 
         searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
@@ -181,7 +187,10 @@ class DrawRouteActivity : AppCompatActivity() {
 
             override fun onError(e: Exception) {
                 Log.e("SearchDebug", "Search error: ${e.message}")
-                runOnUiThread { binding.rvSearchResults.visibility = View.GONE }
+                runOnUiThread { 
+                    binding.rvSearchResults.visibility = View.GONE
+                    Toast.makeText(this@DrawRouteActivity, "Search error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         })
     }
@@ -193,7 +202,12 @@ class DrawRouteActivity : AppCompatActivity() {
                 override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
                     val point = result.coordinate
                     runOnUiThread {
-                        mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).zoom(16.0).build())
+                        mapView?.mapboxMap?.setCamera(
+                            CameraOptions.Builder()
+                                .center(point)
+                                .zoom(16.0)
+                                .build()
+                        )
                         searchMarkerManager?.deleteAll()
                         
                         val markerIcon = getBitmapFromVectorDrawable(R.drawable.outline_location)
@@ -203,13 +217,16 @@ class DrawRouteActivity : AppCompatActivity() {
                                 .withIconImage(it)
                                 .withIconColor("#EF4444")
                                 .withTextField(result.name)
-                                .withTextOffset(listOf(0.0, 2.0))
+                                .withTextSize(12.0)
+                                .withTextOffset(listOf(0.0, 2.5))
                                 .withIconSize(1.5)
                             searchMarkerManager?.create(pointAnnotationOptions)
                         }
+                        
                         binding.rvSearchResults.visibility = View.GONE
                         binding.etSearchLocation.setText(result.name)
-                        Toast.makeText(this@DrawRouteActivity, "Tap map at red marker to add to route", Toast.LENGTH_SHORT).show()
+                        binding.etSearchLocation.clearFocus()
+                        Toast.makeText(this@DrawRouteActivity, "Selected: ${result.name}. Tap on map to add to route.", Toast.LENGTH_LONG).show()
                     }
                 }
 
@@ -217,6 +234,7 @@ class DrawRouteActivity : AppCompatActivity() {
                 override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {}
                 override fun onError(e: Exception) {
                     Log.e("SearchDebug", "Selection error: ${e.message}")
+                    runOnUiThread { Toast.makeText(this@DrawRouteActivity, "Error selecting location", Toast.LENGTH_SHORT).show() }
                 }
             })
         }

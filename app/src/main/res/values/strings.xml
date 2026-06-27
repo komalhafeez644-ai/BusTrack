@@ -118,6 +118,33 @@
     <string name="faq_support_desc">Dedicated 24/7 technical assistance for system administrators and fleet dispatchers.</string>
     <string name="btn_contact_support">Contact Tech Support</string>
     <string name="btn_api_docs">Admin API Docs</string>
+
+    <!-- Driver FAQ Strings -->
+    <string name="driver_faq_header">Driver Help Center</string>
+    <string name="driver_faq_subtitle">Everything you need to know about driving and managing your route.</string>
+
+    <string name="driver_faq_q1">How do I start navigation for my trip?</string>
+    <string name="driver_faq_a1">Ensure you are \'On Duty\', reach the starting point of your route, and tap the green \'Start Navigation\' button on your dashboard.</string>
+
+    <string name="driver_faq_q2">What should I do in case of a bus breakdown?</string>
+    <string name="driver_faq_a2">Tap the \'Alerts\' button and send a \'Breakdown\' notification immediately. The system will alert admins and parents on your route.</string>
+
+    <string name="driver_faq_q3">How do I mark student attendance?</string>
+    <string name="driver_faq_a3">Navigate to the \'Students\' tab or use the \'Daily Attendance\' option from the side menu to mark students as Present or Absent for each stop.</string>
+
+    <string name="driver_faq_q4">Why can\'t I start navigation?</string>
+    <string name="driver_faq_a4">Check if GPS is enabled, ensure you are \'On Duty\', and verify that you are physically within the starting zone of your assigned route.</string>
+
+    <string name="driver_faq_q5">How to update my profile picture?</string>
+    <string name="driver_faq_a5">Go to the side menu, tap on your profile name/photo, and select \'Edit Profile\' to upload a new photo.</string>
+
+    <string name="driver_faq_q6">Can I change my assigned route?</string>
+    <string name="driver_faq_a6">Routes are assigned by the Administrator. Contact the transport office if you need a change in your route assignment.</string>
+
+    <string name="driver_faq_support_title">Driver Support Line</string>
+    <string name="driver_faq_support_desc">Direct assistance for drivers regarding route issues, vehicle maintenance, or app problems.</string>
+    <string name="btn_call_dispatch">Call Dispatch Office</string>
+    <string name="btn_report_issue">Report App Issue</string>
     <string name="terms_conditions_title">Terms &amp; Conditions</string>
     <string name="term_1_num">1.</string>
     <string name="term_1_text">By using this application, you agree to comply with all transport rules and regulations set by the administration.</string>

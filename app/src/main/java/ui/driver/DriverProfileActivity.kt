@@ -55,6 +55,10 @@ class DriverProfileActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         binding.btnBack.setOnClickListener { 
             ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, DriverDashboardActivity::class.java)
+            intent.putExtra("OPEN_DRAWER", true)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
             finish() 
         }
 

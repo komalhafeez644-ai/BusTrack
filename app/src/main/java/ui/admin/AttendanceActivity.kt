@@ -1,7 +1,6 @@
 package ui.admin
 
 import android.app.DatePickerDialog
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -28,6 +27,10 @@ class AttendanceActivity : AppCompatActivity() {
     private lateinit var txtReportDate: TextView
     private lateinit var spinnerFleet: Spinner
     
+    private lateinit var tvTotalCount: TextView
+    private lateinit var tvPresentCount: TextView
+    private lateinit var tvAbsentCount: TextView
+    
     private var selectedDate: String = "Select Date"
     private lateinit var adapter: AttendanceAdapter
 
@@ -52,6 +55,10 @@ class AttendanceActivity : AppCompatActivity() {
         etSearch = findViewById(R.id.etSearch)
         txtReportDate = findViewById(R.id.txtReportDate)
         spinnerFleet = findViewById(R.id.spinnerFleet)
+        
+        tvTotalCount = findViewById(R.id.tvTotalCount)
+        tvPresentCount = findViewById(R.id.tvPresentCount)
+        tvAbsentCount = findViewById(R.id.tvAbsentCount)
 
         rvAttendance.layoutManager = LinearLayoutManager(this)
         adapter = AttendanceAdapter(emptyList())
@@ -63,7 +70,23 @@ class AttendanceActivity : AppCompatActivity() {
 
         viewModel.records.observe(this) { records ->
             adapter.updateList(records)
+            updateSummary(records)
         }
+
+        viewModel.selectedDateText.observe(this) { dateText ->
+            txtReportDate.text = dateText
+            selectedDate = dateText
+        }
+    }
+
+    private fun updateSummary(records: List<AttendanceRecordModel>) {
+        val total = records.size
+        val absent = records.count { it.morningPickup.equals("Absent", ignoreCase = true) }
+        val present = total - absent
+
+        tvTotalCount.text = String.format("%02d", total)
+        tvPresentCount.text = String.format("%02d", present)
+        tvAbsentCount.text = String.format("%02d", absent)
     }
 
     private fun setupFilters() {
@@ -112,7 +135,17 @@ class AttendanceActivity : AppCompatActivity() {
         etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                adapter.filter(s.toString())
+                val query = s.toString()
+                val records = viewModel.records.value ?: emptyList()
+                val filtered = if (query.isEmpty()) {
+                    records
+                } else {
+                    records.filter {
+                        it.studentName.contains(query, true) || it.studentId.contains(query, true)
+                    }
+                }
+                adapter.updateList(filtered, isFiltering = true)
+                updateSummary(filtered)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -130,12 +163,15 @@ class AttendanceActivity : AppCompatActivity() {
         private var filteredList = fullList.toList()
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val tvStudentId: TextView = view.findViewById(R.id.tvStudentId)
             val tvName: TextView = view.findViewById(R.id.tvStudentName)
-            val tvRollNo: TextView = view.findViewById(R.id.tvRollNo)
-            val tvBusStop: TextView = view.findViewById(R.id.tvBusStop)
             val tvRoute: TextView = view.findViewById(R.id.tvRoute)
-            val tvTime: TextView = view.findViewById(R.id.tvTime)
-            val tvStatus: TextView = view.findViewById(R.id.tvStatusBadge)
+            val tvStop: TextView = view.findViewById(R.id.tvStop)
+            val tvMorningPickup: TextView = view.findViewById(R.id.tvMorningPickup)
+            val tvMorningDrop: TextView = view.findViewById(R.id.tvMorningDrop)
+            val tvEveningPickup: TextView = view.findViewById(R.id.tvEveningPickup)
+            val tvEveningDrop: TextView = view.findViewById(R.id.tvEveningDrop)
+            val tvDate: TextView = view.findViewById(R.id.tvDate)
             val txtAvatar: TextView = view.findViewById(R.id.txtAvatar)
         }
 
@@ -146,49 +182,42 @@ class AttendanceActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = filteredList[position]
+            holder.tvStudentId.text = item.studentId
             holder.tvName.text = item.studentName
-            holder.tvRollNo.text = item.rollNo
-            holder.tvBusStop.text = item.busStop
             holder.tvRoute.text = item.route
-            holder.tvTime.text = item.arrivalTime
-            holder.tvStatus.text = item.status.uppercase()
+            holder.tvStop.text = item.stop
+            
+            holder.tvMorningPickup.text = item.morningPickup
+            holder.tvMorningDrop.text = item.morningDrop
+            holder.tvEveningPickup.text = item.eveningPickup
+            holder.tvEveningDrop.text = item.eveningDrop
+            holder.tvDate.text = item.date
 
             // Avatar initial
             holder.txtAvatar.text = if (item.studentName.isNotEmpty()) item.studentName[0].toString() else ""
 
-            // Dynamic Styling for Status
-            when (item.status.uppercase()) {
-                "PRESENT" -> {
-                    holder.tvStatus.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#DCFCE7"))
-                    holder.tvStatus.setTextColor(Color.parseColor("#166534"))
-                }
-                "ABSENT" -> {
-                    holder.tvStatus.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FEE2E2"))
-                    holder.tvStatus.setTextColor(Color.parseColor("#991B1B"))
-                }
-                "LATE" -> {
-                    holder.tvStatus.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FEF3C7"))
-                    holder.tvStatus.setTextColor(Color.parseColor("#92400E"))
-                }
+            // Highlight "Absent" in Red
+            setAbsentStyle(holder.tvMorningPickup)
+            setAbsentStyle(holder.tvMorningDrop)
+            setAbsentStyle(holder.tvEveningPickup)
+            setAbsentStyle(holder.tvEveningDrop)
+        }
+
+        private fun setAbsentStyle(textView: TextView) {
+            if (textView.text.toString().contains("Absent", ignoreCase = true)) {
+                textView.setTextColor(Color.RED)
+            } else {
+                textView.setTextColor(Color.parseColor("#49454F"))
             }
         }
 
         override fun getItemCount() = filteredList.size
 
-        fun updateList(newList: List<AttendanceRecordModel>) {
-            fullList = newList
-            filteredList = newList
-            notifyDataSetChanged()
-        }
-
-        fun filter(query: String) {
-            filteredList = if (query.isEmpty()) {
-                fullList
-            } else {
-                fullList.filter { 
-                    it.studentName.contains(query, true) || it.rollNo.contains(query, true) 
-                }
+        fun updateList(newList: List<AttendanceRecordModel>, isFiltering: Boolean = false) {
+            if (!isFiltering) {
+                fullList = newList
             }
+            filteredList = newList
             notifyDataSetChanged()
         }
     }

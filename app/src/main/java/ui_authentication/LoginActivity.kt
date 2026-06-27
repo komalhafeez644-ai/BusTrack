@@ -101,8 +101,15 @@ class LoginActivity : AppCompatActivity() {
                             startActivity(intent)
                             finish()
                         }
-                        else -> {
+                        "parent" -> {
                             Toast.makeText(this, "Parent Login Successful", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this, ui.parent.ParentDashboardActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        }
+                        else -> {
+                            // Fallback for generic 'user' or unexpected roles
+                            Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
                             val intent = Intent(this, ui.parent.ParentDashboardActivity::class.java)
                             startActivity(intent)
                             finish()

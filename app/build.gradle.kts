@@ -6,9 +6,16 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("androidx.core:core-ktx:1.13.1")
+        force("androidx.appcompat:appcompat:1.7.0")
+    }
+}
+
 android {
     namespace = "com.example.bustrack_app"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.bustrack_app"
@@ -64,9 +71,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.play.services.maps)
-    implementation("com.mapbox.maps:android:11.4.0")
-    implementation("com.mapbox.mapboxsdk:mapbox-sdk-services:6.15.0")
-    implementation("com.mapbox.mapboxsdk:mapbox-sdk-turf:6.15.0")
+    implementation(libs.mapbox.maps)
+    implementation(libs.mapbox.navigation)
+    implementation(libs.mapbox.voice)
     implementation(libs.mapbox.search)
     implementation("com.mapbox.search:mapbox-search-android-ui:2.2.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

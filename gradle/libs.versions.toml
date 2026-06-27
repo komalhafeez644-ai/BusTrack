@@ -14,6 +14,9 @@ googleMaps = "19.0.0"
 firebaseBom = "32.8.0"
 googleServices = "4.4.1"
 mapboxSearch = "2.2.0"
+mapboxMaps = "11.4.0"
+mapboxNavigation = "3.4.0"
+mapboxVoice = "3.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +39,9 @@ firebase-storage = { group = "com.google.firebase", name = "firebase-storage-ktx
 
 glide = { group = "com.github.bumptech.glide", name = "glide", version = "4.16.0" }
 mapbox-search = { group = "com.mapbox.search", name = "mapbox-search-android", version.ref = "mapboxSearch" }
+mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapboxMaps" }
+mapbox-navigation = { group = "com.mapbox.navigationcore", name = "android", version.ref = "mapboxNavigation" }
+mapbox-voice = { group = "com.mapbox.navigationcore", name = "voice", version.ref = "mapboxVoice" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
