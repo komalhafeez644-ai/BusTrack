@@ -13,84 +13,55 @@ class AuthRepository {
 
     /**
      * Tries to login and returns Role (String) or Error Message (String).
+     * Strictly uses signInWithEmailAndPassword for all users.
      */
     suspend fun login(email: String, password: String): String? {
         val cleanEmail = email.trim().lowercase()
 
         return try {
-            // 1. Try to Login
+            // 1. Try to Login using ONLY signIn
             val authResult = auth.signInWithEmailAndPassword(cleanEmail, password).await()
             val uid = authResult.user?.uid
 
             if (uid != null) {
-                val document = db.collection("users").document(uid).get().await()
+                var role: String? = null
                 
-                // Force role for specific emails (to prevent database mismatches)
-                var role = when (cleanEmail) {
-                    "admin@gmail.com" -> "admin"
-                    "principal@gmail.com" -> "principal"
-                    else -> document.getString("role")
+                // Try to fetch role from Firestore, but don't crash if permissions are missing
+                try {
+                    val document = db.collection("users").document(uid).get().await()
+                    role = document.getString("role")
+                } catch (e: Exception) {
+                    Log.w("AuthRepo", "Firestore read failed: ${e.message}")
                 }
 
-                // Fallback: Check 'drivers' collection if role is still not clear or not 'driver'
-                if (role != "admin" && role != "principal" && role != "driver") {
-                    val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
-                    if (!driverQuery.isEmpty) {
-                        role = "driver"
-                    } else if (role == null || role == "user") {
-                        role = "parent"
+                // Hardcoded fallback if Firestore failed or role is missing
+                if (role == null) {
+                    role = when (cleanEmail) {
+                        "admin@gmail.com" -> "admin"
+                        "principal@gmail.com" -> "principal"
+                        else -> {
+                            // Try to check driver collection if possible
+                            try {
+                                val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
+                                if (!driverQuery.isEmpty) "driver" else "parent"
+                            } catch (e: Exception) { "parent" }
+                        }
+                    }
+
+                    // Attempt to sync missing document safely
+                    try {
+                        val userData = mapOf("uid" to uid, "email" to cleanEmail, "role" to role)
+                        db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
+                    } catch (e: Exception) {
+                        Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
                     }
                 }
 
-                // If user exists in Auth but not in Firestore OR if role is mismatched
-                if (!document.exists() || document.getString("role") != role) {
-                    val userData = mutableMapOf(
-                        "uid" to uid,
-                        "email" to cleanEmail,
-                        "role" to role
-                    )
-                    // If it's a first time auto-create for admin/principal
-                    if (!document.exists()) {
-                        userData["fullName"] = if (role == "admin") "System Admin" else if (role == "principal") "Principal Office" else "User"
-                        userData["employeeId"] = if (role == "admin") "ADMIN-2024-001" else "PR-CF-2024"
-                        userData["department"] = if (role == "admin") "Transport" else "Administration"
-                    }
-                    db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge()).await()
-                }
-                return role
+                return if (role == "user") "parent" else role
             }
             "Authentication failed"
         } catch (e: Exception) {
             Log.e("AuthRepo", "Login Error: ${e.message}")
-            
-            // 2. If user doesn't exist in Auth (First time), create it
-            // This replaces the old 'pre-created' logic with a 'auto-create on first login'
-            if ((cleanEmail == "admin@gmail.com" && password == "admin123") || 
-                (cleanEmail == "principal@gmail.com" && password == "principal123")) {
-                
-                return try {
-                    val result = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
-                    val newUid = result.user?.uid
-                    if (newUid != null) {
-                        val role = if (cleanEmail.contains("admin")) "admin" else "principal"
-                        val userData = mapOf(
-                            "uid" to newUid,
-                            "fullName" to if (role == "admin") "System Admin" else "Principal Office",
-                            "email" to cleanEmail,
-                            "role" to role,
-                            "employeeId" to if (role == "admin") "ADMIN-2024-001" else "PR-CF-2024",
-                            "department" to if (role == "admin") "Transport" else "Administration",
-                            "phone" to if (role == "admin") "+92 300 1234567" else "+92 311 9876543"
-                        )
-                        db.collection("users").document(newUid).set(userData).await()
-                        role
-                    } else "Registration failed"
-                } catch (e2: Exception) {
-                    // If creation fails (e.g. user already exists but password was wrong)
-                    e2.localizedMessage ?: "Login failed"
-                }
-            }
-            
             e.localizedMessage ?: "Invalid email or password"
         }
     }

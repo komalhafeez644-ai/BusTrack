@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingBottom="12dp">
+
+    <!-- Timeline Line -->
+    <View
+        android:id="@+id/timelineLine"
+        android:layout_width="2dp"
+        android:layout_height="0dp"
+        android:background="#CBD5E1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="@id/dotContainer"
+        app:layout_constraintStart_toStartOf="@id/dotContainer"
+        app:layout_constraintTop_toBottomOf="@id/dotContainer" />
+
+    <!-- Dot / Bus Icon Container -->
+    <FrameLayout
+        android:id="@+id/dotContainer"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Outer Ring for active stop -->
+        <View
+            android:id="@+id/outerRing"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_circle_ligh"
+            android:backgroundTint="#EFF6FF"
+            android:visibility="gone" />
+
+        <!-- Timeline Dot -->
+        <View
+            android:id="@+id/dotIndicator"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="center"
+            android:background="@drawable/green_dot"
+            android:backgroundTint="#94A3B8" />
+
+        <!-- Small Bus Icon for current stop -->
+        <ImageView
+            android:id="@+id/ivStopBus"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:src="@drawable/directions_bus"
+            android:visibility="gone"
+            app:tint="#2563EB" />
+    </FrameLayout>
+
+    <!-- Stop Number Circle -->
+    <TextView
+        android:id="@+id/tvStopIndex"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/bg_circle_ligh"
+        android:backgroundTint="#F1F5F9"
+        android:gravity="center"
+        android:text="1"
+        android:textColor="#64748B"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="@id/dotContainer"
+        app:layout_constraintStart_toEndOf="@id/dotContainer"
+        app:layout_constraintTop_toTopOf="@id/dotContainer" />
+
+    <!-- Stop Name & Time -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="@id/dotContainer"
+        app:layout_constraintEnd_toStartOf="@id/statusBadge"
+        app:layout_constraintStart_toEndOf="@id/tvStopIndex"
+        app:layout_constraintTop_toTopOf="@id/dotContainer">
+
+        <TextView
+            android:id="@+id/tvStopName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sunrise Apartments"
+            android:textColor="#334155"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvStopTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="09:35 AM"
+            android:textColor="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Status Badge -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/statusBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="#F0FDF4"
+        app:layout_constraintBottom_toBottomOf="@id/dotContainer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/dotContainer">
+        <TextView
+            android:id="@+id/tvStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:text="Completed"
+            android:textColor="#16A34A"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

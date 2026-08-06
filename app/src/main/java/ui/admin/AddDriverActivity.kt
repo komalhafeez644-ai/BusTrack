@@ -134,7 +134,10 @@ class AddDriverActivity : AppCompatActivity() {
         val email = binding.etEmail.text.toString().trim().lowercase()
         binding.btnAddDriver.isEnabled = false
         
-        FirebaseFirestore.getInstance().collection("users")
+        val db = FirebaseFirestore.getInstance()
+        
+        // Strictly check if email already exists in users collection
+        db.collection("users")
             .whereEqualTo("email", email)
             .get()
             .addOnSuccessListener { query ->
@@ -171,13 +174,12 @@ class AddDriverActivity : AppCompatActivity() {
     }
 
     private fun handleAccountCreation(imageUrl: String) {
-        val email = binding.etEmail.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim().lowercase()
         val password = binding.etPassword.text.toString()
         
         lifecycleScope.launch {
             try {
                 // To create a second account WITHOUT logging out the Admin:
-                // Initialize a temporary secondary Firebase app instance
                 val options = FirebaseApp.getInstance().options
                 val secondaryApp = try {
                     FirebaseApp.initializeApp(this@AddDriverActivity, options, "Secondary")
@@ -187,6 +189,7 @@ class AddDriverActivity : AppCompatActivity() {
                 
                 val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
                 
+                // Admin creates driver using createUserWithEmailAndPassword
                 val result = secondaryAuth.createUserWithEmailAndPassword(email, password).await()
                 val uid = result.user?.uid
                 
@@ -196,14 +199,17 @@ class AddDriverActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 binding.btnAddDriver.isEnabled = true
-                Toast.makeText(this@AddDriverActivity, "Auth Error: ${e.message}", Toast.LENGTH_LONG).show()
+                val errorMsg = if (e.message?.contains("already in use") == true) 
+                    "This email is already in use in Firebase Auth. Delete it from console first." 
+                    else e.message
+                Toast.makeText(this@AddDriverActivity, "Auth Error: $errorMsg", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun saveDriverToCollections(uid: String, imageUrl: String) {
         val name = binding.etFullName.text.toString().trim()
-        val email = binding.etEmail.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim().lowercase()
         val empId = binding.etEmployeeId.text.toString().trim()
         val phone = binding.etPhone.text.toString().trim()
         val cnic = binding.etCnic.text.toString().trim()

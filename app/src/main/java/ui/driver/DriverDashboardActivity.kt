@@ -36,6 +36,7 @@ import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.viewport
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
+import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateBearing
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
@@ -51,6 +52,9 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import utils.ViewUtils
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.gestures
 import ui.admin.*
 import ui.driver.NotificationSettingsActivity as DriverNotificationSettings
 import ui_authentication.LoginActivity
@@ -76,6 +80,8 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import androidx.core.content.ContextCompat
 import com.example.bustrack_app.models.RouteModel
+import com.example.bustrack_app.models.AlertOption
+import com.example.bustrack_app.adapter.DriverAlertsAdapter
 import com.example.bustrack_app.data.RouteRepository
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.core.MapboxNavigation
@@ -106,6 +112,15 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var isDutyEnabled = false
     private var isNearStart = false
     private var currentRouteGeometry: String? = null
+    private var isVoiceEnabled = true
+    private lateinit var stopsAdapter: com.example.bustrack_app.adapter.NavigationStopsAdapter
+    private lateinit var bottomSheetBehavior: com.google.android.material.bottomsheet.BottomSheetBehavior<View>
+
+    private var lastLegIndex = -1
+    private val stopArrivalTimes = mutableMapOf<Int, String>()
+    private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+    private var isNorthUp = false
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var currentLocation: Location? = null
@@ -153,9 +168,14 @@ class DriverDashboardActivity : AppCompatActivity() {
             pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
             setupLocationPuck()
             checkLocationSettings()
+            setupMapGestures()
+            setupStopsRecyclerView()
         }
 
         findViewById<View>(R.id.drawerDutyContainer)?.visibility = View.VISIBLE
+
+        binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
+        binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
 
         observeViewModel()
         observeDriverRepo()
@@ -212,11 +232,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
-        voiceInstructionsPlayer?.play(
-            SpeechAnnouncement.Builder(voiceInstructions.announcement() ?: "")
-                .ssmlAnnouncement(voiceInstructions.ssmlAnnouncement())
-                .build()
-        ) { }
+        if (isVoiceEnabled) {
+            voiceInstructionsPlayer?.play(
+                SpeechAnnouncement.Builder(voiceInstructions.announcement() ?: "")
+                    .ssmlAnnouncement(voiceInstructions.ssmlAnnouncement())
+                    .build()
+            ) { }
+        }
     }
 
     private val routesObserver = object : RoutesObserver {
@@ -260,20 +282,54 @@ class DriverDashboardActivity : AppCompatActivity() {
                 binding.tvEstDistance.text = String.format(Locale.getDefault(), "%.1f km", distanceRemaining)
                 binding.tvEstDuration.text = String.format(Locale.getDefault(), "%d min", durationRemaining.toInt())
 
-                // Update Bottom Summary Card (Visible during navigation)
-                binding.tvNavDistance.text = String.format(Locale.getDefault(), "%.1f km", distanceRemaining)
-                
-                // Calculate ETA
-                val calendar = Calendar.getInstance()
-                calendar.add(Calendar.SECOND, routeProgress.durationRemaining.toInt())
-                val etaTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(calendar.time)
-                binding.tvNavEta.text = etaTime
-
-                // Update Next Stop Distance (using leg distance remaining as a proxy or just showing leg progress)
-                val legProgress = routeProgress.currentLegProgress
-                if (legProgress != null) {
-                    binding.tvNavNextStopDist.text = String.format(Locale.getDefault(), "%.1f km", legProgress.distanceRemaining / 1000.0)
+                // Update current location text in bottom sheet
+                currentLocation?.let { loc ->
+                    binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = 
+                        String.format(Locale.getDefault(), "Current: Lat %.4f, Lng %.4f", loc.latitude, loc.longitude)
                 }
+
+                val currentLegIndex = routeProgress.currentLegProgress?.legIndex ?: 0
+                val stops = assignedRoute?.stopsList ?: emptyList()
+
+                // Mark stops as arrived based on leg progress
+                // Leg k completed = Arrival at stop k
+                if (currentLegIndex > lastLegIndex) {
+                    for (i in (if (lastLegIndex == -1) 0 else lastLegIndex) until currentLegIndex) {
+                        if (i >= 0 && i < stops.size && stopArrivalTimes[i] == null) {
+                            stopArrivalTimes[i] = timeFormat.format(Calendar.getInstance().time)
+                        }
+                    }
+                    lastLegIndex = currentLegIndex
+                }
+
+                // Update ETAs/Arrival times in the stops list
+                val legs = routeProgress.route.legs()
+                var accumulatedSeconds = (routeProgress.currentLegProgress?.durationRemaining ?: 0.0).toInt()
+
+                stops.forEachIndexed { index, stop ->
+                    when {
+                        index < currentLegIndex -> {
+                            val arrival = stopArrivalTimes[index]
+                            stop.time = if (arrival != null) "Arrived: $arrival" else "Arrived"
+                        }
+                        index == currentLegIndex -> {
+                            val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
+                            stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                        }
+                        else -> {
+                            // Add duration of the leg leading to this stop
+                            if (legs != null && index < legs.size) {
+                                accumulatedSeconds += (legs[index].duration() ?: 0.0).toInt()
+                            }
+                            val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
+                            stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                        }
+                    }
+                }
+
+                // Update stop index in adapter based on leg progress
+                // currentStopIndex is the one we are currently navigating towards
+                stopsAdapter.updateStops(stops, currentLegIndex)
 
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
@@ -642,6 +698,34 @@ class DriverDashboardActivity : AppCompatActivity() {
             startActivity(Intent(this, DriverProfileActivity::class.java))
         }
 
+        binding.btnNorth.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            toggleNorthUpMode()
+        }
+
+        binding.btnSearchMap.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            Toast.makeText(this, "Search feature coming soon", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnSound.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            isVoiceEnabled = !isVoiceEnabled
+            binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
+            binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            Toast.makeText(this, if (isVoiceEnabled) "Voice instructions ON" else "Voice instructions OFF", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnRecenter.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            startFollowingPuck()
+        }
+
+        binding.btnAlert.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            showAlertsBottomSheet()
+        }
+
         binding.btnStartNavigation.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             val route = assignedRoute
@@ -660,40 +744,159 @@ class DriverDashboardActivity : AppCompatActivity() {
                 showReachStartDialog(startName)
             } else {
                 // Flow 3: Everything OK
+                updateBottomSheetInfo()
                 startNavigationAnimation()
             }
         }
 
-        binding.btnEndNavigation.setOnClickListener {
+        binding.bottomSummaryCard.findViewById<View>(R.id.btnCloseNav)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             setNavigationMode(false)
-        }
-
-        binding.btnMyLocation.setOnClickListener {
-            ViewUtils.applyClickEffect(it)
-            setupInitialCamera()
-        }
-
-        binding.btnZoomIn.setOnClickListener {
-            ViewUtils.applyClickEffect(it)
-            mapView?.camera?.easeTo(
-                CameraOptions.Builder().zoom((mapView?.mapboxMap?.cameraState?.zoom ?: 14.0) + 1.0).build(),
-                MapAnimationOptions.mapAnimationOptions { duration(500) }
-            )
-        }
-
-        binding.btnZoomOut.setOnClickListener {
-            ViewUtils.applyClickEffect(it)
-            mapView?.camera?.easeTo(
-                CameraOptions.Builder().zoom((mapView?.mapboxMap?.cameraState?.zoom ?: 14.0) - 1.0).build(),
-                MapAnimationOptions.mapAnimationOptions { duration(500) }
-            )
         }
 
         binding.btnNotifications.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, NotificationActivity::class.java))
         }
+    }
+
+    private fun setupStopsRecyclerView() {
+        bottomSheetBehavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(binding.bottomSummaryCard)
+        bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_HIDDEN
+
+        stopsAdapter = com.example.bustrack_app.adapter.NavigationStopsAdapter(emptyList())
+        val rvStops = binding.bottomSummaryCard.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvUpcomingStops)
+        rvStops?.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvStops?.adapter = stopsAdapter
+    }
+
+    private fun setupMapGestures() {
+        mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
+            override fun onMoveBegin(detector: MoveGestureDetector) {
+                if (binding.bottomSummaryCard.visibility == View.VISIBLE) {
+                    binding.btnRecenter.visibility = View.VISIBLE
+                }
+            }
+            override fun onMove(detector: MoveGestureDetector): Boolean = false
+            override fun onMoveEnd(detector: MoveGestureDetector) {}
+        })
+    }
+
+    private fun updateBottomSheetInfo() {
+        val route = assignedRoute ?: return
+        val email = FirebaseAuth.getInstance().currentUser?.email?.trim()?.lowercase()
+        val driver = DriverRepository.driverList.value?.find { it.email.trim().lowercase() == email }
+
+        binding.bottomSummaryCard.findViewById<TextView>(R.id.tvBusIdSheet)?.text = route.busNo.ifEmpty { "BUS-TRACK" }
+        binding.bottomSummaryCard.findViewById<TextView>(R.id.tvRouteSheet)?.text = route.routeName
+        binding.bottomSummaryCard.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver?.name ?: "Driver"
+        
+        stopsAdapter.updateStops(route.stopsList, 0)
+    }
+
+    private fun startFollowingPuck() {
+        binding.btnRecenter.visibility = View.GONE
+        if (isNorthUp) {
+            followPuckNorthUp()
+        } else {
+            followPuckHeadingUp()
+        }
+    }
+
+    private fun followPuckHeadingUp() {
+        mapView?.viewport?.transitionTo(
+            mapView?.viewport?.makeFollowPuckViewportState(
+                FollowPuckViewportStateOptions.Builder()
+                    .zoom(18.0)
+                    .pitch(65.0)
+                    .build()
+            )!!
+        )
+    }
+
+    private fun followPuckNorthUp() {
+        mapView?.viewport?.transitionTo(
+            mapView?.viewport?.makeFollowPuckViewportState(
+                FollowPuckViewportStateOptions.Builder()
+                    .zoom(16.0)
+                    .pitch(0.0)
+                    .bearing(FollowPuckViewportStateBearing.Constant(0.0))
+                    .build()
+            )!!
+        )
+    }
+
+    private fun toggleNorthUpMode() {
+        isNorthUp = !isNorthUp
+        if (isNorthUp) {
+            // Switch to North-Up
+            binding.btnNorth.setImageResource(R.drawable.ic_compass) // Assuming this icon indicates active compass/north
+            binding.btnNorth.imageTintList = ColorStateList.valueOf(Color.RED) 
+            followPuckNorthUp()
+        } else {
+            // Switch to Heading-Up
+            binding.btnNorth.setImageResource(R.drawable.ic_compass)
+            binding.btnNorth.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            followPuckHeadingUp()
+        }
+    }
+
+    private fun showAlertsBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_driver_alerts, null)
+        dialog.setContentView(view)
+
+        val alerts = listOf(
+            AlertOption("Road Block", "Road is closed, need alternative route", R.drawable.notification_active, "🚧"),
+            AlertOption("Heavy Traffic", "Stuck in traffic, bus might be late", R.drawable.notification_active, "🚦"),
+            AlertOption("Accident", "Accident on route or bus involved", R.drawable.notification_active, "🚗"),
+            AlertOption("Bus Breakdown", "Engine or tyre issue", R.drawable.notification_active, "🚌"),
+            AlertOption("Fuel Issue", "Low fuel or tank empty", R.drawable.notification_active, "⛽"),
+            AlertOption("Bad Weather", "Heavy rain, fog or storm", R.drawable.notification_active, "🌧️"),
+            AlertOption("Student Emergency", "Student needs medical help", R.drawable.notification_active, "👨‍🎓"),
+            AlertOption("Police Check", "Security check causing delay", R.drawable.notification_active, "👮"),
+            AlertOption("Wrong Route", "Assigned route is closed", R.drawable.notification_active, "📍"),
+            AlertOption("Other", "Custom report or other issue", R.drawable.notification_active, "📝")
+        )
+
+        val rvAlerts = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvAlerts)
+        rvAlerts.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvAlerts.adapter = DriverAlertsAdapter(alerts) { option ->
+            if (option.title == "Other") {
+                showOtherAlertContent()
+            } else {
+                Toast.makeText(this, "Reported: ${option.title}", Toast.LENGTH_SHORT).show()
+            }
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun showOtherAlertContent() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_driver_live_tracking) // Reuse styled dialog layout
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val tvTitle = dialog.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvDesc = dialog.findViewById<TextView>(R.id.tvDialogDescription)
+        val btnSend = dialog.findViewById<MaterialButton>(R.id.btnEnableTracking)
+        val btnCancel = dialog.findViewById<MaterialButton>(R.id.btnCancelTracking)
+
+        tvTitle?.text = "Other Issue"
+        tvDesc?.text = "Please describe the issue you are facing."
+        btnSend?.text = "Send Report"
+
+        // For a real app, I'd add an EditText here. 
+        // For now, I'll just show a toast or prompt the user.
+        btnSend.setOnClickListener {
+            Toast.makeText(this, "Custom report sent to Admin", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+        }
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 
     private fun fetchRouteData() {
@@ -754,19 +957,22 @@ class DriverDashboardActivity : AppCompatActivity() {
             return
         }
 
-        // Use stopsList for navigation coordinates to avoid "Too many coordinates" (max 25)
-        val navPoints = if (route.stopsList.isNotEmpty()) {
-            route.stopsList
+        val navPoints = mutableListOf<Point>()
+
+        // Add current location as the starting point of the navigation
+        currentLocation?.let {
+            navPoints.add(Point.fromLngLat(it.longitude, it.latitude))
+        }
+
+        // Use stopsList for navigation coordinates
+        if (route.stopsList.isNotEmpty()) {
+            navPoints.addAll(route.stopsList
                 .filter { it.latitude != 0.0 && it.longitude != 0.0 }
-                .map { Point.fromLngLat(it.longitude, it.latitude) }
+                .map { Point.fromLngLat(it.longitude, it.latitude) })
         } else if (route.pathPoints.isNotEmpty()) {
             // Fallback to start and end if only path points exist
-            listOf(
-                Point.fromLngLat(route.pathPoints.first().longitude, route.pathPoints.first().latitude),
-                Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude)
-            )
-        } else {
-            emptyList()
+            navPoints.add(Point.fromLngLat(route.pathPoints.first().longitude, route.pathPoints.first().latitude))
+            navPoints.add(Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude))
         }
 
         if (navPoints.size < 2) {
@@ -826,14 +1032,23 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 instructionCard.visibility = View.VISIBLE
                 bottomSummaryCard.visibility = View.VISIBLE
+                bottomSheetBehavior.isHideable = false
+                bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
+
+                // Reset navigation tracking
+                lastLegIndex = -1
+                stopArrivalTimes.clear()
 
                 infoBar.setBackgroundColor(Color.parseColor("#E60D1B3E"))
-                cardMapControls.animate().translationY(-200f).setDuration(500).start()
+                layoutMapControls.animate().translationY(-250f).setDuration(500).start()
+                btnRecenter.animate().translationY(-350f).setDuration(500).start()
             } else {
                 mapboxNavigation?.stopTripSession()
                 mapboxNavigation?.setNavigationRoutes(emptyList())
 
                 mapView?.viewport?.idle()
+                binding.btnRecenter.visibility = View.GONE
+                binding.btnRecenter.translationY = 0f
 
                 mapView?.camera?.easeTo(
                     CameraOptions.Builder()
@@ -849,10 +1064,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 btnStartNavigation.visibility = View.VISIBLE
 
                 instructionCard.visibility = View.GONE
-                bottomSummaryCard.visibility = View.GONE
+                bottomSheetBehavior.isHideable = true
+                bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_HIDDEN
 
                 infoBar.setBackgroundColor(Color.TRANSPARENT)
-                cardMapControls.animate().translationY(0f).setDuration(500).start()
+                layoutMapControls.animate().translationY(0f).setDuration(500).start()
             }
         }
     }

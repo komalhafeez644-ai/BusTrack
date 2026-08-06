@@ -7,7 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bustrack_app.R
-import com.example.bustrack_app.adapters.AlertsAdapter
+import com.example.bustrack_app.adapter.AlertsAdapter
 import com.example.bustrack_app.databinding.ActivityTransportAlertsBinding
 import com.example.bustrack_app.viewmodels.AlertsViewModel
 import utils.NavigationUtils
