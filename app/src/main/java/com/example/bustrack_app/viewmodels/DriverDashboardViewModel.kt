@@ -22,6 +22,9 @@ class DriverDashboardViewModel : ViewModel() {
     private val _quickActions = MutableLiveData<List<QuickAction>>()
     val quickActions: LiveData<List<QuickAction>> = _quickActions
 
+    private val _currentDriver = MutableLiveData<DriverModel?>()
+    val currentDriver: LiveData<DriverModel?> = _currentDriver
+
     private val _isOnDuty = MutableLiveData<Boolean>(true)
     val isOnDuty: LiveData<Boolean> = _isOnDuty
 
@@ -54,6 +57,7 @@ class DriverDashboardViewModel : ViewModel() {
         val students = StudentRepository.studentList.value ?: emptyList()
 
         val driver = drivers.find { it.email.trim().lowercase() == email } ?: return
+        _currentDriver.value = driver
         val bus = buses.find { it.busNumber == driver.assignedBus }
         val route = routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus }
 

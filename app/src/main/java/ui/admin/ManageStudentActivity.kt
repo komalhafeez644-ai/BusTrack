@@ -184,7 +184,12 @@ class ManageStudentActivity : AppCompatActivity() {
             contactNumber = s.phoneNumber,
             time = "Now",
             status = "Pending",
-            image = s.profileImage
+            image = s.profileImage,
+            profileImageUrl = s.profileImageUrl,
+            parentName = s.fatherName,
+            latitude = s.latitude,
+            longitude = s.longitude,
+            studentIdString = s.id
         )
     }
 }

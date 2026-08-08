@@ -134,7 +134,7 @@ class RouteMapActivity : AppCompatActivity() {
         val newStop = StopItem(
             id = nextId,
             stopName = name,
-            time = "TBD",
+            time = "ETA: --",
             latitude = point.latitude(),
             longitude = point.longitude()
         )

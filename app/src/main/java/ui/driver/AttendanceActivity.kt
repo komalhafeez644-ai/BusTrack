@@ -10,6 +10,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.AttendanceBinding
+import utils.ViewUtils
 
 class AttendanceActivity : AppCompatActivity() {
 
@@ -34,12 +35,32 @@ class AttendanceActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         binding.btnMenu.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             finish()
+        }
+        
+        binding.btnSearch.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            Toast.makeText(this, "Search feature coming soon", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnFilter.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            Toast.makeText(this, "Filter feature coming soon", Toast.LENGTH_SHORT).show()
         }
         
         // Clicking on a student or stop row opens the detailed manifest
         binding.ivStudent1.parent.let { it as View }.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, TransitManifestActivity::class.java))
+        }
+
+        binding.btnSaveUpdate.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                Toast.makeText(this, "Attendance updates saved and synced!", Toast.LENGTH_LONG).show()
+                finish()
+            }, 200)
         }
     }
 

@@ -111,6 +111,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val viewModel: DriverDashboardViewModel by viewModels()
     private var isDutyEnabled = false
     private var isNearStart = false
+    private var isNavigating = false
     private var currentRouteGeometry: String? = null
     private var isVoiceEnabled = true
     private lateinit var stopsAdapter: com.example.bustrack_app.adapter.NavigationStopsAdapter
@@ -120,6 +121,11 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val stopArrivalTimes = mutableMapOf<Int, String>()
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
+    private var activeStopStatus = "NEXT" // NEXT, ARRIVED, PASSED
+    private var isCurrentlyAtStop = false
+    private val ARRIVAL_RADIUS = 50.0 // 50 meters
+    private val DEPARTURE_RADIUS = 70.0 // 70 meters to prevent flickering
+
     private var isNorthUp = false
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -127,10 +133,12 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var assignedRoute: RouteModel? = null
     private var driverAnnotation: PointAnnotation? = null
     private var locationCallback: LocationCallback? = null
+    private val bitmapCache = mutableMapOf<Int, Bitmap>()
 
     // Mapbox Navigation
     private var mapboxNavigation: MapboxNavigation? = null
     private var voiceInstructionsPlayer: MapboxVoiceInstructionsPlayer? = null
+    private val attendancePromptedStops = mutableSetOf<Int>()
 
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -167,7 +175,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
             pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
             setupLocationPuck()
-            checkLocationSettings()
+            // Removed duplicate checkLocationSettings() to fix double "Yes" issue
             setupMapGestures()
             setupStopsRecyclerView()
         }
@@ -177,12 +185,14 @@ class DriverDashboardActivity : AppCompatActivity() {
         binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
         binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
 
+        // Start Location Flow First
+        handleLocationFlow()
+
         observeViewModel()
         observeDriverRepo()
         setupClickListeners()
         setupDrawerListeners()
         initNavigation()
-        handleLocationFlow()
 
         if (intent.getBooleanExtra("OPEN_DRAWER", false)) {
             drawerLayout.post {
@@ -217,18 +227,26 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
         MapboxNavigationApp.attach(this)
 
+        // Try to get the instance immediately
         mapboxNavigation = MapboxNavigationApp.current()
 
-        // Initialize Voice Guidance
-        voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(
-            this,
-            Locale.getDefault().language
-        )
+        // If it's still null, it might take a moment to attach
+        if (mapboxNavigation == null) {
+            // We can retry after a short delay or just wait for the user click to handle it
+        }
 
         mapboxNavigation?.registerRoutesObserver(routesObserver)
         mapboxNavigation?.registerLocationObserver(locationObserver)
         mapboxNavigation?.registerRouteProgressObserver(routeProgressObserver)
         mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
+
+        // Initialize Voice Guidance
+        if (voiceInstructionsPlayer == null) {
+            voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(
+                this,
+                java.util.Locale.getDefault().language
+            )
+        }
     }
 
     private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
@@ -291,15 +309,36 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val currentLegIndex = routeProgress.currentLegProgress?.legIndex ?: 0
                 val stops = assignedRoute?.stopsList ?: emptyList()
 
-                // Mark stops as arrived based on leg progress
-                // Leg k completed = Arrival at stop k
-                if (currentLegIndex > lastLegIndex) {
-                    for (i in (if (lastLegIndex == -1) 0 else lastLegIndex) until currentLegIndex) {
-                        if (i >= 0 && i < stops.size && stopArrivalTimes[i] == null) {
-                            stopArrivalTimes[i] = timeFormat.format(Calendar.getInstance().time)
+                // Logic for UPCOMING -> NEXT -> ARRIVED -> PASSED
+                if (currentLegIndex < stops.size) {
+                    val currentStop = stops[currentLegIndex]
+                    val distanceToStop = routeProgress.currentLegProgress?.distanceRemaining?.toDouble() ?: Double.MAX_VALUE
+
+                    when {
+                        !isCurrentlyAtStop && distanceToStop <= ARRIVAL_RADIUS -> {
+                            // Bus just arrived at stop
+                            isCurrentlyAtStop = true
+                            activeStopStatus = "ARRIVED"
+                            stopArrivalTimes[currentLegIndex] = timeFormat.format(Calendar.getInstance().time)
+                            
+                            // Trigger Attendance Sheet if Morning
+                            val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                            if (currentHour < 10 && !attendancePromptedStops.contains(currentLegIndex)) {
+                                attendancePromptedStops.add(currentLegIndex)
+                                val bottomSheet = AttendanceBottomSheet.newInstance(currentStop.stopName, assignedRoute?.routeName ?: "")
+                                bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+                            }
+                        }
+                        isCurrentlyAtStop && distanceToStop > DEPARTURE_RADIUS -> {
+                            // Bus just departed from stop
+                            isCurrentlyAtStop = false
+                            activeStopStatus = "PASSED"
+                            // Mapbox will increment legIndex automatically soon
+                        }
+                        !isCurrentlyAtStop -> {
+                            activeStopStatus = "NEXT"
                         }
                     }
-                    lastLegIndex = currentLegIndex
                 }
 
                 // Update ETAs/Arrival times in the stops list
@@ -313,8 +352,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                             stop.time = if (arrival != null) "Arrived: $arrival" else "Arrived"
                         }
                         index == currentLegIndex -> {
-                            val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
-                            stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                            if (activeStopStatus == "ARRIVED") {
+                                stop.time = "At Stop: ${stopArrivalTimes[index]}"
+                            } else {
+                                val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
+                                stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                            }
                         }
                         else -> {
                             // Add duration of the leg leading to this stop
@@ -327,9 +370,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
 
-                // Update stop index in adapter based on leg progress
-                // currentStopIndex is the one we are currently navigating towards
-                stopsAdapter.updateStops(stops, currentLegIndex)
+                // Update stop index in adapter based on leg progress and status
+                stopsAdapter.updateStops(stops, currentLegIndex, activeStopStatus)
 
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
@@ -341,8 +383,18 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun handleLocationFlow() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
+        val permissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        
+        val needsPermission = permissions.any {
+            ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (needsPermission) {
+            Toast.makeText(this, "Requesting Location Permissions...", Toast.LENGTH_SHORT).show()
+            ActivityCompat.requestPermissions(this, permissions, 1001)
         } else {
             checkLocationSettings()
         }
@@ -369,30 +421,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                     val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution).build()
                     locationSettingsLauncher.launch(intentSenderRequest)
                 } catch (sendEx: Exception) {
-                    Log.e("DriverDashboard", "Error launching location settings resolution", sendEx)
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 }
+            } else {
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             }
         }
-    }
-
-    private fun showEnableGpsDialog() {
-        val bottomSheetDialog = BottomSheetDialog(this)
-        val view = layoutInflater.inflate(R.layout.dialog_driver_live_tracking, null)
-        bottomSheetDialog.setContentView(view)
-        bottomSheetDialog.setCancelable(false)
-
-        view.findViewById<TextView>(R.id.btnEnableTracking)?.text = "Enable GPS"
-
-        view.findViewById<MaterialButton>(R.id.btnEnableTracking).setOnClickListener {
-            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-            bottomSheetDialog.dismiss()
-        }
-
-        view.findViewById<MaterialButton>(R.id.btnCancelTracking).setOnClickListener {
-            bottomSheetDialog.dismiss()
-        }
-
-        bottomSheetDialog.show()
     }
 
     private fun startLocationUpdates() {
@@ -435,13 +469,26 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .withPoint(point)
                 .withIconImage(bitmap)
                 .withIconSize(1.5)
+                .withTextField(assignedRoute?.busNo ?: "My Bus")
+                .withTextOffset(listOf(0.0, -2.0)) // Show above icon
+                .withTextColor(Color.WHITE)
+                .withTextHaloColor(Color.parseColor("#0D1B3E"))
+                .withTextHaloWidth(1.5)
+            
             driverAnnotation = pointAnnotationManager?.create(pointAnnotationOptions)
         }
     }
 
     private fun bitmapFromDrawableRes(context: Context, resourceId: Int): Bitmap? {
+        if (bitmapCache.containsKey(resourceId)) {
+            return bitmapCache[resourceId]
+        }
         val drawable = ContextCompat.getDrawable(context, resourceId)
-        if (drawable is BitmapDrawable) return drawable.bitmap
+        if (drawable is BitmapDrawable) {
+            val bitmap = drawable.bitmap
+            bitmapCache[resourceId] = bitmap
+            return bitmap
+        }
         if (drawable != null) {
             val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 64
             val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 64
@@ -449,6 +496,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             val canvas = Canvas(bitmap)
             drawable.setBounds(0, 0, canvas.width, canvas.height)
             drawable.draw(canvas)
+            bitmapCache[resourceId] = bitmap
             return bitmap
         }
         return null
@@ -458,6 +506,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         val route = assignedRoute ?: return
         val currentLoc = currentLocation ?: return
 
+        // Throttle checking to save CPU
         val startPoint = if (route.pathPoints.isNotEmpty()) {
             Point.fromLngLat(route.pathPoints[0].longitude, route.pathPoints[0].latitude)
         } else if (route.stopsList.isNotEmpty()) {
@@ -474,9 +523,9 @@ class DriverDashboardActivity : AppCompatActivity() {
             val wasNearStart = isNearStart
             isNearStart = distanceInMeters < 300 // within 300m
             
-            // Update map if status changed
+            // Only update UI if status actually changed to prevent flickering/lag
             if (wasNearStart != isNearStart) {
-                updateMapDisplay()
+                runOnUiThread { updateMapDisplay() }
             }
             
             updateNavigationButtonState()
@@ -485,6 +534,11 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun updateMapDisplay() {
         val route = assignedRoute ?: return
+        
+        // If we are currently navigating, don't clear the markers
+        if (isNavigating) {
+            return
+        }
         
         if (isNearStart) {
             // Draw route on map
@@ -649,11 +703,12 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         // Add Markers for all stops in the route
         assignedRoute?.stopsList?.forEach { stop ->
-            addMarker(Point.fromLngLat(stop.longitude, stop.latitude), R.drawable.ic_marker_dest)
+            addMarker(Point.fromLngLat(stop.longitude, stop.latitude), R.drawable.ic_marker_dest, stop.stopName)
         }
 
         // Start Marker (Green)
-        addMarker(points.first(), R.drawable.green_dot)
+        val startName = assignedRoute?.startPoint ?: "Start"
+        addMarker(points.first(), R.drawable.green_dot, startName)
 
         currentLocation?.let { updateDriverMarker(it) }
 
@@ -676,13 +731,26 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
-    private fun addMarker(point: Point, iconRes: Int) {
+    private fun addMarker(point: Point, iconRes: Int, title: String? = null) {
+        // Reuse existing markers to prevent UI lag
+        val markerKey = "${point.latitude()},${point.longitude()}"
+        
         val bitmap = bitmapFromDrawableRes(this, iconRes)
         if (bitmap != null) {
             val options = PointAnnotationOptions()
                 .withPoint(point)
                 .withIconImage(bitmap)
                 .withIconSize(1.0)
+            
+            title?.let {
+                options.withTextField(it)
+                options.withTextSize(12.0)
+                options.withTextOffset(listOf(0.0, 1.5))
+                options.withTextColor(Color.BLACK)
+                options.withTextHaloColor(Color.WHITE)
+                options.withTextHaloWidth(1.0)
+            }
+            
             pointAnnotationManager?.create(options)
         }
     }
@@ -693,9 +761,15 @@ class DriverDashboardActivity : AppCompatActivity() {
             drawerLayout.openDrawer(GravityCompat.END)
         }
 
-        binding.ivProfile.setOnClickListener {
+        findViewById<View>(R.id.layoutProfileArea).setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            startActivity(Intent(this, DriverProfileActivity::class.java))
+            val route = assignedRoute
+            if (route != null && route.stopsList.isNotEmpty()) {
+                val bottomSheet = AttendanceBottomSheet.newInstance(route.stopsList[0].stopName, route.routeName)
+                bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+            } else {
+                Toast.makeText(this, "No route or stops assigned yet", Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.btnNorth.setOnClickListener {
@@ -731,19 +805,39 @@ class DriverDashboardActivity : AppCompatActivity() {
             val route = assignedRoute
             
             if (!isDutyEnabled) {
-                // Flow 1: Duty is OFF
-                val dutySwitch = findViewById<SwitchMaterial>(R.id.switchDuty)
-                showLiveTrackingDialog(dutySwitch)
-            } else if (route == null) {
+                // Flow: Duty is OFF -> Open Drawer + Show Message
+                drawerLayout.openDrawer(androidx.core.view.GravityCompat.END)
+                Toast.makeText(this, "Please enable On Duty Mode before starting navigation.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            
+            if (route == null) {
                 Toast.makeText(this, "No route assigned to you yet", Toast.LENGTH_SHORT).show()
-            } else if (!isNearStart) {
-                // Flow 2: Duty is ON but too far from start
+                return@setOnClickListener
+            }
+
+            if (!isNearStart) {
+                // Flow: Outside Geo-Fence -> Show Distance & Dialog
+                val currentPoint = currentLocation?.let { com.mapbox.geojson.Point.fromLngLat(it.longitude, it.latitude) }
+                val startPoint = if (route.pathPoints.isNotEmpty()) {
+                    com.mapbox.geojson.Point.fromLngLat(route.pathPoints[0].longitude, route.pathPoints[0].latitude)
+                } else if (route.stopsList.isNotEmpty()) {
+                    com.mapbox.geojson.Point.fromLngLat(route.stopsList[0].longitude, route.stopsList[0].latitude)
+                } else null
+
+                if (currentPoint != null && startPoint != null) {
+                    val results = FloatArray(1)
+                    android.location.Location.distanceBetween(currentPoint.latitude(), currentPoint.longitude(), startPoint.latitude(), startPoint.longitude(), results)
+                    val distanceKm = results[0] / 1000.0
+                    Toast.makeText(this, String.format(java.util.Locale.getDefault(), "You are %.2f km away from the starting point.", distanceKm), Toast.LENGTH_LONG).show()
+                }
+
                 val startName = if (route.pathPoints.isNotEmpty()) route.startPoint.ifEmpty { "Start Point" } 
                                else if (route.stopsList.isNotEmpty()) route.stopsList[0].stopName 
                                else "Start Point"
                 showReachStartDialog(startName)
             } else {
-                // Flow 3: Everything OK
+                // Flow: Everything OK -> Start Navigation
                 updateBottomSheetInfo()
                 startNavigationAnimation()
             }
@@ -944,9 +1038,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun startNavigationAnimation() {
+        if (mapboxNavigation == null) {
+            mapboxNavigation = MapboxNavigationApp.current()
+        }
+        
         val nav = mapboxNavigation
         if (nav == null) {
-            Toast.makeText(this, "Navigation SDK not initialized. Please wait...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Initializing Map SDK... please wait 1 second.", Toast.LENGTH_SHORT).show()
             initNavigation()
             return
         }
@@ -1025,6 +1123,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun setNavigationMode(isNavigating: Boolean) {
+        this.isNavigating = isNavigating
         binding.apply {
             if (isNavigating) {
                 cardRouteDetails.visibility = View.GONE
@@ -1040,13 +1139,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                 stopArrivalTimes.clear()
 
                 infoBar.setBackgroundColor(Color.parseColor("#E60D1B3E"))
-                layoutMapControls.animate().translationY(-250f).setDuration(500).start()
-                btnRecenter.animate().translationY(-350f).setDuration(500).start()
+                layoutMapControls.visibility = View.VISIBLE
+                layoutMapControls.animate().translationY(-110f).setDuration(500).start()
+                btnRecenter.animate().translationY(-260f).setDuration(500).start()
             } else {
                 mapboxNavigation?.stopTripSession()
                 mapboxNavigation?.setNavigationRoutes(emptyList())
 
                 mapView?.viewport?.idle()
+                binding.layoutMapControls.visibility = View.GONE
+                binding.layoutMapControls.translationY = 0f
                 binding.btnRecenter.visibility = View.GONE
                 binding.btnRecenter.translationY = 0f
 
@@ -1084,21 +1186,42 @@ class DriverDashboardActivity : AppCompatActivity() {
         val btnCancel = dialog.findViewById<MaterialButton>(R.id.btnCancelTracking)
 
         btnEnable.setOnClickListener {
-            isDutyEnabled = true
-            if (switch?.isChecked == false) {
-                switch.isChecked = true
-            }
-            updateDutyUI(true)
-            dialog.dismiss()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                isDutyEnabled = true
+                if (switch?.isChecked == false) {
+                    switch.isChecked = true
+                }
+                updateDutyUI(true)
+                
+                // Sync status to Firestore
+                viewModel.currentDriver.value?.id?.let { driverId ->
+                    com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Active")
+                }
+                
+                // Close drawer automatically after enabling duty
+                drawerLayout.closeDrawer(androidx.core.view.GravityCompat.END)
+                
+                dialog.dismiss()
+            }, 200)
         }
 
         btnCancel.setOnClickListener {
-            if (switch?.isChecked == true) {
-                switch.isChecked = false
-            }
-            isDutyEnabled = false
-            updateDutyUI(false)
-            dialog.dismiss()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                if (switch?.isChecked == true) {
+                    switch.isChecked = false
+                }
+                isDutyEnabled = false
+                updateDutyUI(false)
+                
+                // Sync status to Firestore
+                viewModel.currentDriver.value?.id?.let { driverId ->
+                    com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                }
+                
+                dialog.dismiss()
+            }, 200)
         }
 
         dialog.show()
@@ -1139,7 +1262,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         btnCancel?.visibility = View.GONE
 
         btnOk.setOnClickListener {
-            dialog.dismiss()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                dialog.dismiss()
+            }, 200)
         }
         dialog.show()
     }
@@ -1164,50 +1290,77 @@ class DriverDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.drawerEmail)?.setOnClickListener(headerAction)
 
         findViewById<View>(R.id.drawerSettings)?.setOnClickListener {
-            val intent = Intent(this, DriverNotificationSettings::class.java)
-            intent.putExtra("FROM_USER", "driver")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, DriverNotificationSettings::class.java)
+                intent.putExtra("FROM_USER", "driver")
+                startActivity(intent)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerPreferences)?.setOnClickListener {
-            val intent = Intent(this, PreferencesActivity::class.java)
-            intent.putExtra("FROM_USER", "driver")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, PreferencesActivity::class.java)
+                intent.putExtra("FROM_USER", "driver")
+                startActivity(intent)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener {
-            val intent = Intent(this, PrivacyPolicyActivityActivity::class.java)
-            intent.putExtra("FROM_USER", "driver")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, PrivacyPolicyActivityActivity::class.java)
+                intent.putExtra("FROM_USER", "driver")
+                startActivity(intent)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerTerms)?.setOnClickListener {
-            val intent = Intent(this, TermsConditionsActivity::class.java)
-            intent.putExtra("FROM_USER", "driver")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, TermsConditionsActivity::class.java)
+                intent.putExtra("FROM_USER", "driver")
+                startActivity(intent)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerFaq)?.setOnClickListener {
-            startActivity(Intent(this, DriverFaqActivity::class.java))
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                startActivity(Intent(this, DriverFaqActivity::class.java))
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
-            startActivity(Intent(this, ChangePasswordActivity::class.java))
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                startActivity(Intent(this, ChangePasswordActivity::class.java))
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 150)
         }
 
         findViewById<View>(R.id.drawerEveningAttendance)?.setOnClickListener {
-            startActivity(Intent(this, EveningAttendanceActivity::class.java))
-            drawerLayout.closeDrawer(GravityCompat.END)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, EveningAttendanceActivity::class.java)
+                intent.putExtra("ROUTE_NAME", assignedRoute?.routeName ?: "")
+                startActivity(intent)
+                overridePendingTransition(0, 0)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }, 200)
         }
 
         findViewById<View>(R.id.drawerLogout)?.setOnClickListener {
-            showLogoutDialog()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                showLogoutDialog()
+            }, 200)
         }
     }
 
@@ -1222,16 +1375,22 @@ class DriverDashboardActivity : AppCompatActivity() {
         val btnCancel = dialog.findViewById<View>(R.id.btnCancelLogout)
 
         btnConfirm.setOnClickListener {
-            dialog.dismiss()
-            FirebaseAuth.getInstance().signOut()
-            val intent = Intent(this, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-            finish()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                dialog.dismiss()
+                FirebaseAuth.getInstance().signOut()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            }, 200)
         }
 
         btnCancel.setOnClickListener {
-            dialog.dismiss()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                dialog.dismiss()
+            }, 200)
         }
 
         dialog.show()
@@ -1239,20 +1398,26 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        mapView?.onStart()
     }
 
     override fun onStop() {
         super.onStop()
+        mapView?.onStop()
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         mapboxNavigation?.unregisterRoutesObserver(routesObserver)
         mapboxNavigation?.unregisterLocationObserver(locationObserver)
         mapboxNavigation?.unregisterRouteProgressObserver(routeProgressObserver)
         mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
         voiceInstructionsPlayer?.shutdown()
         MapboxNavigationApp.detach(this)
+        
+        bitmapCache.clear()
+        mapView?.onDestroy()
+        super.onDestroy()
     }
 
     override fun onBackPressed() {

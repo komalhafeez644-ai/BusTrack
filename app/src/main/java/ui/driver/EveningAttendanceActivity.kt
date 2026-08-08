@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -22,6 +23,7 @@ import com.example.bustrack_app.databinding.ActivityEveningAttendanceBinding
 import com.example.bustrack_app.models.AttendanceRecordModel
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import utils.ViewUtils
 import java.util.ArrayList
 
 class EveningAttendanceActivity : AppCompatActivity() {
@@ -29,6 +31,7 @@ class EveningAttendanceActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEveningAttendanceBinding
     private lateinit var adapter: AttendanceAdapter
     private var isMorning = true
+    private var routeName = ""
     private val attendanceList = ArrayList<AttendanceRecordModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,19 +40,25 @@ class EveningAttendanceActivity : AppCompatActivity() {
         binding = ActivityEveningAttendanceBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        routeName = intent.getStringExtra("ROUTE_NAME") ?: ""
+
         setupUI()
         setupListeners()
-        loadMockData()
+        loadData()
     }
 
     private fun setupUI() {
         binding.rvAttendance.layoutManager = LinearLayoutManager(this)
         adapter = AttendanceAdapter(ArrayList())
         binding.rvAttendance.adapter = adapter
+        
+        // Initial button text
+        binding.btnSaveAttendance.text = if (isMorning) "SAVE UPDATE" else "SAVE ATTENDANCE"
     }
 
     private fun setupListeners() {
         binding.btnBack.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             val intent = Intent(this, DriverDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -57,9 +66,15 @@ class EveningAttendanceActivity : AppCompatActivity() {
             finish()
         }
 
+        binding.btnCalendar.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            Toast.makeText(this, "Calendar selection coming soon", Toast.LENGTH_SHORT).show()
+        }
+
         binding.toggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 isMorning = checkedId == R.id.btnMorning
+                binding.btnSaveAttendance.text = if (isMorning) "SAVE UPDATE" else "SAVE ATTENDANCE"
                 adapter.updateData(attendanceList)
             }
         }
@@ -71,17 +86,77 @@ class EveningAttendanceActivity : AppCompatActivity() {
             }
             override fun afterTextChanged(s: Editable?) {}
         })
+
+        binding.btnSaveAttendance.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                Toast.makeText(this, "Daily attendance records synced successfully!", Toast.LENGTH_LONG).show()
+                // The individual records are already being saved on selection, 
+                // but this button serves as a final confirmation/sync trigger.
+                finish()
+            }, 200)
+        }
     }
 
-    private fun loadMockData() {
-        attendanceList.clear()
-        // statuses changed from time strings to "Present" or "Absent"
-        attendanceList.add(AttendanceRecordModel("FC-9901", "Ali Khan", "Route 1", "Green Valley", "Present", "Present", "Pending", "Pending", "24/05/2026"))
-        attendanceList.add(AttendanceRecordModel("FC-9021", "Arjun Jayaram", "Route 1", "Oak Ridge Estates", "Present", "Present", "Pending", "Pending", "24/05/2026"))
-        attendanceList.add(AttendanceRecordModel("FC-9104", "Sarah Mitchell", "Route 2", "Silver Springs", "Absent", "Absent", "Pending", "Pending", "24/05/2026"))
-        attendanceList.add(AttendanceRecordModel("FC-7721", "Emma Watson", "Route 3", "West Side", "Present", "Present", "Pending", "Pending", "24/05/2026"))
+    private fun loadData() {
+        if (routeName.isEmpty()) {
+            Toast.makeText(this, "Error: No route assigned", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val todayDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+
+        // Step 1: Fetch Students for this route
+        com.example.bustrack_app.data.FirebaseRepository.fetchStudentsByRoute(routeName) { students ->
+            if (isFinishing || isDestroyed) return@fetchStudentsByRoute
+
+            // Step 2: Fetch existing attendance for today
+            com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { allAttendance ->
+                if (isFinishing || isDestroyed) return@fetchAttendance
+
+                attendanceList.clear()
+                
+                students.forEach { student ->
+                    // Find if student has record for today
+                    val existing = allAttendance.find { it.studentId == student.id && it.date == todayDate }
+                    
+                    if (existing != null) {
+                        attendanceList.add(existing)
+                    } else {
+                        // Create a "Pending" record for the UI
+                        attendanceList.add(AttendanceRecordModel(
+                            studentId = student.id,
+                            studentName = student.name,
+                            route = routeName,
+                            stop = student.stopName ?: "Unknown",
+                            morningPickup = "Pending",
+                            morningDrop = "--",
+                            eveningPickup = "Pending",
+                            eveningDrop = "--",
+                            date = todayDate
+                        ))
+                    }
+                }
+                
+                sortAndDisplay()
+            }
+        }
+    }
+
+    private fun sortAndDisplay() {
+        if (!::adapter.isInitialized) return
         
-        adapter.updateData(attendanceList)
+        // Sort by Route and then by Stop Order defined in RouteRepository
+        val routes = com.example.bustrack_app.data.RouteRepository.routeList.value ?: emptyList()
+        
+        val sortedList = attendanceList.sortedWith(compareBy({ it.route }, { record ->
+            val routeData = routes.find { it.routeName.equals(record.route, true) }
+            // Find the index of the stop in the route's stop list
+            val index = routeData?.stopsList?.indexOfFirst { it.stopName.equals(record.stop, true) } ?: -1
+            if (index == -1) 999 else index
+        }))
+        
+        adapter.updateData(sortedList)
     }
 
     inner class AttendanceAdapter(private var fullList: List<AttendanceRecordModel>) :
@@ -135,28 +210,40 @@ class EveningAttendanceActivity : AppCompatActivity() {
             }
 
             holder.btnPresent.setOnClickListener {
+                ViewUtils.applyClickEffect(it)
                 updateAttendance(item, "Present")
             }
 
             holder.btnAbsent.setOnClickListener {
+                ViewUtils.applyClickEffect(it)
                 updateAttendance(item, "Absent")
             }
 
             holder.btnEdit.setOnClickListener {
+                ViewUtils.applyClickEffect(it)
                 updateAttendance(item, "Pending")
             }
         }
 
         private fun updateAttendance(item: AttendanceRecordModel, newStatus: String) {
-            val index = attendanceList.indexOf(item)
-            if (index != -1) {
-                val updatedItem = if (isMorning) {
-                    item.copy(morningPickup = newStatus, morningDrop = if(newStatus == "Absent") "Absent" else item.morningDrop)
+            val updatedItem = if (isMorning) {
+                item.copy(morningPickup = newStatus, morningDrop = if(newStatus == "Absent") "Absent" else item.morningDrop)
+            } else {
+                item.copy(eveningPickup = newStatus, eveningDrop = if(newStatus == "Absent") "Absent" else item.eveningDrop)
+            }
+            
+            com.example.bustrack_app.data.FirebaseRepository.saveAttendance(updatedItem) { success ->
+                if (success) {
+                    // Update local list to reflect changes immediately
+                    val index = attendanceList.indexOfFirst { it.studentId == item.studentId && it.date == item.date }
+                    if (index != -1) {
+                        attendanceList[index] = updatedItem
+                        adapter.updateData(attendanceList)
+                    }
+                    Toast.makeText(this@EveningAttendanceActivity, "Attendance updated", Toast.LENGTH_SHORT).show()
                 } else {
-                    item.copy(eveningPickup = newStatus, eveningDrop = if(newStatus == "Absent") "Absent" else item.eveningDrop)
+                    Toast.makeText(this@EveningAttendanceActivity, "Failed to sync", Toast.LENGTH_SHORT).show()
                 }
-                attendanceList[index] = updatedItem
-                updateData(attendanceList)
             }
         }
 

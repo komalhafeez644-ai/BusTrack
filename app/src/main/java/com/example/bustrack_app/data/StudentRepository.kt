@@ -51,12 +51,12 @@ object StudentRepository {
             .addOnFailureListener { onComplete(false) }
     }
     
-    fun assignRouteToStudent(studentId: String, routeName: String, busNo: String, stop: String) {
+    fun assignRouteToStudent(studentId: String, routeName: String, busNo: String, stop: String, onComplete: (Boolean) -> Unit = {}) {
         studentsCollection.document(studentId).update(
             "route", routeName,
             "busNo", busNo,
             "stopName", stop,
             "status", "ASSIGNED"
-        )
+        ).addOnCompleteListener { onComplete(it.isSuccessful) }
     }
 }

@@ -69,6 +69,7 @@
             android:contentDescription="Search Icon" />
 
         <EditText
+            android:id="@+id/etSearchBus"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
@@ -100,11 +101,14 @@
         app:layout_constraintTop_toBottomOf="@id/searchContainer">
 
         <androidx.cardview.widget.CardView
+            android:id="@+id/zoomInCard"
             android:layout_width="40dp"
             android:layout_height="40dp"
             app:cardCornerRadius="8dp"
             android:backgroundTint="@color/white"
-            app:cardElevation="2dp">
+            app:cardElevation="2dp"
+            android:clickable="true"
+            android:focusable="true">
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -112,17 +116,19 @@
                 android:src="@drawable/zoom_in_24"
                 android:scaleType="centerInside"
                 app:tint="@color/primaryBlue"
-
                 android:contentDescription="Zoom In" />
         </androidx.cardview.widget.CardView>
 
         <androidx.cardview.widget.CardView
+            android:id="@+id/zoomOutCard"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginTop="8dp"
             app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="8dp"
-            app:cardElevation="2dp">
+            app:cardElevation="2dp"
+            android:clickable="true"
+            android:focusable="true">
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -134,12 +140,15 @@
         </androidx.cardview.widget.CardView>
 
         <androidx.cardview.widget.CardView
+            android:id="@+id/myLocationCard"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginTop="16dp"
             app:cardCornerRadius="8dp"
             android:backgroundTint="@color/white"
-            app:cardElevation="2dp">
+            app:cardElevation="2dp"
+            android:clickable="true"
+            android:focusable="true">
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -156,18 +165,30 @@
         android:id="@+id/driverCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
-        android:layout_marginBottom="16dp"
-        app:cardBackgroundColor="@color/card_bg_light"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="8dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude">
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/white"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="12dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude"
+        tools:visibility="visible"
+        app:strokeColor="#F1F5F9"
+        app:strokeWidth="1dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp">
+
+            <!-- Drag Handle for inDrive look -->
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="16dp"
+                android:background="#E2E8F0" />
 
             <RelativeLayout
                 android:layout_width="match_parent"
@@ -188,6 +209,7 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/tvDriverName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Marcus Thompson"
@@ -196,6 +218,7 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/tvBusRouteInfo"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Bus #442-RT • Route"
@@ -203,6 +226,7 @@
                         android:textSize="12sp" />
 
                     <TextView
+                        android:id="@+id/tvRouteDetail"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="North-Alpha"
@@ -232,9 +256,10 @@
                         android:textColor="@color/lightGray"
                         android:textSize="10sp" />
                     <TextView
+                        android:id="@+id/tvEta"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="08 Mins"
+                        android:text="--"
                         android:textColor="@color/text_dark_navy"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -253,9 +278,10 @@
                         android:textColor="@color/lightGray"
                         android:textSize="10sp" />
                     <TextView
+                        android:id="@+id/tvSpeed"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="45 km/h"
+                        android:text="--"
                         android:textColor="@color/text_dark_navy"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -274,9 +300,10 @@
                         android:textColor="@color/lightGray"
                         android:textSize="10sp" />
                     <TextView
+                        android:id="@+id/tvLoad"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="24/40"
+                        android:text="--"
                         android:textColor="@color/text_dark_navy"
                         android:textSize="16sp"
                         android:textStyle="bold" />

@@ -20,6 +20,25 @@ object FirebaseRepository {
         }
     }
 
+    fun fetchStudentsByRoute(routeName: String, onResult: (List<StudentModel>) -> Unit) {
+        db.collection("students")
+            .whereEqualTo("route", routeName)
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { it.toObject<StudentModel>() } ?: emptyList()
+                onResult(list)
+            }
+    }
+
+    fun fetchStudentsByStop(routeName: String, stopName: String, onResult: (List<StudentModel>) -> Unit) {
+        db.collection("students")
+            .whereEqualTo("route", routeName)
+            .whereEqualTo("stopName", stopName)
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { it.toObject<StudentModel>() } ?: emptyList()
+                onResult(list)
+            }
+    }
+
     fun saveStudent(student: StudentModel, onComplete: (Boolean) -> Unit) {
         db.collection("students").document(student.id).set(student)
             .addOnCompleteListener { onComplete(it.isSuccessful) }
@@ -36,6 +55,33 @@ object FirebaseRepository {
     fun saveDriver(driver: DriverModel, onComplete: (Boolean) -> Unit) {
         db.collection("drivers").document(driver.id).set(driver)
             .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
+    fun updateDriverLocation(driverId: String, lat: Double, lng: Double) {
+        val updates = mapOf(
+            "latitude" to lat,
+            "longitude" to lng,
+            "lastUpdated" to System.currentTimeMillis()
+        )
+        db.collection("drivers").document(driverId).update(updates)
+    }
+
+    fun updateDriverStatus(driverId: String, status: String) {
+        db.collection("drivers").document(driverId).update("status", status)
+    }
+
+    // --- ATTENDANCE ---
+    fun saveAttendance(record: AttendanceRecordModel, onComplete: (Boolean) -> Unit) {
+        val docId = "${record.studentId}_${record.date.replace("/", "-")}"
+        db.collection("attendance").document(docId).set(record)
+            .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
+    fun fetchAttendance(onResult: (List<AttendanceRecordModel>) -> Unit) {
+        db.collection("attendance").addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { it.toObject<AttendanceRecordModel>() } ?: emptyList()
+            onResult(list)
+        }
     }
 
     // --- BUSES ---

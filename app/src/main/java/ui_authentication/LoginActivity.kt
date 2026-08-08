@@ -16,6 +16,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import ui.admin.AdminDashboardActivity
 import ui.principal.PrincipalDashboardActivity
+import utils.ViewUtils
 // IMPORT ADD KIYA: Taake intent ko pata chale Signup Activity kahan hai
 
 class LoginActivity : AppCompatActivity() {
@@ -36,6 +37,7 @@ class LoginActivity : AppCompatActivity() {
         val btnGoogle = findViewById<Button>(R.id.btnGoogle)
 
         btnLogin.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString().trim()
 
@@ -58,16 +60,23 @@ class LoginActivity : AppCompatActivity() {
 
         // UPDATED: Sahi class name (SignupActivity) aur package ke saath link kiya
         tvSignUp.setOnClickListener {
-            val intent = Intent(this, SignupActivity::class.java)
-            startActivity(intent)
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                val intent = Intent(this, SignupActivity::class.java)
+                startActivity(intent)
+            }, 200)
         }
 
         tvForgotPassword.setOnClickListener {
-            // Confirm karein ke ForgotPasswordActivity bhi registered hai
-            startActivity(Intent(this, ForgotPasswordActivity::class.java))
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                // Confirm karein ke ForgotPasswordActivity bhi registered hai
+                startActivity(Intent(this, ForgotPasswordActivity::class.java))
+            }, 200)
         }
 
         btnGoogle.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             viewModel.loginWithGoogle()
         }
 
@@ -75,12 +84,18 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun observeLogin() {
+        val progressBar = findViewById<android.view.View>(R.id.loginProgress)
+        val btnLogin = findViewById<Button>(R.id.btnLogin)
+
         viewModel.loginState.observe(this) { resource ->
             when (resource) {
                 is Resource.Loading -> {
-                    Toast.makeText(this, "Logging in...", Toast.LENGTH_SHORT).show()
+                    progressBar.visibility = android.view.View.VISIBLE
+                    btnLogin.text = ""
+                    btnLogin.isEnabled = false
                 }
                 is Resource.Success -> {
+                    progressBar.visibility = android.view.View.GONE
                     val role = resource.data
                     when (role) {
                         "admin" -> {
@@ -117,6 +132,9 @@ class LoginActivity : AppCompatActivity() {
                     }
                 }
                 is Resource.Error -> {
+                    progressBar.visibility = android.view.View.GONE
+                    btnLogin.text = getString(R.string.sign_in)
+                    btnLogin.isEnabled = true
                     Toast.makeText(this, resource.message ?: "Login Failed", Toast.LENGTH_SHORT).show()
                 }
             }

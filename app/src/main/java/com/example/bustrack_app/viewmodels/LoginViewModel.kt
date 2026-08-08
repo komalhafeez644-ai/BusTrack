@@ -46,7 +46,6 @@ class LoginViewModel : ViewModel() {
                 db.collection("users").document(user.uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
             }
             
-            delay(1000)
             loginState.value = Resource.Success("user") 
         }
     }

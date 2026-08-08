@@ -14,27 +14,15 @@
         android:layout_height="wrap_content"
         android:padding="14dp">
 
-        <com.google.android.material.imageview.ShapeableImageView
-            android:id="@+id/ivStudent"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:src="@drawable/ic_person"
-            android:background="#F1F5F9"
-            android:padding="2dp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:shapeAppearanceOverlay="@style/CircleImage" />
-
         <LinearLayout
             android:id="@+id/infoLayout"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
             android:orientation="vertical"
-            app:layout_constraintBottom_toBottomOf="@id/ivStudent"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/actionBarrier"
-            app:layout_constraintStart_toEndOf="@id/ivStudent"
-            app:layout_constraintTop_toTopOf="@id/ivStudent">
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
             <TextView
                 android:id="@+id/tvName"

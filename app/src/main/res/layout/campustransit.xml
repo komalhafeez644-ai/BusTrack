@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="@color/bg_light">
 
-    <!-- Map Background Placeholder -->
+    <!-- Map Background (Only for full screen mode) -->
     <ImageView
         android:id="@+id/mapBg"
         android:layout_width="match_parent"
@@ -15,7 +15,7 @@
         android:scaleType="centerCrop"
         android:src="@android:drawable/ic_menu_mapmode" />
 
-    <!-- Top Floating Header -->
+    <!-- Top Floating Header (Only for full screen mode) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/headerCard"
         android:layout_width="match_parent"
@@ -63,14 +63,15 @@
         </RelativeLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Main Manifest Card -->
+    <!-- Main Manifest Card (Container for BottomSheet) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/manifestCard"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="220dp"
         app:cardBackgroundColor="@color/white"
-        app:cardCornerRadius="45dp"
+        app:cardCornerRadius="0dp"
+        app:shapeAppearance="@style/BottomSheetShape"
         app:cardElevation="16dp"
         app:strokeWidth="0dp"
         app:layout_constraintBottom_toTopOf="@id/navCard"
@@ -87,109 +88,68 @@
                 android:layout_width="50dp"
                 android:layout_height="5dp"
                 android:layout_gravity="center_horizontal"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="20dp"/>
+                android:layout_marginBottom="16dp"
+                android:background="#E2E8F0" />
 
             <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
+
                     <TextView
+                        android:id="@+id/tvCurrentStopName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Bahria Gate Stop"
                         android:textColor="#0D1B3E"
-                        android:textSize="24sp"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="🕒 07:12 AM"
+                        android:layout_marginTop="2dp"
+                        android:text="🕒 Scheduled: 07:12 AM"
                         android:textColor="#64748B"
-                        android:textSize="16sp" />
+                        android:textSize="13sp" />
                 </LinearLayout>
 
-                <!-- Arrived Rounded Rectangular Badge -->
+                <!-- Arrived Badge -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
                     app:cardBackgroundColor="#DCFCE7"
-                    app:cardCornerRadius="10dp"
+                    app:cardCornerRadius="8dp"
                     app:cardElevation="0dp"
                     app:strokeColor="#10B981"
                     app:strokeWidth="1dp">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="8dp"
-                        android:text="● ARRIVED"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:text="ARRIVED"
                         android:textColor="#10B981"
-                        android:textSize="12sp"
+                        android:textSize="10sp"
                         android:textStyle="bold" />
                 </com.google.android.material.card.MaterialCardView>
             </RelativeLayout>
 
-            <!-- Manifest Section with Bold Lines -->
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:layout_marginBottom="16dp">
-
-                <View
-                    android:id="@+id/lineManifestTop"
-                    android:layout_width="match_parent"
-                    android:layout_height="2dp"
-                    android:background="#CBD5E1"
-                    android:layout_alignParentTop="true"/>
-
-                <TextView
-                    android:id="@+id/tvManifestLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_below="@id/lineManifestTop"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:text="MANIFEST (08)"
-                    android:textColor="#64748B"
-                    android:letterSpacing="0.1"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnMarkAllPresent"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:text="MARK ALL PRESENT"
-                    android:textColor="#2563EB"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:paddingHorizontal="16dp"
-                    app:strokeColor="#2563EB"
-                    app:strokeWidth="1.5dp"
-                    app:cornerRadius="12dp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="2dp"
-                    android:background="#CBD5E1"
-                    android:layout_below="@id/tvManifestLabel"/>
-            </RelativeLayout>
+            <!-- Manifest Section Removed as requested -->
 
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
+                android:layout_marginTop="12dp"
                 android:scrollbars="none">
 
                 <LinearLayout
@@ -199,136 +159,320 @@
 
                     <!-- Student 1 -->
                     <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardS1"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="24dp"
-                        app:cardElevation="6dp"
+                        android:layout_marginBottom="12dp"
+                        app:cardBackgroundColor="#FFFFFF"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="3dp"
                         app:strokeColor="#F1F5F9"
                         app:strokeWidth="1dp">
-                        <RelativeLayout android:layout_width="match_parent" android:padding="16dp" android:layout_height="wrap_content">
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="14dp">
+
                             <com.google.android.material.imageview.ShapeableImageView
-                                android:id="@+id/ivS1"
-                                android:layout_width="65dp"
-                                android:layout_height="65dp"
+                                android:id="@+id/ivStudentS1"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
                                 android:src="@drawable/ic_driver"
-                                android:scaleType="centerCrop"
-                                app:shapeAppearanceOverlay="@style/RoundedCorner12" />
-                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/ivS1" android:orientation="vertical" android:layout_centerVertical="true">
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ali Hamza" android:textColor="#0D1B3E" android:textSize="18sp" android:textStyle="bold" />
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BSCS • 5th Sem" android:textColor="#64748B" android:textSize="14sp" />
+                                app:shapeAppearanceOverlay="@style/CircleImage"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toStartOf="@+id/barrierS1"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent"
+                                android:layout_marginStart="60dp">
+
+                                <TextView
+                                    android:id="@+id/tvStudentNameS1"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Ali Hamza"
+                                    android:textColor="#0F172A"
+                                    android:textSize="17sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvStudentDetailsS1"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="ID: #FC-9901 • BSCS"
+                                    android:textColor="#64748B"
+                                    android:textSize="13sp" />
                             </LinearLayout>
-                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:orientation="vertical">
+
+                            <androidx.constraintlayout.widget.Barrier
+                                android:id="@+id/barrierS1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                app:barrierDirection="start"
+                                app:constraint_referenced_ids="layoutMarkS1,layoutStatusS1" />
+
+                            <!-- Mark Attendance Buttons -->
+                            <LinearLayout
+                                android:id="@+id/layoutMarkS1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:visibility="visible"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+
                                 <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAbsentS1"
                                     style="@style/Widget.Material3.Button.TonalButton"
-                                    android:layout_width="110dp"
-                                    android:layout_height="40dp"
-                                    android:text="Present"
-                                    android:textSize="12sp"
-                                    android:textColor="#10B981"
-                                    app:icon="@drawable/checkcircle"
-                                    app:iconTint="#10B981"
-                                    app:iconSize="18dp"
-                                    app:iconGravity="textStart"
-                                    app:iconPadding="8dp"
+                                    android:layout_width="48dp"
+                                    android:layout_height="44dp"
+                                    android:layout_marginEnd="8dp"
                                     android:padding="0dp"
-                                    app:backgroundTint="#DCFCE7"
-                                    app:strokeColor="#10B981"
-                                    app:strokeWidth="1.2dp"
-                                    app:cornerRadius="12dp"/>
-                                <com.google.android.material.button.MaterialButton
-                                    style="@style/Widget.Material3.Button.TonalButton"
-                                    android:layout_width="110dp"
-                                    android:layout_height="40dp"
-                                    android:layout_marginTop="8dp"
-                                    android:text="Absent"
-                                    android:textSize="12sp"
-                                    android:textColor="#EF4444"
-                                    app:icon="@drawable/crosscircle"
-                                    app:iconTint="#EF4444"
-                                    app:iconSize="18dp"
-                                    app:iconGravity="textStart"
-                                    app:iconPadding="8dp"
-                                    android:padding="0dp"
+                                    android:insetLeft="0dp"
+                                    android:insetTop="0dp"
+                                    android:insetRight="0dp"
+                                    android:insetBottom="0dp"
                                     app:backgroundTint="#FEE2E2"
-                                    app:strokeColor="#EF4444"
-                                    app:strokeWidth="1.2dp"
-                                    app:cornerRadius="12dp"/>
+                                    app:cornerRadius="12dp"
+                                    app:icon="@drawable/crosscircle"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="0dp"
+                                    app:iconSize="28dp"
+                                    app:iconTint="#EF4444" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnPresentS1"
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="48dp"
+                                    android:layout_height="44dp"
+                                    android:padding="0dp"
+                                    android:insetLeft="0dp"
+                                    android:insetTop="0dp"
+                                    android:insetRight="0dp"
+                                    android:insetBottom="0dp"
+                                    app:backgroundTint="#DCFCE7"
+                                    app:cornerRadius="12dp"
+                                    app:icon="@drawable/checkcircle"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="0dp"
+                                    app:iconSize="28dp"
+                                    app:iconTint="#10B981" />
                             </LinearLayout>
-                        </RelativeLayout>
+
+                            <!-- Status Display -->
+                            <LinearLayout
+                                android:id="@+id/layoutStatusS1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:visibility="gone"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+
+                                <TextView
+                                    android:id="@+id/tvStatusBadgeS1"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:background="@drawable/bg_badge"
+                                    android:paddingHorizontal="12dp"
+                                    android:paddingVertical="6dp"
+                                    android:text="PRESENT"
+                                    android:textColor="#10B981"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <ImageView
+                                    android:id="@+id/btnEditS1"
+                                    android:layout_width="32dp"
+                                    android:layout_height="32dp"
+                                    android:layout_marginStart="8dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="6dp"
+                                    android:src="@drawable/edit"
+                                    app:tint="#94A3B8" />
+                            </LinearLayout>
+
+                        </androidx.constraintlayout.widget.ConstraintLayout>
                     </com.google.android.material.card.MaterialCardView>
 
                     <!-- Student 2 -->
                     <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardS2"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="16dp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="24dp"
-                        app:cardElevation="6dp"
+                        android:layout_marginBottom="12dp"
+                        app:cardBackgroundColor="#FFFFFF"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="3dp"
                         app:strokeColor="#F1F5F9"
                         app:strokeWidth="1dp">
-                        <RelativeLayout android:layout_width="match_parent" android:padding="16dp" android:layout_height="wrap_content">
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="14dp">
+
                             <com.google.android.material.imageview.ShapeableImageView
-                                android:id="@+id/ivS2"
-                                android:layout_width="65dp"
-                                android:layout_height="65dp"
+                                android:id="@+id/ivStudentS2"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
                                 android:src="@drawable/ic_driver"
-                                android:scaleType="centerCrop"
-                                app:shapeAppearanceOverlay="@style/RoundedCorner12" />
-                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_toEndOf="@id/ivS2" android:orientation="vertical" android:layout_centerVertical="true">
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sarah Jenkins" android:textColor="#0D1B3E" android:textSize="18sp" android:textStyle="bold" />
-                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BBA • 3rd Sem" android:textColor="#64748B" android:textSize="14sp" />
+                                app:shapeAppearanceOverlay="@style/CircleImage"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toStartOf="@+id/barrierS2"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent"
+                                android:layout_marginStart="60dp">
+
+                                <TextView
+                                    android:id="@+id/tvStudentNameS2"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Sarah Jenkins"
+                                    android:textColor="#0F172A"
+                                    android:textSize="17sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvStudentDetailsS2"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="ID: #FC-9021 • BBA"
+                                    android:textColor="#64748B"
+                                    android:textSize="13sp" />
                             </LinearLayout>
-                            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:orientation="vertical">
+
+                            <androidx.constraintlayout.widget.Barrier
+                                android:id="@+id/barrierS2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                app:barrierDirection="start"
+                                app:constraint_referenced_ids="layoutMarkS2,layoutStatusS2" />
+
+                            <!-- Mark Attendance Buttons -->
+                            <LinearLayout
+                                android:id="@+id/layoutMarkS2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:visibility="visible"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+
                                 <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAbsentS2"
                                     style="@style/Widget.Material3.Button.TonalButton"
-                                    android:layout_width="110dp"
-                                    android:layout_height="40dp"
-                                    android:text="Present"
-                                    android:textSize="12sp"
-                                    android:textColor="#10B981"
-                                    app:icon="@drawable/checkcircle"
-                                    app:iconTint="#10B981"
-                                    app:iconSize="18dp"
-                                    app:iconGravity="textStart"
-                                    app:iconPadding="8dp"
+                                    android:layout_width="48dp"
+                                    android:layout_height="44dp"
+                                    android:layout_marginEnd="8dp"
                                     android:padding="0dp"
-                                    app:backgroundTint="#DCFCE7"
-                                    app:strokeColor="#10B981"
-                                    app:strokeWidth="1.2dp"
-                                    app:cornerRadius="12dp"/>
-                                <com.google.android.material.button.MaterialButton
-                                    style="@style/Widget.Material3.Button.TonalButton"
-                                    android:layout_width="110dp"
-                                    android:layout_height="40dp"
-                                    android:layout_marginTop="8dp"
-                                    android:text="Absent"
-                                    android:textSize="12sp"
-                                    android:textColor="#EF4444"
-                                    app:icon="@drawable/crosscircle"
-                                    app:iconTint="#EF4444"
-                                    app:iconSize="18dp"
-                                    app:iconGravity="textStart"
-                                    app:iconPadding="8dp"
-                                    android:padding="0dp"
+                                    android:insetLeft="0dp"
+                                    android:insetTop="0dp"
+                                    android:insetRight="0dp"
+                                    android:insetBottom="0dp"
                                     app:backgroundTint="#FEE2E2"
-                                    app:strokeColor="#EF4444"
-                                    app:strokeWidth="1.2dp"
-                                    app:cornerRadius="12dp"/>
+                                    app:cornerRadius="12dp"
+                                    app:icon="@drawable/crosscircle"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="0dp"
+                                    app:iconSize="28dp"
+                                    app:iconTint="#EF4444" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnPresentS2"
+                                    style="@style/Widget.Material3.Button.TonalButton"
+                                    android:layout_width="48dp"
+                                    android:layout_height="44dp"
+                                    android:padding="0dp"
+                                    android:insetLeft="0dp"
+                                    android:insetTop="0dp"
+                                    android:insetRight="0dp"
+                                    android:insetBottom="0dp"
+                                    app:backgroundTint="#DCFCE7"
+                                    app:cornerRadius="12dp"
+                                    app:icon="@drawable/checkcircle"
+                                    app:iconGravity="textStart"
+                                    app:iconPadding="0dp"
+                                    app:iconSize="28dp"
+                                    app:iconTint="#10B981" />
                             </LinearLayout>
-                        </RelativeLayout>
+
+                            <!-- Status Display -->
+                            <LinearLayout
+                                android:id="@+id/layoutStatusS2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:visibility="gone"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+
+                                <TextView
+                                    android:id="@+id/tvStatusBadgeS2"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:background="@drawable/bg_badge"
+                                    android:paddingHorizontal="12dp"
+                                    android:paddingVertical="6dp"
+                                    android:text="PRESENT"
+                                    android:textColor="#10B981"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <ImageView
+                                    android:id="@+id/btnEditS2"
+                                    android:layout_width="32dp"
+                                    android:layout_height="32dp"
+                                    android:layout_marginStart="8dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="6dp"
+                                    android:src="@drawable/edit"
+                                    app:tint="#94A3B8" />
+                            </LinearLayout>
+
+                        </androidx.constraintlayout.widget.ConstraintLayout>
                     </com.google.android.material.card.MaterialCardView>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="8dp"
                         android:gravity="center_vertical">
-                        <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/cloudsync" app:tint="#2563EB" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="Attendance syncing to cloud..." android:textColor="#64748B" android:textSize="14sp" />
+
+                        <ImageView
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/cloudsync"
+                            app:tint="#2563EB" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:text="Syncing..."
+                            android:textColor="#64748B"
+                            android:textSize="12sp" />
                     </LinearLayout>
 
                 </LinearLayout>
@@ -337,40 +481,41 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSkip"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="62dp"
+                    android:layout_height="56dp"
                     android:layout_weight="0.4"
-                    android:text="SKIP STOP"
-                    android:textColor="#0D1B3E"
+                    android:text="SKIP"
+                    android:textColor="#64748B"
+                    android:textSize="14sp"
                     android:textStyle="bold"
-                    app:strokeColor="#CBD5E1"
-                    app:strokeWidth="1.5dp"
-                    app:cornerRadius="16dp" />
+                    app:cornerRadius="16dp"
+                    app:strokeColor="#E2E8F0"
+                    app:strokeWidth="1dp" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSaveAttendance"
                     android:layout_width="0dp"
-                    android:layout_height="62dp"
-                    android:layout_marginStart="14dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="0.6"
                     android:backgroundTint="#0D1B3E"
                     android:text="SAVE ATTENDANCE"
                     android:textColor="@color/white"
+                    android:textSize="14sp"
                     android:textStyle="bold"
-                    app:cornerRadius="16dp"
-                    app:icon="@android:drawable/ic_media_play"
-                    app:iconGravity="textEnd"
-                    app:iconTint="@color/white" />
+                    app:cornerRadius="16dp" />
             </LinearLayout>
 
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Bottom Navigation Card -->
+    <!-- Bottom Navigation Card (Only for full screen mode) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/navCard"
         android:layout_width="match_parent"

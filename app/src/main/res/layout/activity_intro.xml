@@ -63,4 +63,16 @@
         android:elevation="4dp"
         app:borderWidth="0dp" />
 
+    <ProgressBar
+        android:id="@+id/loadingIndicator"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:indeterminateTint="@color/white"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/fabNextAction"
+        app:layout_constraintEnd_toEndOf="@id/fabNextAction"
+        app:layout_constraintStart_toStartOf="@id/fabNextAction"
+        app:layout_constraintTop_toTopOf="@id/fabNextAction"
+        android:elevation="10dp" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

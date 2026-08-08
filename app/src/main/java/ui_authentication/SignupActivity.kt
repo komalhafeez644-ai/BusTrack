@@ -12,6 +12,7 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import utils.ViewUtils
 
 class SignupActivity : AppCompatActivity() {
 
@@ -25,10 +26,14 @@ class SignupActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.tvSignIn.setOnClickListener {
-            finish()
+            ViewUtils.applyClickEffect(it)
+            it.postDelayed({
+                finish()
+            }, 200)
         }
 
         binding.btnCreateAccount.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
             handleSignup()
         }
     }

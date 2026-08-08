@@ -25,22 +25,24 @@ class AttendanceViewModel : ViewModel() {
     }
 
     private fun loadData() {
-
-        allRecords.clear()
-
-        allRecords.addAll(
-            listOf(
-                AttendanceRecordModel("FC-9901", "Ali Khan", "Route 1", "Green Valley", "07:20 AM", "08:05 AM", "02:20 PM", "03:05 PM", "24/05/2026"),
-                AttendanceRecordModel("FC-9021", "Arjun Jayaram", "Route 1", "Oak Ridge Estates", "07:15 AM", "08:00 AM", "02:35 PM", "03:20 PM", "24/05/2026"),
-                AttendanceRecordModel("FC-9104", "Sarah Mitchell", "Route 2", "Silver Springs", "07:30 AM", "08:15 AM", "02:15 PM", "03:00 PM", "24/05/2026"),
-                AttendanceRecordModel("FC-8850", "Leo Knight", "Route 3", "Maple Street", "Absent", "Absent", "Absent", "Absent", "23/05/2026"),
-                AttendanceRecordModel("FC-7721", "Emma Watson", "Route 3", "West Side", "07:10 AM", "07:55 AM", "02:40 PM", "03:25 PM", "24/05/2026"),
-                AttendanceRecordModel("FC-9902", "Hina Ali", "Route 2", "City Center", "07:35 AM", "08:20 AM", "02:45 PM", "03:30 PM", "24/05/2026"),
-                AttendanceRecordModel("FC-9903", "Usman Tariq", "Route 3", "Lake View", "Absent", "Absent", "Absent", "Absent", "24/05/2026")
-            )
-        )
-
-        applyFilter()
+        com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { list ->
+            allRecords.clear()
+            
+            // Add initial mock data if database is empty for demo purposes
+            if (list.isEmpty()) {
+                allRecords.addAll(
+                    listOf(
+                        AttendanceRecordModel("FC-9901", "Ali Khan", "Route 1", "Green Valley", "07:20 AM", "08:05 AM", "02:20 PM", "03:05 PM", "24/05/2026"),
+                        AttendanceRecordModel("FC-9021", "Arjun Jayaram", "Route 1", "Oak Ridge Estates", "07:15 AM", "08:00 AM", "02:35 PM", "03:20 PM", "24/05/2026"),
+                        AttendanceRecordModel("FC-9104", "Sarah Mitchell", "Route 2", "Silver Springs", "07:30 AM", "08:15 AM", "02:15 PM", "03:00 PM", "24/05/2026")
+                    )
+                )
+            } else {
+                allRecords.addAll(list)
+            }
+            
+            applyFilter()
+        }
     }
 
     // ⭐ MAIN FILTER FUNCTION (Route + Date)

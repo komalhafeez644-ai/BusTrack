@@ -11,5 +11,8 @@ data class DriverModel(
     var profileImageUrl: String = "",
     var cnic: String = "",
     var phone: String = "",
-    var email: String = "" // Yeh humne verify kiya ke naya field available hai
+    var email: String = "",
+    var latitude: Double = 0.0,
+    var longitude: Double = 0.0,
+    var lastUpdated: Long = 0L
 ) : Serializable

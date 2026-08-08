@@ -70,8 +70,6 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
             binding.btnConfirm.setTextColor(ContextCompat.getColor(this, R.color.white))
             
             saveToRepository()
-            showSuccessDialog()
-            viewModel.confirmAndNotify()
         }
 
         binding.btnBack.setOnClickListener {
@@ -103,12 +101,24 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
     private fun saveToRepository() {
         val originalData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
         originalData?.let {
+            if (it.studentIdString.isEmpty()) {
+                Toast.makeText(this, "Error: Student ID missing", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
             StudentRepository.assignRouteToStudent(
                 it.studentIdString,
                 it.bestRoute,
                 com.example.bustrack_app.data.RouteRepository.getBusForRoute(it.bestRoute),
                 it.nearestStop
-            )
+            ) { success ->
+                if (success) {
+                    showSuccessDialog()
+                    viewModel.confirmAndNotify()
+                } else {
+                    Toast.makeText(this, "Failed to save assignment in database", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

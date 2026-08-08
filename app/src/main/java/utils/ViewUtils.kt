@@ -5,14 +5,14 @@ import android.view.View
 object ViewUtils {
     fun applyClickEffect(view: View) {
         view.animate()
-            .scaleX(0.95f)
-            .scaleY(0.95f)
-            .setDuration(100)
+            .scaleX(0.9f)
+            .scaleY(0.9f)
+            .setDuration(150)
             .withEndAction {
                 view.animate()
                     .scaleX(1f)
                     .scaleY(1f)
-                    .setDuration(100)
+                    .setDuration(150)
                     .start()
             }
             .start()

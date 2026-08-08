@@ -72,10 +72,10 @@ class BusApplicationsActivity : AppCompatActivity() {
     }
 
     private fun setupDummyData() {
-        applicationsList.add(ApplicationModel(1, "Aryan Sharma", "Grade 10 • Section B", "Green Park Sector 4", "92 3459745703", "2 HRS AGO", "Pending", R.drawable.img, "Rajesh Sharma", "Route-01", "95%", "North Gate", "0.8km away"))
-        applicationsList.add(ApplicationModel(2, "Vanya Patel", "Grade 8 • Section A", "Sunrise Heights", "92 3456789012", "5 HRS AGO", "Pending", R.drawable.ic_person, "Vikram Patel", "Route-05", "88%", "Sunrise Point", "1.2km away"))
-        applicationsList.add(ApplicationModel(3, "Rohan Gupta", "Grade 12 • Section C", "Oakwood Avenue", "92 3123456789", "Yesterday", "Approved", R.drawable.img, "Sanjay Gupta", "Route-02", "75%", "Oakwood Entry", "2.1km away"))
-        applicationsList.add(ApplicationModel(4, "Zoya Khan", "Grade 9 • Section D", "Blue Tower", "92 3001234567", "3 HRS AGO", "Approved", R.drawable.ic_person, "Imran Khan", "Route-01", "98%", "Central Hub", "0.5km away"))
+        applicationsList.add(ApplicationModel(1, "Aryan Sharma", "Grade 10 • Section B", "Green Park Sector 4", "92 3459745703", "2 HRS AGO", "Pending", R.drawable.img, "", "BT-8821", "Rajesh Sharma", "Route-01", "95%", "North Gate", "0.8km away", 0.0, 0.0, "STU_001"))
+        applicationsList.add(ApplicationModel(2, "Vanya Patel", "Grade 8 • Section A", "Sunrise Heights", "92 3456789012", "5 HRS AGO", "Pending", R.drawable.ic_person, "", "BT-8822", "Vikram Patel", "Route-05", "88%", "Sunrise Point", "1.2km away", 0.0, 0.0, "STU_002"))
+        applicationsList.add(ApplicationModel(3, "Rohan Gupta", "Grade 12 • Section C", "Oakwood Avenue", "92 3123456789", "Yesterday", "Approved", R.drawable.img, "", "BT-8823", "Sanjay Gupta", "Route-02", "75%", "Oakwood Entry", "2.1km away", 0.0, 0.0, "STU_003"))
+        applicationsList.add(ApplicationModel(4, "Zoya Khan", "Grade 9 • Section D", "Blue Tower", "92 3001234567", "3 HRS AGO", "Approved", R.drawable.ic_person, "", "BT-8824", "Imran Khan", "Route-01", "98%", "Central Hub", "0.5km away", 0.0, 0.0, "STU_004"))
     }
 
     private fun setupSearch(searchBox: EditText) {

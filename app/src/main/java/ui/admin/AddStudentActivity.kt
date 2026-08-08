@@ -179,7 +179,7 @@ class AddStudentActivity : AppCompatActivity() {
             profileImageUrl = imageUrl,
             fatherName = binding.etParentName.text.toString().trim(),
             phoneNumber = binding.etEmergencyContact.text.toString().trim(),
-            pickupTime = "TBD",
+            pickupTime = "ETA: --",
             insuranceStatus = "Pending",
             latitude = selectedLat,
             longitude = selectedLng

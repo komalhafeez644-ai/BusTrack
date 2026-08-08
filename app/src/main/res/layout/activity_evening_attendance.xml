@@ -87,7 +87,7 @@
                     android:layout_width="0dp"
                     android:layout_height="50dp"
                     android:layout_weight="1"
-                    android:text="MORNING 🌅"
+                    android:text="MORNING"
                     android:textSize="13sp"
                     android:textStyle="bold"
                     app:cornerRadius="12dp" />
@@ -98,7 +98,7 @@
                     android:layout_width="0dp"
                     android:layout_height="50dp"
                     android:layout_weight="1"
-                    android:text="EVENING 🌆"
+                    android:text="EVENING"
                     android:textSize="13sp"
                     android:textStyle="bold"
                     app:cornerRadius="12dp" />
@@ -145,9 +145,28 @@
         android:layout_marginTop="12dp"
         android:paddingHorizontal="20dp"
         android:clipToPadding="false"
-        android:paddingBottom="24dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        android:paddingBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/btnSaveAttendance"
         app:layout_constraintTop_toBottomOf="@id/filterCard"
         tools:listitem="@layout/item_evening_attendance_student" />
+
+    <!-- Save Attendance Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSaveAttendance"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="100dp"
+        android:backgroundTint="#0D1B3E"
+        android:text="SAVE ATTENDANCE"
+        android:textColor="@color/white"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        app:cornerRadius="16dp"
+        app:icon="@drawable/checkcircle"
+        app:iconGravity="textStart"
+        app:iconPadding="12dp"
+        app:iconTint="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
