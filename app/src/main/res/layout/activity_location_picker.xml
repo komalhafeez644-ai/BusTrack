@@ -30,57 +30,59 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="4dp">
+            android:orientation="vertical">
 
-            <ImageView
-                android:id="@+id/btnBack"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:padding="4dp"
-                android:src="@drawable/outline_arrow_back_24"
-                app:tint="@color/primaryDark" />
-
-            <EditText
-                android:id="@+id/etSearchLocation"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="@null"
-                android:hint="Search pickup location..."
-                android:imeOptions="actionSearch"
-                android:inputType="text"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:paddingHorizontal="12dp"
-                android:textSize="15sp" />
+                android:paddingVertical="4dp">
 
-            <ImageView
-                android:id="@+id/btnClearSearch"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:padding="6dp"
-                android:src="@drawable/ic_close"
+                <ImageView
+                    android:id="@+id/btnBack"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:padding="4dp"
+                    android:src="@drawable/outline_arrow_back_24"
+                    app:tint="@color/primaryDark" />
+
+                <EditText
+                    android:id="@+id/etSearchLocation"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="Search pickup location..."
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:paddingHorizontal="12dp"
+                    android:textSize="15sp" />
+
+                <ImageView
+                    android:id="@+id/btnClearSearch"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_close"
+                    android:visibility="gone"
+                    app:tint="@color/lightGray" />
+
+            </LinearLayout>
+
+            <!-- Search Results List -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvSearchResults"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxHeight="250dp"
                 android:visibility="gone"
-                app:tint="@color/lightGray" />
+                tools:listitem="@layout/item_search_result"
+                tools:visibility="visible" />
 
         </LinearLayout>
     </androidx.cardview.widget.CardView>
-
-    <!-- Center Marker -->
-    <ImageView
-        android:id="@+id/ivCenterMarker"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:src="@drawable/outline_location"
-        android:clickable="false"
-        android:focusable="false"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="#DC2626"
-        android:translationY="-20dp"/>
 
     <!-- Bottom Info Card -->
     <androidx.cardview.widget.CardView

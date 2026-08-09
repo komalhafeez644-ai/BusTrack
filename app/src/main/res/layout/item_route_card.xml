@@ -48,7 +48,7 @@
                 android:textStyle="bold"
                 tools:ignore="HardcodedText" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switchRouteStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -57,7 +57,7 @@
                 android:checked="true"
                 android:minHeight="48dp"
                 app:thumbTint="@android:color/white"
-                android:track="@drawable/custom_switch_track"
+                app:trackTint="@color/switch_track_selector"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         </RelativeLayout>

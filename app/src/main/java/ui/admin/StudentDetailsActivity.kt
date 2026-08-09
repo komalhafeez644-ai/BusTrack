@@ -33,6 +33,11 @@ class StudentDetailsActivity : AppCompatActivity() {
 
         observeData()
         setupClickListeners()
+        
+        // Observe student list to keep this screen in sync
+        StudentRepository.studentList.observe(this) {
+            viewModel.loadStudentDetails(currentStudentId)
+        }
     }
 
     override fun onResume() {

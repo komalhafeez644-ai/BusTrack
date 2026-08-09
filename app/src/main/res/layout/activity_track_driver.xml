@@ -134,12 +134,14 @@
                             android:layout_toEndOf="@id/ivBusIcon"
                             android:orientation="vertical">
                             <TextView
+                                android:id="@+id/tvBusIdSheet"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="BUS-101"
                                 android:textStyle="bold"
                                 android:textColor="@color/text_dark_navy" />
                             <TextView
+                                android:id="@+id/tvRouteNameSheet"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="Route 1 (North)"
@@ -147,6 +149,7 @@
                                 android:textColor="@color/lightGray" />
                         </LinearLayout>
                         <TextView
+                            android:id="@+id/tvDriverNameSheet"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_alignParentEnd="true"
@@ -171,6 +174,7 @@
                             app:tint="#4CAF50"
                             android:contentDescription="Location" />
                         <TextView
+                            android:id="@+id/tvCurrentLocationSheet"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
@@ -196,6 +200,7 @@
                     android:textColor="@color/text_dark_navy"
                     android:textSize="16sp" />
                 <TextView
+                    android:id="@+id/tvViewAll"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_alignParentEnd="true"
@@ -205,288 +210,15 @@
                     android:textSize="12sp" />
             </RelativeLayout>
 
-            <!-- Detailed Timeline (Matching the provided Image) -->
-            <LinearLayout
+            <!-- Dynamic Timeline -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvStopsTimeline"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" android:paddingHorizontal="16dp">
+                android:paddingHorizontal="16dp"
+                android:nestedScrollingEnabled="false"
+                tools:listitem="@layout/item_stop_timeline" />
 
-                <!-- Stop 1 (Completed) -->
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-                    <LinearLayout
-                        android:id="@+id/timeline1"
-                        android:layout_width="32dp"
-                        android:layout_height="60dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
-                        <ImageView
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
-                            android:src="@drawable/bg_chip_selected"
-                            android:backgroundTint="#4CAF50" />
-                        <View
-                            android:layout_width="2dp"
-                            android:layout_height="match_parent"
-                            android:background="#4CAF50" />
-                    </LinearLayout>
-                    <androidx.cardview.widget.CardView
-                        android:id="@+id/n1"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_toEndOf="@id/timeline1"
-                        app:cardCornerRadius="11dp"
-                        app:cardElevation="0dp"
-                        app:cardBackgroundColor="#F0F0F0">
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:text="1"
-                            android:textSize="10sp" />
-                    </androidx.cardview.widget.CardView>
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_toEndOf="@id/n1"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Sunrise Apartments"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_dark_navy" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="09:35 AM"
-                            android:textSize="11sp"
-                            android:textColor="@color/lightGray" />
-                    </LinearLayout>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:text="Completed"
-                        android:textColor="#4CAF50"
-                        android:textSize="10sp"
-                        android:background="@drawable/bg_chip_selected"
-                        android:backgroundTint="#E8F5E9"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="4dp" />
-                </RelativeLayout>
-
-                <!-- Stop 2 (Completed) -->
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-                    <LinearLayout
-                        android:id="@+id/timeline2"
-                        android:layout_width="32dp"
-                        android:layout_height="60dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
-                        <ImageView
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
-                            android:src="@drawable/bg_chip_selected"
-                            android:backgroundTint="@color/primaryBlue" />
-                        <View
-                            android:layout_width="2dp"
-                            android:layout_height="match_parent"
-                            android:background="@color/primaryBlue" />
-                    </LinearLayout>
-                    <androidx.cardview.widget.CardView
-                        android:id="@+id/n2"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_toEndOf="@id/timeline2"
-                        app:cardCornerRadius="11dp"
-                        app:cardElevation="0dp"
-                        app:cardBackgroundColor="#F0F0F0">
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:text="2"
-                            android:textSize="10sp" />
-                    </androidx.cardview.widget.CardView>
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_toEndOf="@id/n2"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Maple Avenue"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_dark_navy" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="09:38 AM"
-                            android:textSize="11sp"
-                            android:textColor="@color/lightGray" />
-                    </LinearLayout>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:text="Completed"
-                        android:textColor="#4CAF50"
-                        android:textSize="10sp"
-                        android:background="@drawable/bg_chip_selected"
-                        android:backgroundTint="#E8F5E9"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="4dp" />
-                </RelativeLayout>
-
-                <!-- Stop 3 (Next Stop - Highlighted) -->
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_card"
-                    android:backgroundTint="#F0F7FF"
-                    android:padding="8dp"
-                    android:layout_marginBottom="4dp">
-                    <LinearLayout
-                        android:id="@+id/timeline3"
-                        android:layout_width="32dp"
-                        android:layout_height="60dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/directions_bus"
-                            app:tint="@color/primaryBlue"
-                            android:background="@drawable/bg_chip_selected"
-                            android:backgroundTint="#FFFFFF"
-                            android:padding="4dp"
-                            android:elevation="2dp" />
-                        <View
-                            android:layout_width="2dp"
-                            android:layout_height="match_parent"
-                            android:background="#E0E0E0" />
-                    </LinearLayout>
-                    <androidx.cardview.widget.CardView
-                        android:id="@+id/n3"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_toEndOf="@id/timeline3"
-                        app:cardCornerRadius="11dp"
-                        app:cardElevation="0dp"
-                        app:cardBackgroundColor="#E3EAF2">
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:text="3"
-                            android:textSize="10sp"
-                            android:textColor="@color/primaryBlue"
-                            android:textStyle="bold" />
-                    </androidx.cardview.widget.CardView>
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_toEndOf="@id/n3"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Greenfield School (Next Stop)"
-                            android:textStyle="bold"
-                            android:textColor="@color/primaryBlue" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="ETA: 5 min"
-                            android:textSize="11sp"
-                            android:textColor="@color/primaryBlue" />
-                    </LinearLayout>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:text="Upcoming"
-                        android:textColor="@color/primaryBlue"
-                        android:textSize="10sp"
-                        android:background="@drawable/bg_chip_selected"
-                        android:backgroundTint="#E1EFFF"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="4dp" />
-                </RelativeLayout>
-
-                <!-- Stop 4 (Future) -->
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-                    <LinearLayout
-                        android:id="@+id/timeline4"
-                        android:layout_width="32dp"
-                        android:layout_height="40dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
-                        <ImageView
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
-                            android:src="@drawable/bg_chip_unselected" />
-                    </LinearLayout>
-                    <androidx.cardview.widget.CardView
-                        android:id="@+id/n4"
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_toEndOf="@id/timeline4"
-                        app:cardCornerRadius="11dp"
-                        app:cardElevation="0dp"
-                        app:cardBackgroundColor="#F0F0F0">
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:text="4"
-                            android:textSize="10sp" />
-                    </androidx.cardview.widget.CardView>
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:layout_toEndOf="@id/n4"
-                        android:orientation="vertical">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="City Center"
-                            android:textColor="@color/text_dark_navy" />
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="09:50 AM"
-                            android:textSize="11sp"
-                            android:textColor="@color/lightGray" />
-                    </LinearLayout>
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:text="Upcoming"
-                        android:textColor="@color/lightGray"
-                        android:textSize="10sp"
-                        android:background="@drawable/bg_chip_unselected"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="4dp" />
-                </RelativeLayout>
-
-            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

@@ -40,77 +40,55 @@ class BusAdapter(
             binding.frameBusIcon.setBackgroundResource(R.drawable.bg_bus_circle_blue)
             binding.ivBusGraphic.setColorFilter(Color.parseColor("#1E88E5"))
 
-            // 3. Driver & Route Check (Unassigned Logic)
+            // 3. Driver & Route Check (Refined Status Logic)
             val driverName = bus.driverName
             val routeName = bus.routeName
 
-            // Agar driver ya route mein se KOI EK cheez bhi missing hai
-            val isUnassigned = driverName.isNullOrEmpty() || routeName.isNullOrEmpty()
+            val hasDriver = !driverName.isNullOrEmpty()
+            val hasRoute = !routeName.isNullOrEmpty()
 
-            if (isUnassigned) {
-                // Card text fields ko "Not Assigned" set karein
-                binding.txtDriverVal.text = "Not Assigned"
-                binding.txtRouteVal.text = "Not Assigned"
-
-                // Style ko Italic karein jaisa requirements mein hai
-                binding.txtDriverVal.setTypeface(null, Typeface.ITALIC)
-                binding.txtRouteVal.setTypeface(null, Typeface.ITALIC)
-
-                // Meta info icons hide karein
-                binding.ivDriverMetaIcon.visibility = View.GONE
-                binding.ivRouteMetaIcon.visibility = View.GONE
-
-                // Status Badge styling for UNASSIGNED (Light Orange Background)
-                binding.tvStatusBadge.text = "UNASSIGNED"
-                binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFE0B2"))
-                binding.tvStatusBadge.setTextColor(Color.parseColor("#E65100"))
-            } else {
-                // Agar dono assign hain to actual text show karein
+            // Set Driver Text
+            if (hasDriver) {
                 binding.txtDriverVal.text = driverName
-                binding.txtRouteVal.text = routeName
-
                 binding.txtDriverVal.setTypeface(null, Typeface.NORMAL)
-                binding.txtRouteVal.setTypeface(null, Typeface.NORMAL)
-
                 binding.ivDriverMetaIcon.visibility = View.VISIBLE
-                binding.ivRouteMetaIcon.visibility = View.VISIBLE
+            } else {
+                binding.txtDriverVal.text = "Not Assigned"
+                binding.txtDriverVal.setTypeface(null, Typeface.ITALIC)
+                binding.ivDriverMetaIcon.visibility = View.GONE
+            }
 
-                // Live Active/Inactive badge UI setup
-                val displayStatus = if (bus.status == "UNASSIGNED") "ACTIVE" else bus.status.uppercase()
-                binding.tvStatusBadge.text = displayStatus
-                
-                if (displayStatus == "ACTIVE") {
-                    binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E8F5E9")) // Modern Light Green
-                    binding.tvStatusBadge.setTextColor(Color.parseColor("#2E7D32"))     // Dark Green
-                } else {
-                    binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFEBEE")) // Modern Light Red
-                    binding.tvStatusBadge.setTextColor(Color.parseColor("#C62828"))     // Dark Red
-                }
+            // Set Route Text
+            if (hasRoute) {
+                binding.txtRouteVal.text = routeName
+                binding.txtRouteVal.setTypeface(null, Typeface.NORMAL)
+                binding.ivRouteMetaIcon.visibility = View.VISIBLE
+            } else {
+                binding.txtRouteVal.text = "Not Assigned"
+                binding.txtRouteVal.setTypeface(null, Typeface.ITALIC)
+                binding.ivRouteMetaIcon.visibility = View.GONE
+            }
+
+            // 3. Status Badge Logic (Operational Status)
+            val isBusActive = bus.status.equals("ACTIVE", ignoreCase = true)
+            
+            binding.tvStatusBadge.text = if (isBusActive) "ACTIVE" else "INACTIVE"
+            if (isBusActive) {
+                binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E8F5E9")) // Light Green
+                binding.tvStatusBadge.setTextColor(Color.parseColor("#2E7D32")) // Dark Green
+            } else {
+                binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFEBEE")) // Light Red
+                binding.tvStatusBadge.setTextColor(Color.parseColor("#C62828")) // Dark Red
             }
 
             // 4. Switch Toggle Handling
-            binding.switchBusStatus.setOnCheckedChangeListener(null) // Recycler view reuse loop protection
+            binding.switchBusStatus.setOnCheckedChangeListener(null)
+            binding.switchBusStatus.isChecked = isBusActive
+            binding.switchBusStatus.isEnabled = true // Always enabled for Active/Inactive toggle
 
-            // Switch tabhi ON dikhe jab status "ACTIVE" ho aur data missing na ho
-            val isActiveState = bus.status.equals("ACTIVE", ignoreCase = true) && !isUnassigned
-            binding.switchBusStatus.isChecked = isActiveState
-
-            // Unassigned bus ka switch state disabled (lock) rahega
-            binding.switchBusStatus.isEnabled = !isUnassigned
-
-            binding.switchBusStatus.setOnCheckedChangeListener { _, isChecked ->
-                val newStatus = if (isChecked) "ACTIVE" else "INACTIVE"
-                binding.tvStatusBadge.text = newStatus
-                
-                if (isChecked) {
-                    binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#E8F5E9"))
-                    binding.tvStatusBadge.setTextColor(Color.parseColor("#2E7D32"))
-                } else {
-                    binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFEBEE"))
-                    binding.tvStatusBadge.setTextColor(Color.parseColor("#C62828"))
-                }
-
-                // Main Activity callback ko notify karein
+            binding.switchBusStatus.setOnClickListener {
+                val isChecked = (it as androidx.appcompat.widget.SwitchCompat).isChecked
+                // Pass the event to Activity to handle confirmation logic
                 onStatusChanged(bus, isChecked)
             }
 

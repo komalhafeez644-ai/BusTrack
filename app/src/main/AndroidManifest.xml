@@ -63,6 +63,10 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="YOUR_API_KEY" />
 
+        <meta-data
+            android:name="com.mapbox.token"
+            android:value="@string/mapbox_access_token" />
+
         <activity
             android:name="ui.admin.DrawRouteActivity"
             android:exported="false" />

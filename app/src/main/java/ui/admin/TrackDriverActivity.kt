@@ -1,19 +1,29 @@
 package ui.admin
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.widget.NestedScrollView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
+import com.example.bustrack_app.adapter.NavigationStopsAdapter
+import com.example.bustrack_app.models.DriverModel
+import com.example.bustrack_app.models.RouteModel
+import com.example.bustrack_app.viewmodels.TrackDriverViewModel
 import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.mapbox.api.directions.v5.DirectionsCriteria
-import com.mapbox.api.directions.v5.MapboxDirections
-import com.mapbox.api.directions.v5.models.DirectionsResponse
-import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
@@ -24,19 +34,33 @@ import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.layers.getLayer
+import com.mapbox.maps.extension.style.sources.getSource
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.mapbox.turf.TurfMeasurement
 
 class TrackDriverActivity : AppCompatActivity() {
 
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<NestedScrollView>
     private var mapView: MapView? = null
+    private val viewModel: TrackDriverViewModel by viewModels()
+    
+    private var pointAnnotationManager: PointAnnotationManager? = null
+    private var driverMarker: PointAnnotation? = null
+    private val stopMarkers = mutableListOf<PointAnnotation>()
+    
+    private lateinit var stopsAdapter: NavigationStopsAdapter
     private val ROUTE_SOURCE_ID = "route-source-id"
     private val ROUTE_LAYER_ID = "route-layer-id"
+    
+    private val bitmapCache = mutableMapOf<Int, Bitmap>()
+    private var currentRouteId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,138 +68,183 @@ class TrackDriverActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
-        // Initialize Mapbox Map
-        mapView = findViewById(R.id.mapView)
-        mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
-            setupMapAnnotations()
+        val driverId = intent.getStringExtra("DRIVER_ID") ?: ""
+        if (driverId.isEmpty()) {
+            Toast.makeText(this, "Invalid Driver ID", Toast.LENGTH_SHORT).show()
+            finish()
+            return
         }
 
-        // Initialize Bottom Sheet
-        val bottomSheet = findViewById<NestedScrollView>(R.id.bottomSheet)
-        bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+        mapView = findViewById(R.id.mapView)
+        mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+            pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+            observeViewModel()
+        }
 
-        // Optional: Bottom Sheet state change listener
-        bottomSheetBehavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
-            override fun onStateChanged(bottomSheet: View, newState: Int) {
-                // Handle state changes
-            }
-
-            override fun onSlide(bottomSheet: View, slideOffset: Float) {
-                // Animation logic
-            }
-        })
+        setupBottomSheet()
+        viewModel.setDriverId(driverId)
 
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
     }
 
-    private fun setupMapAnnotations() {
-        val originPoint = Point.fromLngLat(73.0535, 33.5985) // FG College Rawalpindi
-        val destinationPoint = Point.fromLngLat(73.0450, 33.6050) // Nearby Saddar area
+    private fun setupBottomSheet() {
+        val bottomSheet = findViewById<NestedScrollView>(R.id.bottomSheet)
+        bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
         
-        // Add Markers for Origin and Destination
-        val annotationApi = mapView?.annotations
-        val pointAnnotationManager = annotationApi?.createPointAnnotationManager()
-        
-        // Origin Marker
-        val originOptions = PointAnnotationOptions()
-            .withPoint(originPoint)
-            .withTextField("Driver: Marcus Thompson")
-        pointAnnotationManager?.create(originOptions)
-
-        // Destination Marker
-        val destOptions = PointAnnotationOptions()
-            .withPoint(destinationPoint)
-            .withTextField("Bus Stop")
-        pointAnnotationManager?.create(destOptions)
-
-        // Fetch and draw route
-        getRoute(originPoint, destinationPoint)
+        stopsAdapter = NavigationStopsAdapter(emptyList())
+        val rvStops = findViewById<RecyclerView>(R.id.rvStopsTimeline)
+        rvStops.layoutManager = LinearLayoutManager(this)
+        rvStops.adapter = stopsAdapter
     }
 
-    private fun getRoute(origin: Point, destination: Point) {
-        val client = MapboxDirections.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .routeOptions(
-                RouteOptions.builder()
-                    .coordinatesList(listOf(origin, destination))
-                    .profile(DirectionsCriteria.PROFILE_DRIVING)
-                    .overview(DirectionsCriteria.OVERVIEW_FULL)
-                    .build()
-            )
-            .build()
+    private fun observeViewModel() {
+        viewModel.targetDriver.observe(this) { driver ->
+            driver?.let { updateUI(it) }
+        }
 
-        client.enqueueCall(object : Callback<DirectionsResponse> {
-            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                if (response.body() == null || response.body()!!.routes().isEmpty()) {
-                    Log.e("TrackDriverActivity", "No routes found")
-                    return
+        viewModel.assignedRoute.observe(this) { route ->
+            route?.let { 
+                if (currentRouteId != it.id) {
+                    currentRouteId = it.id
+                    drawRouteOnMap(it)
                 }
-
-                val currentRoute = response.body()!!.routes()[0]
-                val geometry = currentRoute.geometry() ?: return
-                
-                // Draw route on map
-                drawRoute(geometry)
-            }
-
-            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                Log.e("TrackDriverActivity", "Error: " + t.message)
-                Toast.makeText(this@TrackDriverActivity, "Error fetching route", Toast.LENGTH_SHORT).show()
-            }
-        })
-    }
-
-    private fun drawRoute(geometry: String) {
-        mapView?.mapboxMap?.getStyle { style ->
-            // Remove existing source and layer if they exist
-            if (style.styleSourceExists(ROUTE_SOURCE_ID)) {
-                // style.removeStyleLayer(ROUTE_LAYER_ID) // V11 handles this differently or you can just update source
-                // For simplicity in this example, we check and add
-            }
-
-            val lineString = LineString.fromPolyline(geometry, 6)
-            
-            // Add Source
-            if (!style.styleSourceExists(ROUTE_SOURCE_ID)) {
-                style.addSource(geoJsonSource(ROUTE_SOURCE_ID) {
-                    geometry(lineString)
-                })
-            }
-
-            // Add Layer
-            if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
-                style.addLayer(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
-                    lineColor(Color.parseColor("#3bb2d0"))
-                    lineWidth(5.0)
-                    lineJoin(com.mapbox.maps.extension.style.layers.properties.generated.LineJoin.ROUND)
-                })
-            }
-
-            // Zoom to fit route
-            val cameraOptions = mapView?.mapboxMap?.cameraForGeometry(
-                lineString,
-                EdgeInsets(100.0, 100.0, 100.0, 100.0)
-            )
-            if (cameraOptions != null) {
-                mapView?.mapboxMap?.setCamera(cameraOptions)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        mapView?.onStart()
+    private fun updateUI(driver: DriverModel) {
+        // Update Bottom Sheet Header
+        findViewById<TextView>(R.id.tvBusIdSheet).text = driver.assignedBus ?: "N/A"
+        findViewById<TextView>(R.id.tvDriverNameSheet).text = driver.name
+        findViewById<TextView>(R.id.tvRouteNameSheet).text = driver.route ?: "No Route"
+        findViewById<TextView>(R.id.tvCurrentLocationSheet).text = java.util.Locale.getDefault().let { locale ->
+            "Current: Lat ${String.format(locale, "%.4f", driver.latitude)}, Lng ${String.format(locale, "%.4f", driver.longitude)}"
+        }
+
+        // Update Marker
+        val point = Point.fromLngLat(driver.longitude, driver.latitude)
+        if (driverMarker == null) {
+            val bitmap = bitmapFromDrawableRes(this, R.drawable.ic_driver)
+            bitmap?.let {
+                val options = PointAnnotationOptions()
+                    .withPoint(point)
+                    .withIconImage(it)
+                    .withIconSize(1.5)
+                driverMarker = pointAnnotationManager?.create(options)
+            }
+        } else {
+            driverMarker?.point = point
+        }
+
+        // Calculate Stop Progress
+        viewModel.assignedRoute.value?.let { route ->
+            calculateProgress(driver, route)
+        }
+        
+        // Smooth Camera Move
+        mapView?.mapboxMap?.flyTo(
+            CameraOptions.Builder().center(point).build(),
+            MapAnimationOptions.mapAnimationOptions { duration(1000) }
+        )
     }
 
-    override fun onStop() {
-        super.onStop()
-        mapView?.onStop()
+    private fun calculateProgress(driver: DriverModel, route: RouteModel) {
+        val driverPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+        var currentIndex = 0
+        var status = "NEXT"
+
+        for (i in route.stopsList.indices) {
+            val stop = route.stopsList[i]
+            val stopPoint = Point.fromLngLat(stop.longitude, stop.latitude)
+            val distance = TurfMeasurement.distance(driverPoint, stopPoint, com.mapbox.turf.TurfConstants.UNIT_METERS)
+            
+            if (distance < 50.0) { // 50m radius
+                currentIndex = i
+                status = "ARRIVED"
+                break
+            } else {
+                // Determine if we passed it or are approaching
+                // Simple version: find the first stop that is in front of us
+                // For a more accurate logic, we'd need to check route orientation
+                currentIndex = i
+                status = "NEXT"
+            }
+        }
+        
+        stopsAdapter.updateStops(route.stopsList, currentIndex, status)
     }
 
-    override fun onDestroy() {
+    private fun drawRouteOnMap(route: RouteModel) {
+        if (route.pathPoints.isEmpty()) return
+
+        val points = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
+        val lineString = LineString.fromLngLats(points)
+
+        mapView?.mapboxMap?.getStyle { style ->
+            if (!style.styleSourceExists(ROUTE_SOURCE_ID)) {
+                style.addSource(geoJsonSource(ROUTE_SOURCE_ID) {
+                    geometry(lineString)
+                })
+            } else {
+                val source = style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+                source?.geometry(lineString)
+            }
+
+            if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
+                style.addLayer(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
+                    lineColor(Color.parseColor("#2563EB"))
+                    lineWidth(6.0)
+                    lineOpacity(0.6)
+                })
+            }
+        }
+
+        // Update Stop Markers
+        stopMarkers.forEach { pointAnnotationManager?.delete(it) }
+        stopMarkers.clear()
+        
+        route.stopsList.forEach { stop ->
+            val bitmap = bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)
+            bitmap?.let {
+                val options = PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(stop.longitude, stop.latitude))
+                    .withIconImage(it)
+                    .withIconSize(1.0)
+                    .withTextField(stop.stopName)
+                    .withTextSize(10.0)
+                    .withTextOffset(listOf(0.0, 1.5))
+                pointAnnotationManager?.create(options)?.let { stopMarkers.add(it) }
+            }
+        }
+    }
+
+    private fun bitmapFromDrawableRes(context: Context, resourceId: Int): Bitmap? {
+        if (bitmapCache.containsKey(resourceId)) return bitmapCache[resourceId]
+        val drawable = ContextCompat.getDrawable(context, resourceId)
+        if (drawable is BitmapDrawable) {
+            bitmapCache[resourceId] = drawable.bitmap
+            return drawable.bitmap
+        }
+        if (drawable != null) {
+            val bitmap = Bitmap.createBitmap(drawable.intrinsicWidth.takeIf { it > 0 } ?: 64, 
+                                            drawable.intrinsicHeight.takeIf { it > 0 } ?: 64, 
+                                            Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            bitmapCache[resourceId] = bitmap
+            return bitmap
+        }
+        return null
+    }
+
+    override fun onStart() { super.onStart(); mapView?.onStart() }
+    override fun onStop() { super.onStop(); mapView?.onStop() }
+    override fun onDestroy() { 
         super.onDestroy()
-        mapView?.onDestroy()
+        bitmapCache.clear()
+        mapView?.onDestroy() 
     }
 }

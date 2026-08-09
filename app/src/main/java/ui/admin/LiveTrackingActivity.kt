@@ -1,6 +1,10 @@
 package ui.admin
 
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
@@ -8,25 +12,25 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.widget.addTextChangedListener
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.drawable.BitmapDrawable
 import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.DriverModel
 import com.example.bustrack_app.viewmodels.LiveTrackingViewModel
 import com.google.android.material.button.MaterialButton
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.gestures.gestures
 
 class LiveTrackingActivity : AppCompatActivity() {
 
@@ -35,6 +39,7 @@ class LiveTrackingActivity : AppCompatActivity() {
     private val viewModel: LiveTrackingViewModel by viewModels()
     private val driverMarkers = mutableMapOf<String, PointAnnotation>()
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
+    private var isUserInteracting = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,12 +56,12 @@ class LiveTrackingActivity : AppCompatActivity() {
             val bitmap = bitmapFromDrawableRes(this@LiveTrackingActivity, R.drawable.blue_bus)
             bitmap?.let { style.addImage("bus-icon", it) }
 
-            // Default center on Islamabad (Pakistan)
-            val defaultPoint = Point.fromLngLat(73.0479, 33.6844)
+            // Default center on FG Post Graduate College, Saddar (Rawalpindi)
+            val defaultPoint = Point.fromLngLat(73.0478, 33.5977)
             mapView?.mapboxMap?.setCamera(
                 CameraOptions.Builder()
                     .center(defaultPoint)
-                    .zoom(12.0)
+                    .zoom(15.0)
                     .build()
             )
 
@@ -67,6 +72,7 @@ class LiveTrackingActivity : AppCompatActivity() {
                     latDiff < 0.0001 && lngDiff < 0.0001
                 }
                 driver?.let {
+                    isUserInteracting = false
                     viewModel.selectDriver(it)
                     focusOnDriver(it)
                 }
@@ -101,6 +107,7 @@ class LiveTrackingActivity : AppCompatActivity() {
                 viewModel.activeDrivers.value?.find { 
                     it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true 
                 }?.let { driver ->
+                    isUserInteracting = false
                     focusOnDriver(driver)
                     viewModel.selectDriver(driver)
                 }
@@ -116,16 +123,24 @@ class LiveTrackingActivity : AppCompatActivity() {
                 mapView?.mapboxMap?.setCamera(CameraOptions.Builder().zoom(mapView?.mapboxMap?.cameraState?.zoom?.minus(1.0)).build())
             }
             controls.findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
-                // Focus on all buses if available, otherwise default
+                isUserInteracting = false
                 val drivers = viewModel.activeDrivers.value
                 if (!drivers.isNullOrEmpty()) {
-                    focusOnDriver(drivers[0])
+                    if (drivers.size == 1) focusOnDriver(drivers[0]) else focusOnAllDrivers(drivers)
                 } else {
-                    val defaultPoint = Point.fromLngLat(73.0479, 33.6844)
-                    mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(defaultPoint).zoom(12.0).build())
+                    val defaultPoint = Point.fromLngLat(73.0478, 33.5977)
+                    mapView?.mapboxMap?.flyTo(CameraOptions.Builder().center(defaultPoint).zoom(15.0).build())
                 }
             }
         }
+
+        mapView?.gestures?.addOnMoveListener(object : com.mapbox.maps.plugin.gestures.OnMoveListener {
+            override fun onMoveBegin(detector: com.mapbox.android.gestures.MoveGestureDetector) {
+                isUserInteracting = true
+            }
+            override fun onMove(detector: com.mapbox.android.gestures.MoveGestureDetector): Boolean = false
+            override fun onMoveEnd(detector: com.mapbox.android.gestures.MoveGestureDetector) {}
+        })
     }
 
     private fun observeViewModel() {
@@ -142,41 +157,74 @@ class LiveTrackingActivity : AppCompatActivity() {
     }
 
     private fun updateMarkers(drivers: List<DriverModel>) {
-        pointAnnotationManager?.deleteAll()
-        driverMarkers.clear()
+        val currentIds = drivers.map { it.id }.toSet()
 
-        drivers.forEach { driver ->
-            val point = Point.fromLngLat(driver.longitude, driver.latitude)
-            val options = PointAnnotationOptions()
-                .withPoint(point)
-                .withIconImage("bus-icon")
-                .withIconSize(1.5)
-                .withTextField(driver.assignedBus ?: driver.name)
-                .withTextOffset(listOf(0.0, 2.0))
-                .withTextColor(android.graphics.Color.WHITE)
-                .withTextHaloColor(android.graphics.Color.BLACK)
-                .withTextHaloWidth(1.0)
-
-            val annotation = pointAnnotationManager?.create(options)
-            if (annotation != null) {
-                driverMarkers[driver.id] = annotation
+        // 1. Remove markers for drivers who are no longer active
+        val iterator = driverMarkers.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (!currentIds.contains(entry.key)) {
+                pointAnnotationManager?.delete(entry.value)
+                iterator.remove()
             }
         }
 
-        if (drivers.isNotEmpty() && viewModel.selectedDriver.value == null) {
-            viewModel.selectDriver(drivers[0])
-            focusOnDriver(drivers[0])
+        // 2. Add or update markers for active drivers
+        drivers.forEach { driver ->
+            val point = Point.fromLngLat(driver.longitude, driver.latitude)
+            
+            if (driverMarkers.containsKey(driver.id)) {
+                driverMarkers[driver.id]?.point = point
+            } else {
+                val options = PointAnnotationOptions()
+                    .withPoint(point)
+                    .withIconImage("bus-icon")
+                    .withIconSize(1.5)
+                    .withTextField(driver.assignedBus ?: driver.name)
+                    .withTextOffset(listOf(0.0, 2.0))
+                    .withTextColor(android.graphics.Color.WHITE)
+                    .withTextHaloColor(android.graphics.Color.BLACK)
+                    .withTextHaloWidth(1.0)
+
+                val annotation = pointAnnotationManager?.create(options)
+                if (annotation != null) {
+                    driverMarkers[driver.id] = annotation
+                }
+            }
+        }
+
+        // 3. Camera handling
+        if (!isUserInteracting && drivers.isNotEmpty()) {
+            if (drivers.size == 1) {
+                focusOnDriver(drivers[0])
+            } else {
+                focusOnAllDrivers(drivers)
+            }
+        }
+    }
+
+    private fun focusOnAllDrivers(drivers: List<DriverModel>) {
+        val points = drivers.map { Point.fromLngLat(it.longitude, it.latitude) }
+        val camera = mapView?.mapboxMap?.cameraForCoordinates(
+            points,
+            EdgeInsets(200.0, 100.0, 200.0, 100.0),
+            null,
+            null
+        )
+        camera?.let {
+            mapView?.mapboxMap?.flyTo(it, MapAnimationOptions.mapAnimationOptions { duration(1000) })
         }
     }
 
     private fun focusOnDriver(driver: DriverModel) {
         if (driver.latitude != 0.0) {
             val point = Point.fromLngLat(driver.longitude, driver.latitude)
-            mapView?.mapboxMap?.setCamera(
+            mapView?.mapboxMap?.flyTo(
                 CameraOptions.Builder()
                     .center(point)
-                    .zoom(14.0)
-                    .build()
+                    .zoom(15.0)
+                    .build(),
+                MapAnimationOptions.mapAnimationOptions { duration(1000) }
             )
         }
     }
@@ -188,7 +236,6 @@ class LiveTrackingActivity : AppCompatActivity() {
             return
         }
         
-        // Show with animation for inDrive feel
         if (card.visibility == View.GONE) {
             card.visibility = View.VISIBLE
             card.alpha = 0f
@@ -212,15 +259,13 @@ class LiveTrackingActivity : AppCompatActivity() {
 
     override fun onStart() { super.onStart(); mapView?.onStart() }
     override fun onStop() { super.onStop(); mapView?.onStop() }
+    
     private fun bitmapFromDrawableRes(context: Context, resourceId: Int): Bitmap? {
-        if (bitmapCache.containsKey(resourceId)) {
-            return bitmapCache[resourceId]
-        }
+        if (bitmapCache.containsKey(resourceId)) return bitmapCache[resourceId]
         val drawable = ContextCompat.getDrawable(context, resourceId)
         if (drawable is BitmapDrawable) {
-            val bitmap = drawable.bitmap
-            bitmapCache[resourceId] = bitmap
-            return bitmap
+            bitmapCache[resourceId] = drawable.bitmap
+            return drawable.bitmap
         }
         if (drawable != null) {
             val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 64

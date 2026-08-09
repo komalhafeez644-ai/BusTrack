@@ -20,8 +20,11 @@ class LiveTrackingViewModel : ViewModel() {
 
     private fun startTracking() {
         FirebaseRepository.fetchDrivers { allDrivers ->
-            // Filter only active drivers who have location data
-            val active = allDrivers.filter { it.status == "Active" && it.latitude != 0.0 }
+            // Filter only active drivers who have location data (Case-insensitive check)
+            val active = allDrivers.filter { 
+                (it.status.equals("Active", true) || it.status.equals("ACTIVE", true) || it.status.equals("On Duty", true)) 
+                && it.latitude != 0.0 && it.longitude != 0.0 
+            }
             _activeDrivers.value = active
             
             // If the currently selected driver moved, update the detail card

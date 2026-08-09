@@ -449,6 +449,17 @@ class DriverDashboardActivity : AppCompatActivity() {
                     currentLocation = location
                     updateDriverMarker(location)
                     checkArrivalAtStart()
+
+                    // Sync location to Firestore if On Duty
+                    if (isDutyEnabled) {
+                        viewModel.currentDriver.value?.id?.let { driverId ->
+                            com.example.bustrack_app.data.FirebaseRepository.updateDriverLocation(
+                                driverId,
+                                location.latitude,
+                                location.longitude
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -670,6 +681,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 // Dashboard Card
                 tvTotalStops.text = data.stopsCount
+
+                // Update Local Duty State
+                if (data.isOnDuty != isDutyEnabled) {
+                    isDutyEnabled = data.isOnDuty
+                    findViewById<SwitchMaterial>(R.id.switchDuty)?.isChecked = isDutyEnabled
+                    updateDutyUI(isDutyEnabled)
+                }
             }
 
             // Fetch route details to update Start/Stop 1

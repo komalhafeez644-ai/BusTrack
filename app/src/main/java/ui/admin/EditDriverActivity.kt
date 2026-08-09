@@ -190,6 +190,17 @@ class EditDriverActivity : AppCompatActivity() {
         driverData?.let { driver ->
             val selectedBus = binding.menuEditBus.text.toString().trim()
             val finalBus = if (selectedBus == "Select Bus") null else selectedBus
+
+            // VALIDATION: Check if this bus is already assigned to someone else
+            if (finalBus != null) {
+                val allDrivers = DriverRepository.driverList.value ?: emptyList()
+                val otherDriver = allDrivers.find { it.assignedBus == finalBus && it.id != driver.id }
+                if (otherDriver != null) {
+                    Toast.makeText(this, "Bus $finalBus is already assigned to ${otherDriver.name}", Toast.LENGTH_LONG).show()
+                    return
+                }
+            }
+
             val finalRoute = binding.txtRouteValue.text.toString().trim()
             val finalRouteValue = if (finalRoute == "No Route" || finalRoute == "No Route Assigned") null else finalRoute
 
@@ -205,9 +216,7 @@ class EditDriverActivity : AppCompatActivity() {
             )
             
             // 1. Dependency Logic: Sync with Bus and Route Repositories
-            if (finalBus != null) {
-                syncDriverToBusAndRoute(finalBus, updatedDriver.name)
-            }
+            syncDriverToBusAndRoute(finalBus, driver.assignedBus, updatedDriver.name)
 
             // 2. Save to Firestore via FirebaseRepository
             com.example.bustrack_app.data.FirebaseRepository.saveDriver(updatedDriver) { success ->
@@ -223,18 +232,38 @@ class EditDriverActivity : AppCompatActivity() {
         }
     }
 
-    private fun syncDriverToBusAndRoute(busNo: String, driverName: String) {
-        // 1. Update BusRepository
-        val bus = BusRepository.getBusByNumber(busNo)
-        bus?.let {
-            BusRepository.updateBusDetails(busNo, it.copy(driverName = driverName))
+    private fun syncDriverToBusAndRoute(newBusNo: String?, oldBusNo: String?, driverName: String) {
+        // 1. Unassign from Old Bus if it changed
+        if (oldBusNo != null && oldBusNo != newBusNo) {
+            val oldBus = BusRepository.getBusByNumber(oldBusNo)
+            oldBus?.let {
+                BusRepository.updateBusDetails(oldBusNo, it.copy(driverName = null))
+            }
+            
+            RouteRepository.routeList.value?.find { it.busNo == oldBusNo }?.let { route ->
+                RouteRepository.updateRoute(route.copy(driverName = ""))
+            }
         }
 
-        // 2. Update RouteRepository (Interdependence)
-        val allRoutes = RouteRepository.routeList.value ?: return
-        val targetRoute = allRoutes.find { it.busNo == busNo }
-        targetRoute?.let {
-            RouteRepository.updateRoute(it.copy(driverName = driverName))
+        // 2. Handle New Bus Assignment
+        if (newBusNo != null) {
+            // A. If this bus was with another driver, clear that driver's profile
+            val allDrivers = DriverRepository.driverList.value ?: listOf()
+            allDrivers.find { it.assignedBus == newBusNo && it.id != driverData?.id }?.let { otherDriver ->
+                DriverRepository.updateDriver(otherDriver.copy(assignedBus = null, route = null))
+            }
+
+            // B. Update Bus and Route with the new driver
+            val bus = BusRepository.getBusByNumber(newBusNo)
+            bus?.let {
+                BusRepository.updateBusDetails(newBusNo, it.copy(driverName = driverName))
+            }
+
+            val allRoutes = RouteRepository.routeList.value ?: return
+            val targetRoute = allRoutes.find { it.busNo == newBusNo }
+            targetRoute?.let {
+                RouteRepository.updateRoute(it.copy(driverName = driverName))
+            }
         }
     }
 

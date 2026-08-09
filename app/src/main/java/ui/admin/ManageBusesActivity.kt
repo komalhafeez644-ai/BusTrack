@@ -5,18 +5,24 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.bustrack_app.R
 import com.example.bustrack_app.adapter.BusAdapter
-import com.example.bustrack_app.data.RouteRepository
+import com.example.bustrack_app.data.BusRepository
 import com.example.bustrack_app.data.DriverRepository
+import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.databinding.ActivityManageBusesBinding
 import com.example.bustrack_app.databinding.DialogAddNewBusBinding
 import com.example.bustrack_app.models.BusModel
 import com.example.bustrack_app.viewmodels.BusViewModel
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
 
 class ManageBusesActivity : AppCompatActivity() {
 
@@ -24,7 +30,6 @@ class ManageBusesActivity : AppCompatActivity() {
     private lateinit var viewModel: BusViewModel
     private lateinit var busAdapter: BusAdapter
 
-    // Local memory list testing ke liye
     private val temporaryBusList = mutableListOf<BusModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,23 +39,16 @@ class ManageBusesActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[BusViewModel::class.java]
 
-        // Pre-fetch and observe data for dropdowns to ensure they are ready when needed
-        DriverRepository.driverList.observe(this) { drivers ->
-            // Data is kept fresh in background
-        }
-        RouteRepository.routeList.observe(this) { routes ->
-            // Data is kept fresh in background
-        }
+        DriverRepository.driverList.observe(this) { }
+        RouteRepository.routeList.observe(this) { }
 
         setupRecyclerViewList()
         observeViewModelStreams()
 
-        // Floating Action Button (+) Click Listener
         binding.btnFloatingAddBus.setOnClickListener {
             showAddNewBusBottomSheet()
         }
 
-        // App Bar Back Arrow Click Listener
         binding.btnBackArrow.setOnClickListener {
             finish()
         }
@@ -58,8 +56,7 @@ class ManageBusesActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh mapping from Route Management
-        com.example.bustrack_app.data.BusRepository.refreshBusList()
+        BusRepository.refreshBusList()
         utils.NavigationUtils.setupBottomNavigation(this)
     }
 
@@ -77,14 +74,27 @@ class ManageBusesActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onStatusChanged = { bus, isChecked ->
-                val isUnassigned = bus.routeName.isNullOrEmpty() || bus.driverName.isNullOrEmpty()
-                val newStatus = when {
-                    isUnassigned -> "UNASSIGNED"
-                    isChecked -> "ACTIVE"
-                    else -> "INACTIVE"
+                val isCurrentlyActive = bus.status.equals("ACTIVE", ignoreCase = true)
+                
+                if (isChecked != isCurrentlyActive) {
+                    showCustomConfirmDialog(
+                        title = if (isChecked) "Enable Bus?" else "Disable Bus?",
+                        message = if (isChecked) {
+                            "Are you sure you want to enable ${bus.busNumber}? It will become available for tracking and assignments."
+                        } else {
+                            "This bus is currently assigned to ${bus.driverName ?: "a driver"}. Disabling it will make it unavailable for operations."
+                        },
+                        iconRes = if (isChecked) R.drawable.directions_bus else R.drawable.warning,
+                        confirmText = if (isChecked) "Enable" else "Disable",
+                        onConfirm = {
+                            viewModel.updateBusDetails(bus.busNumber, bus.copy(status = if (isChecked) "ACTIVE" else "INACTIVE"))
+                        },
+                        onCancel = {
+                            // Revert switch UI
+                            busAdapter.notifyDataSetChanged()
+                        }
+                    )
                 }
-
-                viewModel.updateBusDetails(bus.busNumber, bus.copy(status = newStatus))
             }
         )
 
@@ -98,7 +108,6 @@ class ManageBusesActivity : AppCompatActivity() {
         viewModel.busList.observe(this) { standardList ->
             temporaryBusList.clear()
             temporaryBusList.addAll(standardList)
-            // Header metric counter card items count update
             binding.tvTotalMetricCounter.text = temporaryBusList.size.toString()
             busAdapter.updateData(temporaryBusList)
         }
@@ -109,36 +118,30 @@ class ManageBusesActivity : AppCompatActivity() {
         val dialogBinding = DialogAddNewBusBinding.inflate(LayoutInflater.from(this))
         bottomSheetDialog.setContentView(dialogBinding.root)
 
-        // Ensure the bottom sheet is expanded when shown to avoid layout shifts with keyboard
         bottomSheetDialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         bottomSheetDialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
-        // Setup Route Dropdown from RouteRepository
         val routes = RouteRepository.routeList.value ?: listOf()
         val routeNames = routes.map { it.routeName }.toMutableList()
         routeNames.add(0, "None")
 
-        val routeAdapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, routeNames)
+        val routeAdapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, routeNames)
         dialogBinding.spinnerRouteSelection.setAdapter(routeAdapter)
         dialogBinding.spinnerRouteSelection.setText("None", false)
 
-        // Setup Driver Dropdown from DriverRepository
         val drivers = DriverRepository.driverList.value ?: listOf()
         val driverNames = drivers.map { it.name }.toMutableList()
         driverNames.add(0, "None")
 
-        val driverAdapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, driverNames)
+        val driverAdapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, driverNames)
         dialogBinding.spinnerDriverSelection.setAdapter(driverAdapter)
         dialogBinding.spinnerDriverSelection.setText("None", false)
 
-        // Formatting
         utils.FormUtils.setupUppercaseInput(dialogBinding.etBusNumberInput)
 
-        // CANCEL BUTTON ACTIONS
         dialogBinding.btnCancelCross.setOnClickListener { bottomSheetDialog.dismiss() }
         dialogBinding.tvCancelFormAction.setOnClickListener { bottomSheetDialog.dismiss() }
 
-        // SAVE BUTTON CLICK LOGIC
         dialogBinding.btnSaveBusSubmit.setOnClickListener {
             val busNo = dialogBinding.etBusNumberInput.text.toString().trim()
             val capacityStr = dialogBinding.etCapacityInput.text.toString().trim()
@@ -152,23 +155,22 @@ class ManageBusesActivity : AppCompatActivity() {
                 val routeValue = if (selectedRouteName == "None") null else selectedRouteName
                 val driverValue = if (selectedDriverName == "None") null else selectedDriverName
 
-                // Validation: Check if route or driver is already assigned to another bus
                 val allBuses = viewModel.busList.value ?: emptyList()
                 
-                if (routeValue != null && allBuses.any { it.routeName == routeValue }) {
-                    Toast.makeText(this, "This route is already assigned to another bus!", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
                 if (driverValue != null && allBuses.any { it.driverName == driverValue }) {
-                    Toast.makeText(this, "This driver is already assigned to another bus!", Toast.LENGTH_SHORT).show()
+                    val otherBus = allBuses.find { it.driverName == driverValue }
+                    Toast.makeText(this, "Driver $driverValue is already assigned to Bus ${otherBus?.busNumber}", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
 
-                // 1. Dependency Logic: Update Repositories if route/driver is selected
+                if (routeValue != null && allBuses.any { it.routeName == routeValue }) {
+                    val otherBus = allBuses.find { it.routeName == routeValue }
+                    Toast.makeText(this, "Route $routeValue is already assigned to Bus ${otherBus?.busNumber}", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+
                 assignBusToRouteAndDriver(busNo, routeValue ?: "", driverValue ?: "")
 
-                // 2. New Bus Object
                 val newBus = BusModel(
                     busNumber = busNo,
                     totalSeats = capacity,
@@ -190,16 +192,24 @@ class ManageBusesActivity : AppCompatActivity() {
         val finalRoute = if (routeName == "None") "" else routeName
         val finalDriver = if (driverName == "None") "" else driverName
 
-        // 1. Update Driver Repository
         if (finalDriver.isNotEmpty()) {
             val drivers = DriverRepository.driverList.value ?: listOf()
             val targetDriver = drivers.find { it.name == finalDriver }
-            targetDriver?.let {
-                DriverRepository.updateDriver(it.copy(assignedBus = busNo, route = finalRoute))
+            targetDriver?.let { driver ->
+                driver.assignedBus?.let { oldBusNo ->
+                    if (oldBusNo != busNo) {
+                        BusRepository.getBusByNumber(oldBusNo)?.let { oldBus ->
+                            BusRepository.updateBusDetails(oldBusNo, oldBus.copy(driverName = null))
+                        }
+                        RouteRepository.routeList.value?.find { it.busNo == oldBusNo }?.let { oldRoute ->
+                            RouteRepository.updateRoute(oldRoute.copy(driverName = ""))
+                        }
+                    }
+                }
+                DriverRepository.updateDriver(driver.copy(assignedBus = busNo, route = finalRoute.ifEmpty { null }))
             }
         }
 
-        // 2. Update Route Repository
         if (finalRoute.isNotEmpty()) {
             val allRoutes = RouteRepository.routeList.value ?: return
             val targetRoute = allRoutes.find { it.routeName == finalRoute }
@@ -207,5 +217,57 @@ class ManageBusesActivity : AppCompatActivity() {
                 RouteRepository.updateRoute(it.copy(busNo = busNo, driverName = finalDriver))
             }
         }
+    }
+
+    private fun showCustomConfirmDialog(
+        title: String,
+        message: String,
+        iconRes: Int,
+        confirmText: String,
+        onConfirm: () -> Unit,
+        onCancel: () -> Unit
+    ) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_confirm_status, null)
+        
+        val ivIcon = dialogView.findViewById<ImageView>(R.id.ivDialogIcon)
+        val tvTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val tvMsg = dialogView.findViewById<TextView>(R.id.tvDialogMessage)
+        val btnCancel = dialogView.findViewById<MaterialButton>(R.id.btnCancel)
+        val btnConfirm = dialogView.findViewById<MaterialButton>(R.id.btnConfirm)
+
+        tvTitle.text = title
+        tvMsg.text = message
+        ivIcon.setImageResource(iconRes)
+        
+        if (confirmText == "Disable") {
+            ivIcon.setColorFilter(android.graphics.Color.parseColor("#DC2626"))
+            btnConfirm.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#DC2626"))
+        } else {
+            ivIcon.setColorFilter(android.graphics.Color.parseColor("#2563EB"))
+            btnConfirm.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2563EB"))
+        }
+        
+        btnConfirm.text = confirmText
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnCancel.setOnClickListener {
+            onCancel()
+            dialog.dismiss()
+        }
+
+        btnConfirm.setOnClickListener {
+            onConfirm()
+            dialog.dismiss()
+        }
+
+        dialog.show()
+        val width = (resources.displayMetrics.widthPixels * 0.85).toInt()
+        dialog.window?.setLayout(width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 }

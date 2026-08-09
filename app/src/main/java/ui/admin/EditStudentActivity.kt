@@ -1,5 +1,7 @@
 package ui.admin
 
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -19,6 +21,8 @@ class EditStudentActivity : AppCompatActivity() {
     private var studentId: String? = null
     private var studentData: StudentModel? = null
     private var selectedImageUri: Uri? = null
+    private var selectedLat: Double = 0.0
+    private var selectedLng: Double = 0.0
 
     private lateinit var imgStudentEdit: ShapeableImageView
     private lateinit var etEditStudentId: EditText
@@ -36,7 +40,21 @@ class EditStudentActivity : AppCompatActivity() {
     private lateinit var btnBack: View
     private lateinit var btnCancelEdit: View
     private lateinit var btnChangeImage: View
+    private lateinit var btnSelectOnMap: View
 
+    // Map Picker Launcher
+    private val pickLocationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val address = result.data?.getStringExtra("SELECTED_ADDRESS")
+            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
+            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
+            address?.let {
+                etEditPickupAddress.setText(it)
+            }
+        }
+    }
+
+    // Photo Picker Launcher
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
@@ -52,12 +70,20 @@ class EditStudentActivity : AppCompatActivity() {
         initViews()
         
         studentId = intent.getStringExtra("STUDENT_ID")
-        loadStudentData()
-
+        
         setupGradeSpinner()
-        setupRouteAndStopSpinners()
         setupClickListeners()
         setupFormFormatting()
+        
+        // Observe data to keep UI updated
+        RouteRepository.routeList.observe(this) {
+            setupRouteAndStopSpinners()
+            loadStudentData()
+        }
+        
+        StudentRepository.studentList.observe(this) {
+            loadStudentData()
+        }
     }
 
     private fun initViews() {
@@ -77,9 +103,12 @@ class EditStudentActivity : AppCompatActivity() {
         btnBack = findViewById(R.id.btnBack)
         btnCancelEdit = findViewById(R.id.btnCancelEdit)
         btnChangeImage = findViewById(R.id.btnChangeImage)
+        btnSelectOnMap = findViewById(R.id.btnSelectOnMap)
     }
 
     private fun loadStudentData() {
+        if (studentId == null) return
+        
         studentData = StudentRepository.studentList.value?.find { it.id == studentId }
         studentData?.let {
             etEditStudentId.setText(it.id)
@@ -89,21 +118,31 @@ class EditStudentActivity : AppCompatActivity() {
             etEditEmergencyContact.setText(it.phoneNumber)
             etEditPickupAddress.setText(it.location)
             
+            // CRITICAL FIX: Initialize coordinates from existing data
+            selectedLat = it.latitude
+            selectedLng = it.longitude
+            
             if (it.route.isNullOrEmpty()) {
-                spinnerEditRoute.setText("Unassigned", false)
-                spinnerEditRoute.isEnabled = false
-                tilRoute.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_NONE
+                spinnerEditRoute.setText("None", false)
+                spinnerEditRoute.isEnabled = true
+                tilRoute.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_DROPDOWN_MENU
                 
-                spinnerEditStop.setText("Unassigned", false)
-                spinnerEditStop.isEnabled = false
-                tilStop.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_NONE
+                spinnerEditStop.setText("Select Stop", false)
+                spinnerEditStop.isEnabled = true
+                tilStop.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_DROPDOWN_MENU
 
-                txtEditBusValue.text = "Unassigned"
+                txtEditBusValue.text = "No Bus Assigned"
             } else {
                 spinnerEditRoute.setText(it.route, false)
+                spinnerEditRoute.isEnabled = true
+                tilRoute.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_DROPDOWN_MENU
+                
                 spinnerEditStop.setText(it.stopName ?: "Select Stop", false)
+                spinnerEditStop.isEnabled = true
+                tilStop.endIconMode = com.google.android.material.textfield.TextInputLayout.END_ICON_DROPDOWN_MENU
+                
                 txtEditBusValue.text = it.busNo ?: "No Bus Assigned"
-                updateStopsForRoute(it.route, it.stopName)
+                updateStopsForRoute(it.route!!, it.stopName)
             }
 
             if (it.profileImageUrl.isNotEmpty()) {
@@ -125,7 +164,9 @@ class EditStudentActivity : AppCompatActivity() {
     private fun setupRouteAndStopSpinners() {
         val routes = RouteRepository.routeList.value ?: listOf()
         val routeNames = routes.map { it.routeName }.toMutableList()
-        routeNames.add(0, "None")
+        if (!routeNames.contains("None")) {
+            routeNames.add(0, "None")
+        }
 
         val routeAdapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, routeNames)
         spinnerEditRoute.setAdapter(routeAdapter)
@@ -177,6 +218,12 @@ class EditStudentActivity : AppCompatActivity() {
         btnChangeImage.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             pickImageLauncher.launch("image/*")
+        }
+
+        btnSelectOnMap.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            val intent = Intent(this, LocationPickerActivity::class.java)
+            pickLocationLauncher.launch(intent)
         }
 
         btnUpdateStudent.setOnClickListener {
@@ -244,7 +291,9 @@ class EditStudentActivity : AppCompatActivity() {
                 route = finalRoute,
                 busNo = finalBus,
                 status = if (finalRoute != null) "ASSIGNED" else "UNASSIGNED",
-                profileImageUrl = imageUrl
+                profileImageUrl = imageUrl,
+                latitude = selectedLat,
+                longitude = selectedLng
             )
 
             StudentRepository.updateStudent(updatedStudent) { success ->

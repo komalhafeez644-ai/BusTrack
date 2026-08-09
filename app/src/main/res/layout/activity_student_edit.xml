@@ -294,8 +294,7 @@
                         app:boxCornerRadiusTopStart="12dp"
                         app:boxCornerRadiusTopEnd="12dp"
                         app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp"
-                        android:layout_marginBottom="16dp">
+                        app:boxCornerRadiusBottomEnd="12dp">
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etEditPickupAddress"
                             android:layout_width="match_parent"
@@ -303,6 +302,22 @@
                             android:maxLength="100"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelectOnMap"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:text="Select on Map"
+                        android:textAllCaps="false"
+                        android:textColor="#007AFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:icon="@drawable/outline_location"
+                        app:iconSize="16dp"
+                        app:iconTint="#007AFF"
+                        android:layout_marginBottom="8dp"/>
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/tilRoute"
