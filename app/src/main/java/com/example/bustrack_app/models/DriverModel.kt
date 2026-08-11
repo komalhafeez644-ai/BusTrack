@@ -14,5 +14,8 @@ data class DriverModel(
     var email: String = "",
     var latitude: Double = 0.0,
     var longitude: Double = 0.0,
+    var speed: Double = 0.0,
+    var eta: String = "On Way",
+    var load: String = "0/0",
     var lastUpdated: Long = 0L
 ) : Serializable

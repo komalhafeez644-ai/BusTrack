@@ -1,5 +1,6 @@
 package ui.admin
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -9,13 +10,14 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.widget.NestedScrollView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
@@ -31,6 +33,7 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
@@ -39,15 +42,18 @@ import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
-import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
-import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
-import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
-import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.*
+import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
+import com.mapbox.turf.TurfMisc
+
+import android.location.Geocoder
+import android.location.Location
+import java.util.Locale
 
 class TrackDriverActivity : AppCompatActivity() {
 
-    private lateinit var bottomSheetBehavior: BottomSheetBehavior<NestedScrollView>
+    private lateinit var bottomSheetBehavior: BottomSheetBehavior<FrameLayout>
     private var mapView: MapView? = null
     private val viewModel: TrackDriverViewModel by viewModels()
     
@@ -57,46 +63,121 @@ class TrackDriverActivity : AppCompatActivity() {
     
     private lateinit var stopsAdapter: NavigationStopsAdapter
     private val ROUTE_SOURCE_ID = "route-source-id"
+    private val TRAVELED_ROUTE_SOURCE_ID = "traveled-route-source-id"
     private val ROUTE_LAYER_ID = "route-layer-id"
+    private val TRAVELED_ROUTE_LAYER_ID = "traveled-route-layer-id"
     
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
     private var currentRouteId: String? = null
+    private var previousPoint: Point? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_track_driver)
+        try {
+            setContentView(R.layout.activity_track_driver)
+            supportActionBar?.hide()
 
-        supportActionBar?.hide()
+            val driverId = intent.getStringExtra("DRIVER_ID") ?: ""
+            if (driverId.isEmpty()) {
+                Toast.makeText(this, "Invalid Driver ID", Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
 
-        val driverId = intent.getStringExtra("DRIVER_ID") ?: ""
-        if (driverId.isEmpty()) {
-            Toast.makeText(this, "Invalid Driver ID", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
+            mapView = findViewById(R.id.mapView)
+            mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
+                pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+                
+                // Use a realistic blue bus icon for a "3D" navigation look
+                bitmapFromDrawableRes(this, R.drawable.blue_bus)?.let { style.addImage("bus-icon", it) }
+                bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)?.let { style.addImage("stop-icon", it) }
+                
+                observeViewModel()
+            }
 
-        mapView = findViewById(R.id.mapView)
-        mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
-            pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
-            observeViewModel()
-        }
+            setupBottomSheet()
+            viewModel.setDriverId(driverId)
 
-        setupBottomSheet()
-        viewModel.setDriverId(driverId)
-
-        findViewById<ImageView>(R.id.btnBack).setOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
+            findViewById<ImageView>(R.id.btnBack)?.setOnClickListener { finish() }
+            
+        } catch (e: Exception) {
+            Log.e("TrackDriverActivity", "Crash in onCreate", e)
+            Toast.makeText(this, "Error initializing tracking", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun setupBottomSheet() {
-        val bottomSheet = findViewById<NestedScrollView>(R.id.bottomSheet)
-        bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+        val bottomSheet = findViewById<FrameLayout>(R.id.bottomSheet)
+        if (bottomSheet != null) {
+            bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+            
+            // Ensure Bottom Sheet is in Light Mode for Admin
+            forceLightBottomSheet(bottomSheet)
+
+            // Driver Sheet Specific IDs
+            val rvStops = bottomSheet.findViewById<RecyclerView>(R.id.rvUpcomingStops)
+            stopsAdapter = NavigationStopsAdapter(emptyList())
+            rvStops?.layoutManager = LinearLayoutManager(this)
+            rvStops?.adapter = stopsAdapter
+
+            bottomSheet.findViewById<View>(R.id.btnViewAllStops)?.setOnClickListener {
+                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+            }
+            
+            bottomSheet.findViewById<View>(R.id.btnCloseNav)?.setOnClickListener {
+                finish()
+            }
+        }
+    }
+
+    private fun forceLightBottomSheet(sheet: View) {
+        // Force background to white dialog style
+        sheet.findViewById<View>(R.id.bottomSheetContainer)?.setBackgroundResource(R.drawable.bg_bottom_sheet_dialog)
         
-        stopsAdapter = NavigationStopsAdapter(emptyList())
-        val rvStops = findViewById<RecyclerView>(R.id.rvStopsTimeline)
-        rvStops.layoutManager = LinearLayoutManager(this)
-        rvStops.adapter = stopsAdapter
+        // Force text colors to dark for light background
+        val colorTextPrimary = Color.parseColor("#0F172A")
+        val colorTextSecondary = Color.parseColor("#64748B")
+        
+        // Outline Buttons Theme for Admin
+        val btnClose = sheet.findViewById<View>(R.id.btnCloseNav)
+        val btnRoute = sheet.findViewById<View>(R.id.btnViewRoute)
+        val outlineColor = Color.parseColor("#CBD5E1")
+        
+        btnClose?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
+        btnRoute?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
+        
+        btnClose?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineColor)
+        btnRoute?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineColor)
+
+        (sheet.findViewById<ViewGroup>(R.id.btnCloseNav)?.getChildAt(0) as? ImageView)?.imageTintList = 
+            android.content.res.ColorStateList.valueOf(Color.parseColor("#64748B"))
+        (sheet.findViewById<ViewGroup>(R.id.btnViewRoute)?.getChildAt(0) as? ImageView)?.imageTintList = 
+            android.content.res.ColorStateList.valueOf(Color.parseColor("#2563EB"))
+
+        sheet.findViewById<TextView>(R.id.tvBusIdSheet)?.setTextColor(colorTextPrimary)
+        sheet.findViewById<TextView>(R.id.tvRouteSheet)?.setTextColor(colorTextSecondary)
+        sheet.findViewById<TextView>(R.id.tvDriverNameSheet)?.setTextColor(colorTextPrimary)
+        sheet.findViewById<TextView>(R.id.tvCurrentLocSheet)?.setTextColor(colorTextSecondary)
+        sheet.findViewById<TextView>(R.id.tvUpcomingLabel)?.setTextColor(colorTextPrimary)
+        
+        // Force label and value colors for live stats
+        sheet.findViewById<TextView>(R.id.tvEtaLabel)?.setTextColor(colorTextSecondary)
+        sheet.findViewById<TextView>(R.id.tvSpeedLabel)?.setTextColor(colorTextSecondary)
+        sheet.findViewById<TextView>(R.id.tvLoadLabel)?.setTextColor(colorTextSecondary)
+        
+        sheet.findViewById<TextView>(R.id.tvEtaSheet)?.setTextColor(colorTextPrimary)
+        sheet.findViewById<TextView>(R.id.tvSpeedSheet)?.setTextColor(colorTextPrimary)
+        sheet.findViewById<TextView>(R.id.tvLoadSheet)?.setTextColor(colorTextPrimary)
+        
+        // Force Card colors
+        sheet.findViewById<com.google.android.material.card.MaterialCardView>(R.id.cardHeader)?.setCardBackgroundColor(Color.WHITE)
+        sheet.findViewById<View>(R.id.dividerHeader)?.setBackgroundColor(Color.parseColor("#F1F5F9"))
+        
+        // Ensure stops list is also in light mode
+        if (::stopsAdapter.isInitialized) {
+            stopsAdapter.setTheme(false)
+        }
     }
 
     private fun observeViewModel() {
@@ -108,116 +189,246 @@ class TrackDriverActivity : AppCompatActivity() {
             route?.let { 
                 if (currentRouteId != it.id) {
                     currentRouteId = it.id
-                    drawRouteOnMap(it)
+                    drawInitialRoute(it)
+                    // Populate stops list immediately even if driver hasn't moved
+                    stopsAdapter.updateStops(it.stopsList, 0, "NEXT")
                 }
             }
         }
     }
 
     private fun updateUI(driver: DriverModel) {
-        // Update Bottom Sheet Header
-        findViewById<TextView>(R.id.tvBusIdSheet).text = driver.assignedBus ?: "N/A"
-        findViewById<TextView>(R.id.tvDriverNameSheet).text = driver.name
-        findViewById<TextView>(R.id.tvRouteNameSheet).text = driver.route ?: "No Route"
-        findViewById<TextView>(R.id.tvCurrentLocationSheet).text = java.util.Locale.getDefault().let { locale ->
-            "Current: Lat ${String.format(locale, "%.4f", driver.latitude)}, Lng ${String.format(locale, "%.4f", driver.longitude)}"
-        }
+        try {
+            val sheet = findViewById<FrameLayout>(R.id.bottomSheet)
+            sheet?.let {
+                it.findViewById<TextView>(R.id.tvBusIdSheet)?.text = driver.assignedBus ?: "BUS-101"
+                it.findViewById<TextView>(R.id.tvRouteSheet)?.text = driver.route ?: "Route"
+                it.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver.name
+                
+                var locationName = ""
+                val geocoder = Geocoder(this@TrackDriverActivity, Locale.getDefault())
+                try {
+                    val addresses = geocoder.getFromLocation(driver.latitude, driver.longitude, 1)
+                    if (!addresses.isNullOrEmpty()) {
+                        val addr = addresses[0]
+                        // Construct a cleaner address, excluding plus codes
+                        val feature = addr.featureName
+                        val street = addr.thoroughfare
+                        val subLocality = addr.subLocality
+                        val locality = addr.locality
+                        
+                        val cleanLocation = when {
+                            street != null && subLocality != null -> "$street, $subLocality"
+                            street != null -> street
+                            feature != null && feature.contains("+").not() -> feature
+                            subLocality != null -> subLocality
+                            locality != null -> locality
+                            else -> "Near Route"
+                        }
+                        
+                        locationName = cleanLocation
+                        it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = addr.getAddressLine(0).replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
+                    } else {
+                        locationName = "Moving"
+                        it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = "Location: ${String.format("%.4f", driver.latitude)}, ${String.format("%.4f", driver.longitude)}"
+                    }
+                } catch (e: Exception) {
+                    locationName = "Moving"
+                    it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = "Location: ${String.format("%.4f", driver.latitude)}, ${String.format("%.4f", driver.longitude)}"
+                }
 
-        // Update Marker
-        val point = Point.fromLngLat(driver.longitude, driver.latitude)
-        if (driverMarker == null) {
-            val bitmap = bitmapFromDrawableRes(this, R.drawable.ic_driver)
-            bitmap?.let {
-                val options = PointAnnotationOptions()
-                    .withPoint(point)
-                    .withIconImage(it)
-                    .withIconSize(1.5)
-                driverMarker = pointAnnotationManager?.create(options)
+                // Update Live Stats in Bottom Sheet
+                it.findViewById<TextView>(R.id.tvEtaSheet)?.text = driver.eta
+                it.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "${driver.speed.toInt()} km/h"
+                it.findViewById<TextView>(R.id.tvLoadSheet)?.text = driver.load
+
+                if (driver.latitude == 0.0 || driver.longitude == 0.0) return@let
+                val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+
+                if (driverMarker == null) {
+                    val options = PointAnnotationOptions()
+                        .withPoint(targetPoint)
+                        .withIconImage("bus-icon")
+                        .withIconSize(2.5) 
+                        .withTextField(locationName)
+                        .withTextOffset(listOf(0.0, -2.5))
+                        .withTextColor(Color.BLUE)
+                        .withTextHaloColor(Color.WHITE)
+                        .withTextHaloWidth(1.0)
+                    driverMarker = pointAnnotationManager?.create(options)
+                } else {
+                    val start = previousPoint ?: driverMarker!!.point
+                    if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
+                        val bearing = calculateBearing(start, targetPoint)
+                        driverMarker?.iconRotate = bearing.toDouble()
+                        driverMarker?.textField = locationName // Dynamically update location name
+                        animateMarker(driverMarker!!, start, targetPoint)
+                    }
+                }
             }
-        } else {
-            driverMarker?.point = point
-        }
 
-        // Calculate Stop Progress
-        viewModel.assignedRoute.value?.let { route ->
-            calculateProgress(driver, route)
+            if (driver.latitude == 0.0 || driver.longitude == 0.0) return
+            val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+            previousPoint = targetPoint
+
+            viewModel.assignedRoute.value?.let { route ->
+                updateRouteSplitting(targetPoint, route)
+                calculateProgress(driver, route)
+            }
+            
+            // Apply a tilted 3D perspective to the map
+            mapView?.mapboxMap?.flyTo(
+                CameraOptions.Builder()
+                    .center(targetPoint)
+                    .zoom(17.0)
+                    .pitch(60.0) // 3D tilt
+                    .build(),
+                MapAnimationOptions.mapAnimationOptions { duration(1000) }
+            )
+        } catch (e: Exception) {
+            Log.e("TrackDriverActivity", "Error updating UI", e)
         }
-        
-        // Smooth Camera Move
-        mapView?.mapboxMap?.flyTo(
-            CameraOptions.Builder().center(point).build(),
-            MapAnimationOptions.mapAnimationOptions { duration(1000) }
-        )
+    }
+
+    private fun animateMarker(annotation: PointAnnotation, start: Point, end: Point) {
+        val animator = ValueAnimator.ofFloat(0f, 1f)
+        animator.duration = 1000
+        animator.interpolator = LinearInterpolator()
+        animator.addUpdateListener { animation ->
+            val fraction = animation.animatedValue as Float
+            val lat = start.latitude() + (end.latitude() - start.latitude()) * fraction
+            val lng = start.longitude() + (end.longitude() - start.longitude()) * fraction
+            annotation.point = Point.fromLngLat(lng, lat)
+        }
+        animator.start()
+    }
+
+    private fun calculateBearing(start: Point, end: Point): Float {
+        val lat1 = Math.toRadians(start.latitude())
+        val lon1 = Math.toRadians(start.longitude())
+        val lat2 = Math.toRadians(end.latitude())
+        val lon2 = Math.toRadians(end.longitude())
+
+        val dLon = lon2 - lon1
+        val y = Math.sin(dLon) * Math.cos(lat2)
+        val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+        val brng = Math.atan2(y, x)
+
+        return ((Math.toDegrees(brng) + 360) % 360).toFloat()
     }
 
     private fun calculateProgress(driver: DriverModel, route: RouteModel) {
         val driverPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-        var currentIndex = 0
-        var status = "NEXT"
-
+        var closestIdx = 0
+        var minDistance = Double.MAX_VALUE
+        
         for (i in route.stopsList.indices) {
             val stop = route.stopsList[i]
             val stopPoint = Point.fromLngLat(stop.longitude, stop.latitude)
-            val distance = TurfMeasurement.distance(driverPoint, stopPoint, com.mapbox.turf.TurfConstants.UNIT_METERS)
-            
-            if (distance < 50.0) { // 50m radius
-                currentIndex = i
-                status = "ARRIVED"
-                break
-            } else {
-                // Determine if we passed it or are approaching
-                // Simple version: find the first stop that is in front of us
-                // For a more accurate logic, we'd need to check route orientation
-                currentIndex = i
-                status = "NEXT"
+            val distance = TurfMeasurement.distance(driverPoint, stopPoint, TurfConstants.UNIT_METERS)
+            if (distance < minDistance) {
+                minDistance = distance
+                closestIdx = i
             }
         }
-        
-        stopsAdapter.updateStops(route.stopsList, currentIndex, status)
+
+        val status = if (minDistance < 150.0) "ARRIVED" else "NEXT"
+        stopsAdapter.updateStops(route.stopsList, closestIdx, status)
     }
 
-    private fun drawRouteOnMap(route: RouteModel) {
+    private fun drawInitialRoute(route: RouteModel) {
         if (route.pathPoints.isEmpty()) return
+
+        // Update Stops List immediately
+        stopsAdapter.updateStops(route.stopsList, 0, "NEXT")
 
         val points = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
         val lineString = LineString.fromLngLats(points)
 
         mapView?.mapboxMap?.getStyle { style ->
-            if (!style.styleSourceExists(ROUTE_SOURCE_ID)) {
-                style.addSource(geoJsonSource(ROUTE_SOURCE_ID) {
-                    geometry(lineString)
-                })
-            } else {
-                val source = style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
-                source?.geometry(lineString)
-            }
+            try {
+                if (!style.styleSourceExists(ROUTE_SOURCE_ID)) {
+                    style.addSource(geoJsonSource(ROUTE_SOURCE_ID) { geometry(lineString) })
+                }
+                if (!style.styleSourceExists(TRAVELED_ROUTE_SOURCE_ID)) {
+                    style.addSource(geoJsonSource(TRAVELED_ROUTE_SOURCE_ID) { geometry(LineString.fromLngLats(emptyList())) })
+                }
 
-            if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
-                style.addLayer(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
-                    lineColor(Color.parseColor("#2563EB"))
-                    lineWidth(6.0)
-                    lineOpacity(0.6)
-                })
+                if (!style.styleLayerExists(TRAVELED_ROUTE_LAYER_ID)) {
+                    style.addLayer(lineLayer(TRAVELED_ROUTE_LAYER_ID, TRAVELED_ROUTE_SOURCE_ID) {
+                        lineColor(Color.parseColor("#94A3B8"))
+                        lineWidth(6.0)
+                        lineOpacity(0.8)
+                    })
+                }
+                if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
+                    style.addLayerBelow(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
+                        lineColor(Color.parseColor("#2563EB"))
+                        lineWidth(6.0)
+                        lineOpacity(0.8)
+                    }, TRAVELED_ROUTE_LAYER_ID)
+                }
+            } catch (e: Exception) {
+                Log.e("TrackDriverActivity", "Error drawing route", e)
             }
         }
 
-        // Update Stop Markers
-        stopMarkers.forEach { pointAnnotationManager?.delete(it) }
-        stopMarkers.clear()
-        
-        route.stopsList.forEach { stop ->
-            val bitmap = bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)
-            bitmap?.let {
+        pointAnnotationManager?.let { pam ->
+            stopMarkers.forEach { pam.delete(it) }
+            stopMarkers.clear()
+            
+            route.stopsList.forEach { stop ->
                 val options = PointAnnotationOptions()
                     .withPoint(Point.fromLngLat(stop.longitude, stop.latitude))
-                    .withIconImage(it)
+                    .withIconImage("stop-icon")
                     .withIconSize(1.0)
                     .withTextField(stop.stopName)
                     .withTextSize(10.0)
                     .withTextOffset(listOf(0.0, 1.5))
-                pointAnnotationManager?.create(options)?.let { stopMarkers.add(it) }
+                    .withTextColor(Color.BLACK)
+                    .withTextHaloColor(Color.WHITE)
+                    .withTextHaloWidth(1.0)
+                pam.create(options)?.let { stopMarkers.add(it) }
             }
         }
+    }
+
+    private fun updateRouteSplitting(currentPos: Point, route: RouteModel) {
+        if (route.pathPoints.size < 2) return
+        try {
+            val fullPath = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
+            val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullPath)
+            val splitIndex = findClosestPathIndex(currentPos, fullPath)
+            
+            val snappedP = snappedPoint.geometry() as? Point ?: return
+            
+            val traveledPoints = fullPath.subList(0, splitIndex + 1).toMutableList()
+            traveledPoints.add(snappedP)
+            
+            val upcomingPoints = mutableListOf<Point>()
+            upcomingPoints.add(snappedP)
+            upcomingPoints.addAll(fullPath.subList(splitIndex + 1, fullPath.size))
+
+            mapView?.mapboxMap?.getStyle { style ->
+                (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)?.geometry(LineString.fromLngLats(traveledPoints))
+                (style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)?.geometry(LineString.fromLngLats(upcomingPoints))
+            }
+        } catch (e: Exception) {
+            Log.e("TrackDriverActivity", "Error splitting route", e)
+        }
+    }
+
+    private fun findClosestPathIndex(point: Point, path: List<Point>): Int {
+        var minDistance = Double.MAX_VALUE
+        var index = 0
+        for (i in path.indices) {
+            val dist = TurfMeasurement.distance(point, path[i], TurfConstants.UNIT_METERS)
+            if (dist < minDistance) {
+                minDistance = dist
+                index = i
+            }
+        }
+        return index
     }
 
     private fun bitmapFromDrawableRes(context: Context, resourceId: Int): Bitmap? {

@@ -1,37 +1,105 @@
 package com.example.bustrack_app.viewmodels
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.MediatorLiveData
+import android.location.Location
+import androidx.lifecycle.*
 import com.example.bustrack_app.data.DriverRepository
+import com.example.bustrack_app.data.FirebaseRepository
 import com.example.bustrack_app.data.RouteRepository
+import com.example.bustrack_app.models.AttendanceRecordModel
 import com.example.bustrack_app.models.DriverModel
 import com.example.bustrack_app.models.RouteModel
+import com.example.bustrack_app.models.StudentModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 class TrackDriverViewModel : ViewModel() {
 
-    private val _targetDriver = MediatorLiveData<DriverModel?>()
-    val targetDriver: LiveData<DriverModel?> = _targetDriver
+    private val _driverId = MutableLiveData<String>()
+    private val lastLocation = MutableLiveData<Pair<Location, Long>>()
+    
+    private val allStudents = MutableLiveData<List<StudentModel>>()
+    private val todayAttendance = MutableLiveData<List<AttendanceRecordModel>>()
 
-    private val _assignedRoute = MediatorLiveData<RouteModel?>()
-    val assignedRoute: LiveData<RouteModel?> = _assignedRoute
+    init {
+        FirebaseRepository.fetchStudents { allStudents.value = it }
+        FirebaseRepository.fetchAttendance { todayAttendance.value = it }
+    }
 
-    private var driverId: String? = null
-
-    fun setDriverId(id: String) {
-        this.driverId = id
-        
-        _targetDriver.addSource(DriverRepository.driverList) { list ->
-            _targetDriver.value = list.find { it.id == id }
+    val targetDriver: LiveData<DriverModel?> = _driverId.switchMap { id ->
+        DriverRepository.driverList.map { list ->
+            val driver = list.find { it.id == id }
+            driver?.let { calculateLiveStats(it) }
+            driver
         }
+    }
 
-        _assignedRoute.addSource(_targetDriver) { driver ->
+    val assignedRoute: LiveData<RouteModel?> = targetDriver.switchMap { driver ->
+        RouteRepository.routeList.map { routes ->
             if (driver != null) {
-                _assignedRoute.addSource(RouteRepository.routeList) { routes ->
-                    _assignedRoute.value = routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus }
-                }
+                routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus || it.id == driver.route }
+            } else null
+        }
+    }
+
+    private fun calculateLiveStats(driver: DriverModel) {
+        // 1. Calculate Speed
+        val currentLoc = Location("service").apply {
+            latitude = driver.latitude
+            longitude = driver.longitude
+        }
+        val currentTime = System.currentTimeMillis()
+        
+        lastLocation.value?.let { last ->
+            val distance = last.first.distanceTo(currentLoc)
+            val timeDiff = (currentTime - last.second) / 1000.0
+            if (timeDiff > 0) {
+                val speedKph = (distance / timeDiff) * 3.6
+                driver.speed = if (speedKph < 2.0) 0.0 else speedKph
             }
         }
+        lastLocation.value = Pair(currentLoc, currentTime)
+
+        // 2. Calculate Load (Live from Attendance)
+        val routeName = driver.route ?: ""
+        val students = allStudents.value?.filter { it.route == routeName } ?: emptyList()
+        val records = todayAttendance.value?.filter { it.route == routeName && it.date == SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) } ?: emptyList()
+        
+        val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+        if (isMorning) {
+            val present = records.count { it.morningPickup.equals("Present", true) }
+            driver.load = "$present/${students.size}"
+        } else {
+            val eveningPresent = records.count { it.eveningPickup.equals("Present", true) }
+            val dropped = records.count { it.eveningDrop.equals("Dropped", true) || it.eveningDrop.equals("Present", true) }
+            val currentLoad = eveningPresent - dropped
+            driver.load = "${if (currentLoad < 0) 0 else currentLoad}/$eveningPresent"
+        }
+
+        // 3. Calculate ETA (Current Location to Final Destination)
+        val route = RouteRepository.routeList.value?.find { it.routeName == driver.route || it.busNo == driver.assignedBus || it.id == driver.route }
+        if (route != null && route.stopsList.isNotEmpty()) {
+            val lastStop = route.stopsList.last()
+            val destLoc = Location("dest").apply {
+                latitude = lastStop.latitude
+                longitude = lastStop.longitude
+            }
+            val distanceToDest = currentLoc.distanceTo(destLoc) // meters
+            
+            if (distanceToDest < 200) {
+                driver.eta = "Arrived"
+            } else {
+                // Use current speed or a default average speed (30 km/h) for calculation
+                val speedMs = if (driver.speed > 5) (driver.speed / 3.6) else (30.0 / 3.6)
+                val seconds = (distanceToDest / speedMs).toInt()
+                val minutes = seconds / 60
+                driver.eta = if (minutes <= 1) "Arriving" else "$minutes min"
+            }
+        } else {
+            driver.eta = "On Way"
+        }
+    }
+
+    fun setDriverId(id: String) {
+        _driverId.value = id
     }
 }

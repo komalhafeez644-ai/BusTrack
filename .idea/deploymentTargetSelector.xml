@@ -3,12 +3,12 @@
   <component name="deploymentTargetSelector">
     <selectionStates>
       <SelectionState runConfigName="app">
-        <option name="selectionMode" value="DIALOG" />
+        <option name="selectionMode" value="DROPDOWN" />
         <DialogSelection>
           <targets>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\dell\.android\avd\Pixel_7.avd" />
+                <DeviceId pluginId="PhysicalDevice" identifier="serial=082653733K004041" />
               </handle>
             </Target>
             <Target type="DEFAULT_BOOT">

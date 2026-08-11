@@ -1,5 +1,6 @@
 package ui.admin
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -7,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.view.View
+import android.view.animation.LinearInterpolator
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -31,6 +33,10 @@ import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.gestures.gestures
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import android.view.LayoutInflater
+import android.view.ViewGroup
 
 class LiveTrackingActivity : AppCompatActivity() {
 
@@ -38,8 +44,10 @@ class LiveTrackingActivity : AppCompatActivity() {
     private var pointAnnotationManager: PointAnnotationManager? = null
     private val viewModel: LiveTrackingViewModel by viewModels()
     private val driverMarkers = mutableMapOf<String, PointAnnotation>()
+    private val driverPreviousPositions = mutableMapOf<String, Point>()
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
     private var isUserInteracting = false
+    private lateinit var searchAdapter: BusSearchAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +61,7 @@ class LiveTrackingActivity : AppCompatActivity() {
             pointAnnotationManager = annotationApi?.createPointAnnotationManager()
 
             // Add bus icon to map style
-            val bitmap = bitmapFromDrawableRes(this@LiveTrackingActivity, R.drawable.blue_bus)
+            val bitmap = bitmapFromDrawableRes(this@LiveTrackingActivity, R.drawable.ic_marker_bus)
             bitmap?.let { style.addImage("bus-icon", it) }
 
             // Default center on FG Post Graduate College, Saddar (Rawalpindi)
@@ -66,7 +74,8 @@ class LiveTrackingActivity : AppCompatActivity() {
             )
 
             pointAnnotationManager?.addClickListener { annotation ->
-                val driver = viewModel.activeDrivers.value?.find {
+                val driversList = viewModel.activeDrivers.value
+                val driver = driversList?.find {
                     val latDiff = Math.abs(it.latitude - annotation.point.latitude())
                     val lngDiff = Math.abs(it.longitude - annotation.point.longitude())
                     latDiff < 0.0001 && lngDiff < 0.0001
@@ -77,6 +86,12 @@ class LiveTrackingActivity : AppCompatActivity() {
                     focusOnDriver(it)
                 }
                 true
+            }
+
+            // Sync Compass UI with map rotation
+            mapView?.mapboxMap?.subscribeCameraChanged {
+                val bearing = mapView?.mapboxMap?.cameraState?.bearing?.toFloat() ?: 0f
+                findViewById<ImageView>(R.id.ivCompass)?.rotation = -bearing
             }
 
             observeViewModel()
@@ -101,32 +116,76 @@ class LiveTrackingActivity : AppCompatActivity() {
             finish()
         }
 
+        // Setup Search Suggestions
+        val rvSuggestions = findViewById<RecyclerView>(R.id.rvSearchSuggestions)
+        val cardSuggestions = findViewById<View>(R.id.searchSuggestionsCard)
+        
+        rvSuggestions.layoutManager = LinearLayoutManager(this)
+        searchAdapter = BusSearchAdapter { driver ->
+            isUserInteracting = false
+            viewModel.selectDriver(driver)
+            if (driver.latitude != 0.0 && driver.longitude != 0.0) {
+                focusOnDriver(driver)
+            } else {
+                android.widget.Toast.makeText(this, "Bus is currently offline", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            cardSuggestions.visibility = View.GONE
+            findViewById<EditText>(R.id.etSearchBus).setText(driver.assignedBus ?: driver.name)
+            findViewById<EditText>(R.id.etSearchBus).clearFocus()
+        }
+        rvSuggestions.adapter = searchAdapter
+
+        findViewById<EditText>(R.id.etSearchBus)?.setOnClickListener {
+            if (cardSuggestions.visibility == View.GONE) {
+                val drivers = viewModel.allDriversForSearch.value ?: emptyList()
+                searchAdapter.updateData(drivers)
+                if (drivers.isNotEmpty()) cardSuggestions.visibility = View.VISIBLE
+            }
+        }
+
+        findViewById<EditText>(R.id.etSearchBus)?.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                val drivers = viewModel.allDriversForSearch.value ?: emptyList()
+                searchAdapter.updateData(drivers)
+                if (drivers.isNotEmpty()) cardSuggestions.visibility = View.VISIBLE
+            } else {
+                cardSuggestions.postDelayed({ cardSuggestions.visibility = View.GONE }, 200)
+            }
+        }
+
         findViewById<EditText>(R.id.etSearchBus)?.addTextChangedListener { text ->
             val query = text.toString().lowercase()
+            val drivers = viewModel.allDriversForSearch.value ?: emptyList()
+            
             if (query.isNotEmpty()) {
-                viewModel.activeDrivers.value?.find { 
+                val filtered = drivers.filter { 
                     it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true 
-                }?.let { driver ->
-                    isUserInteracting = false
-                    focusOnDriver(driver)
-                    viewModel.selectDriver(driver)
                 }
+                searchAdapter.updateData(filtered)
+                cardSuggestions.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
+            } else if (findViewById<EditText>(R.id.etSearchBus).isFocused) {
+                searchAdapter.updateData(drivers)
+                cardSuggestions.visibility = if (drivers.isNotEmpty()) View.VISIBLE else View.GONE
             }
         }
 
         // Map Controls
         findViewById<View>(R.id.mapControls)?.let { controls ->
-            controls.findViewById<View>(R.id.zoomInCard)?.setOnClickListener {
-                mapView?.mapboxMap?.setCamera(CameraOptions.Builder().zoom(mapView?.mapboxMap?.cameraState?.zoom?.plus(1.0)).build())
+            controls.findViewById<View>(R.id.compassCard)?.setOnClickListener {
+                // Reset map rotation to North
+                mapView?.mapboxMap?.flyTo(CameraOptions.Builder().bearing(0.0).build())
             }
-            controls.findViewById<View>(R.id.zoomOutCard)?.setOnClickListener {
-                mapView?.mapboxMap?.setCamera(CameraOptions.Builder().zoom(mapView?.mapboxMap?.cameraState?.zoom?.minus(1.0)).build())
-            }
+            
             controls.findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
                 isUserInteracting = false
                 val drivers = viewModel.activeDrivers.value
                 if (!drivers.isNullOrEmpty()) {
-                    if (drivers.size == 1) focusOnDriver(drivers[0]) else focusOnAllDrivers(drivers)
+                    val selected = viewModel.selectedDriver.value
+                    if (selected != null) {
+                        focusOnDriver(selected)
+                    } else {
+                        if (drivers.size == 1) focusOnDriver(drivers[0]) else focusOnAllDrivers(drivers)
+                    }
                 } else {
                     val defaultPoint = Point.fromLngLat(73.0478, 33.5977)
                     mapView?.mapboxMap?.flyTo(CameraOptions.Builder().center(defaultPoint).zoom(15.0).build())
@@ -166,18 +225,31 @@ class LiveTrackingActivity : AppCompatActivity() {
             if (!currentIds.contains(entry.key)) {
                 pointAnnotationManager?.delete(entry.value)
                 iterator.remove()
+                driverPreviousPositions.remove(entry.key)
             }
         }
 
         // 2. Add or update markers for active drivers
         drivers.forEach { driver ->
-            val point = Point.fromLngLat(driver.longitude, driver.latitude)
+            val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
             
             if (driverMarkers.containsKey(driver.id)) {
-                driverMarkers[driver.id]?.point = point
+                val annotation = driverMarkers[driver.id]!!
+                val prevPoint = driverPreviousPositions[driver.id]
+                
+                if (prevPoint != null && (prevPoint.latitude() != targetPoint.latitude() || prevPoint.longitude() != targetPoint.longitude())) {
+                    // Calculate Rotation (Bearing)
+                    val bearing = calculateBearing(prevPoint, targetPoint)
+                    annotation.iconRotate = bearing.toDouble()
+                    
+                    // Smooth Animate Position
+                    animateMarker(annotation, prevPoint, targetPoint)
+                } else {
+                    annotation.point = targetPoint
+                }
             } else {
                 val options = PointAnnotationOptions()
-                    .withPoint(point)
+                    .withPoint(targetPoint)
                     .withIconImage("bus-icon")
                     .withIconSize(1.5)
                     .withTextField(driver.assignedBus ?: driver.name)
@@ -191,16 +263,47 @@ class LiveTrackingActivity : AppCompatActivity() {
                     driverMarkers[driver.id] = annotation
                 }
             }
+            driverPreviousPositions[driver.id] = targetPoint
         }
 
         // 3. Camera handling
         if (!isUserInteracting && drivers.isNotEmpty()) {
-            if (drivers.size == 1) {
+            val selected = viewModel.selectedDriver.value
+            if (selected != null) {
+                focusOnDriver(selected)
+            } else if (drivers.size == 1) {
                 focusOnDriver(drivers[0])
             } else {
                 focusOnAllDrivers(drivers)
             }
         }
+    }
+
+    private fun animateMarker(annotation: PointAnnotation, start: Point, end: Point) {
+        val animator = ValueAnimator.ofFloat(0f, 1f)
+        animator.duration = 1000
+        animator.interpolator = LinearInterpolator()
+        animator.addUpdateListener { animation ->
+            val fraction = animation.animatedValue as Float
+            val lat = start.latitude() + (end.latitude() - start.latitude()) * fraction
+            val lng = start.longitude() + (end.longitude() - start.longitude()) * fraction
+            annotation.point = Point.fromLngLat(lng, lat)
+        }
+        animator.start()
+    }
+
+    private fun calculateBearing(start: Point, end: Point): Float {
+        val lat1 = Math.toRadians(start.latitude())
+        val lon1 = Math.toRadians(start.longitude())
+        val lat2 = Math.toRadians(end.latitude())
+        val lon2 = Math.toRadians(end.longitude())
+
+        val dLon = lon2 - lon1
+        val y = Math.sin(dLon) * Math.cos(lat2)
+        val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+        val brng = Math.atan2(y, x)
+
+        return ((Math.toDegrees(brng) + 360) % 360).toFloat()
     }
 
     private fun focusOnAllDrivers(drivers: List<DriverModel>) {
@@ -247,9 +350,9 @@ class LiveTrackingActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status}"
         
-        findViewById<TextView>(R.id.tvEta)?.text = "On Way"
-        findViewById<TextView>(R.id.tvSpeed)?.text = if (driver.latitude != 0.0) "38 km/h" else "Idle"
-        findViewById<TextView>(R.id.tvLoad)?.text = "Online"
+        findViewById<TextView>(R.id.tvEta)?.text = driver.eta
+        findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
+        findViewById<TextView>(R.id.tvLoad)?.text = driver.load
     }
 
     override fun onResume() {
@@ -284,5 +387,51 @@ class LiveTrackingActivity : AppCompatActivity() {
         super.onDestroy()
         bitmapCache.clear()
         mapView?.onDestroy() 
+    }
+
+    inner class BusSearchAdapter(private val onItemSelected: (DriverModel) -> Unit) :
+        RecyclerView.Adapter<BusSearchAdapter.ViewHolder>() {
+
+        private var drivers = listOf<DriverModel>()
+
+        fun updateData(newList: List<DriverModel>) {
+            drivers = newList
+            notifyDataSetChanged()
+        }
+
+        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val tvBusId: TextView = view.findViewById(R.id.tvBusId)
+            val tvRouteInfo: TextView = view.findViewById(R.id.tvRouteInfo)
+            val tvStatus: TextView = view.findViewById(R.id.tvStatus)
+
+            init {
+                view.setOnClickListener { 
+                    val pos = bindingAdapterPosition
+                    if (pos != RecyclerView.NO_POSITION) {
+                        onItemSelected(drivers[pos])
+                    }
+                }
+            }
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_bus_search_suggestion, parent, false)
+            return ViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val item = drivers[position]
+            holder.tvBusId.text = item.assignedBus ?: item.name
+            holder.tvRouteInfo.text = "Route: ${item.route ?: "N/A"}"
+            holder.tvStatus.text = item.status
+            
+            if (item.status.equals("Active", true) || item.status.equals("ACTIVE", true)) {
+                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
+            } else {
+                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_inactive)
+            }
+        }
+
+        override fun getItemCount() = drivers.size
     }
 }

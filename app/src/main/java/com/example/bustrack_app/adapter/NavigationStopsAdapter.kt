@@ -1,5 +1,6 @@
 package com.example.bustrack_app.adapter
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,13 +13,19 @@ import com.example.bustrack_app.models.StopItem
 class NavigationStopsAdapter(
     private var stops: List<StopItem>,
     private var currentStopIndex: Int = 0,
-    private var activeStopStatus: String = "NEXT" // NEXT, ARRIVED, PASSED
+    private var activeStopStatus: String = "NEXT",
+    private var isDarkMode: Boolean = false
 ) : RecyclerView.Adapter<NavigationStopsAdapter.ViewHolder>() {
 
     fun updateStops(newStops: List<StopItem>, currentIndex: Int, status: String = "NEXT") {
         this.stops = newStops
         this.currentStopIndex = currentIndex
         this.activeStopStatus = status
+        notifyDataSetChanged()
+    }
+
+    fun setTheme(isDark: Boolean) {
+        this.isDarkMode = isDark
         notifyDataSetChanged()
     }
 
@@ -40,7 +47,13 @@ class NavigationStopsAdapter(
             binding.tvStopTime.text = displayTime
             binding.tvStopIndex.text = (position + 1).toString()
 
-            // Hide line for last item
+            // Apply Theme Colors
+            val primaryColor = if (isDarkMode) Color.WHITE else Color.parseColor("#0F172A")
+            val secondaryColor = if (isDarkMode) Color.parseColor("#B0BEC5") else Color.parseColor("#64748B")
+            
+            binding.tvStopName.setTextColor(primaryColor)
+            binding.tvStopTime.setTextColor(secondaryColor)
+
             binding.timelineLine.visibility = if (position == stops.size - 1) View.GONE else View.VISIBLE
 
             when {
@@ -56,7 +69,7 @@ class NavigationStopsAdapter(
                     binding.tvStatusText.setTextColor(ContextCompat.getColor(itemView.context, R.color.status_green))
                 }
                 position == currentStopIndex -> {
-                    // NEXT or ARRIVED or PASSED (if just transitioned)
+                    // LIVE / CURRENT
                     if (activeStopStatus == "ARRIVED") {
                         binding.dotIndicator.visibility = View.GONE
                         binding.ivStopBus.visibility = View.VISIBLE
@@ -66,25 +79,14 @@ class NavigationStopsAdapter(
                         binding.statusBadge.setCardBackgroundColor(ContextCompat.getColor(itemView.context, R.color.status_green_bg))
                         binding.tvStatusText.text = "ARRIVED"
                         binding.tvStatusText.setTextColor(ContextCompat.getColor(itemView.context, R.color.status_green))
-                    } else if (activeStopStatus == "PASSED") {
-                        // This case might happen momentarily before currentIndex increments
-                        binding.dotIndicator.visibility = View.VISIBLE
-                        binding.dotIndicator.backgroundTintList = ContextCompat.getColorStateList(itemView.context, R.color.status_green)
-                        binding.ivStopBus.visibility = View.GONE
-                        binding.outerRing.visibility = View.GONE
-                        
-                        binding.statusBadge.setCardBackgroundColor(ContextCompat.getColor(itemView.context, R.color.status_green_bg))
-                        binding.tvStatusText.text = "PASSED"
-                        binding.tvStatusText.setTextColor(ContextCompat.getColor(itemView.context, R.color.status_green))
                     } else {
-                        // NEXT
                         binding.dotIndicator.visibility = View.GONE
                         binding.ivStopBus.visibility = View.VISIBLE
                         binding.outerRing.visibility = View.VISIBLE
                         binding.outerRing.backgroundTintList = ContextCompat.getColorStateList(itemView.context, R.color.icon_bg_blue)
                         
                         binding.statusBadge.setCardBackgroundColor(ContextCompat.getColor(itemView.context, R.color.icon_bg_blue))
-                        binding.tvStatusText.text = "NEXT"
+                        binding.tvStatusText.text = "LIVE"
                         binding.tvStatusText.setTextColor(ContextCompat.getColor(itemView.context, R.color.accent_blue))
                     }
                 }

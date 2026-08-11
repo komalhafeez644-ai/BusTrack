@@ -88,8 +88,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Sunrise Apartments"
-            android:textColor="#334155"
-            android:textSize="15sp"
+            android:textColor="#0F172A"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
@@ -97,7 +97,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="09:35 AM"
-            android:textColor="#94A3B8"
+            android:textColor="#475569"
             android:textSize="13sp" />
     </LinearLayout>
 
