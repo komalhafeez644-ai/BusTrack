@@ -25,11 +25,23 @@ class TrackDriverViewModel : ViewModel() {
         FirebaseRepository.fetchAttendance { todayAttendance.value = it }
     }
 
-    val targetDriver: LiveData<DriverModel?> = _driverId.switchMap { id ->
-        DriverRepository.driverList.map { list ->
-            val driver = list.find { it.id == id }
+    val targetDriver: LiveData<DriverModel?> = MediatorLiveData<DriverModel?>().apply {
+        addSource(_driverId) { id ->
+            val driver = DriverRepository.driverList.value?.find { it.id == id }
             driver?.let { calculateLiveStats(it) }
-            driver
+            value = driver
+        }
+        addSource(DriverRepository.driverList) { list ->
+            val driver = list.find { it.id == _driverId.value }
+            driver?.let { calculateLiveStats(it) }
+            value = driver
+        }
+        addSource(RouteRepository.routeList) { _ ->
+            val driver = value ?: DriverRepository.driverList.value?.find { it.id == _driverId.value }
+            driver?.let { 
+                calculateLiveStats(it)
+                value = it
+            }
         }
     }
 
@@ -75,22 +87,38 @@ class TrackDriverViewModel : ViewModel() {
             driver.load = "${if (currentLoad < 0) 0 else currentLoad}/$eveningPresent"
         }
 
-        // 3. Calculate ETA (Current Location to Final Destination)
+        // 3. Calculate ETA (Current Location to each Stop)
         val route = RouteRepository.routeList.value?.find { it.routeName == driver.route || it.busNo == driver.assignedBus || it.id == driver.route }
         if (route != null && route.stopsList.isNotEmpty()) {
+            val avgSpeedMs = if (driver.speed > 5) (driver.speed / 3.6) else (30.0 / 3.6)
+            
+            route.stopsList.forEach { stop ->
+                val stopLoc = Location("stop").apply {
+                    latitude = stop.latitude
+                    longitude = stop.longitude
+                }
+                val distance = currentLoc.distanceTo(stopLoc)
+                
+                if (distance < 150) {
+                    stop.time = "Arrived"
+                } else {
+                    val seconds = (distance / avgSpeedMs).toInt()
+                    val minutes = seconds / 60
+                    stop.time = if (minutes <= 1) "Arriving" else "$minutes min"
+                }
+            }
+
             val lastStop = route.stopsList.last()
             val destLoc = Location("dest").apply {
                 latitude = lastStop.latitude
                 longitude = lastStop.longitude
             }
-            val distanceToDest = currentLoc.distanceTo(destLoc) // meters
+            val distanceToDest = currentLoc.distanceTo(destLoc)
             
             if (distanceToDest < 200) {
                 driver.eta = "Arrived"
             } else {
-                // Use current speed or a default average speed (30 km/h) for calculation
-                val speedMs = if (driver.speed > 5) (driver.speed / 3.6) else (30.0 / 3.6)
-                val seconds = (distanceToDest / speedMs).toInt()
+                val seconds = (distanceToDest / avgSpeedMs).toInt()
                 val minutes = seconds / 60
                 driver.eta = if (minutes <= 1) "Arriving" else "$minutes min"
             }

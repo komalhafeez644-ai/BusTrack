@@ -43,7 +43,14 @@ class NavigationStopsAdapter(
     inner class ViewHolder(private val binding: ItemStopTimelineBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(stop: StopItem, position: Int) {
             binding.tvStopName.text = stop.stopName
-            val displayTime = if (stop.time == "TBD" || stop.time.isEmpty()) "ETA: --" else stop.time
+            
+            val displayTime = when {
+                stop.time.isEmpty() || stop.time == "TBD" -> "ETA: --"
+                stop.time.contains("min") || stop.time.contains("Arriving") || stop.time.contains("Arrived") -> {
+                    if (stop.time.startsWith("ETA:")) stop.time else "ETA: ${stop.time}"
+                }
+                else -> stop.time // Likely a fixed time like "09:35 AM"
+            }
             binding.tvStopTime.text = displayTime
             binding.tvStopIndex.text = (position + 1).toString()
 
