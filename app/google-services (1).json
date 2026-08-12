@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "127976454752",
+    "project_id": "bustrackapp-1a6c98c0",
+    "storage_bucket": "bustrackapp-1a6c98c0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:127976454752:android:39879860c4f20fd7faa105",
+        "android_client_info": {
+          "package_name": "com.example.bustrack_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "127976454752-tfb4us77mgk0jre7u95p5vu7ooci66qu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bustrack_app",
+            "certificate_hash": "835a7b9e3552c08cab45ab388a116bd50ca07d5c"
+          }
+        },
+        {
+          "client_id": "127976454752-rachqeicq8su1478t13lcp0bsi135cjl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFTq09V0oU0iNsN9uLVCGvaJyhIR34zuE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "127976454752-rachqeicq8su1478t13lcp0bsi135cjl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
