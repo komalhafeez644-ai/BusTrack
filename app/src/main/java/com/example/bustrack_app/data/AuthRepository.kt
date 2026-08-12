@@ -1,6 +1,7 @@
 package com.example.bustrack_app.data
 
 import android.util.Log
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -24,46 +25,70 @@ class AuthRepository {
             val uid = authResult.user?.uid
 
             if (uid != null) {
-                var role: String? = null
-                
-                // Try to fetch role from Firestore, but don't crash if permissions are missing
-                try {
-                    val document = db.collection("users").document(uid).get().await()
-                    role = document.getString("role")
-                } catch (e: Exception) {
-                    Log.w("AuthRepo", "Firestore read failed: ${e.message}")
-                }
-
-                // Hardcoded fallback if Firestore failed or role is missing
-                if (role == null) {
-                    role = when (cleanEmail) {
-                        "admin@gmail.com" -> "admin"
-                        "principal@gmail.com" -> "principal"
-                        else -> {
-                            // Try to check driver collection if possible
-                            try {
-                                val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
-                                if (!driverQuery.isEmpty) "driver" else "parent"
-                            } catch (e: Exception) { "parent" }
-                        }
-                    }
-
-                    // Attempt to sync missing document safely
-                    try {
-                        val userData = mapOf("uid" to uid, "email" to cleanEmail, "role" to role)
-                        db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
-                    } catch (e: Exception) {
-                        Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
-                    }
-                }
-
-                return if (role == "user") "parent" else role
+                return getOrSyncRole(uid, cleanEmail)
             }
             "Authentication failed"
         } catch (e: Exception) {
             Log.e("AuthRepo", "Login Error: ${e.message}")
             e.localizedMessage ?: "Invalid email or password"
         }
+    }
+
+    suspend fun signInWithGoogle(idToken: String): String? {
+        return try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val authResult = auth.signInWithCredential(credential).await()
+            val user = authResult.user
+            if (user != null) {
+                return getOrSyncRole(user.uid, user.email ?: "")
+            }
+            "Google Authentication failed"
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Google Login Error: ${e.message}")
+            e.localizedMessage ?: "Google Sign-In failed"
+        }
+    }
+
+    private suspend fun getOrSyncRole(uid: String, email: String): String {
+        val cleanEmail = email.trim().lowercase()
+        var role: String? = null
+        
+        // Try to fetch role from Firestore
+        try {
+            val document = db.collection("users").document(uid).get().await()
+            role = document.getString("role")
+        } catch (e: Exception) {
+            Log.w("AuthRepo", "Firestore read failed: ${e.message}")
+        }
+
+        // Fallback if role is missing
+        if (role == null) {
+            role = when (cleanEmail) {
+                "admin@gmail.com" -> "admin"
+                "principal@gmail.com" -> "principal"
+                else -> {
+                    try {
+                        val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
+                        if (!driverQuery.isEmpty) "driver" else "parent"
+                    } catch (e: Exception) { "parent" }
+                }
+            }
+
+            // Sync missing document
+            try {
+                val userData = mapOf(
+                    "uid" to uid, 
+                    "email" to cleanEmail, 
+                    "role" to role,
+                    "fullName" to (auth.currentUser?.displayName ?: "User Name")
+                )
+                db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
+            } catch (e: Exception) {
+                Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
+            }
+        }
+
+        return if (role == "user") "parent" else role
     }
 
     // REMOVED: createAdminAccount and createPrincipalAccount as they were using ghost UIDs

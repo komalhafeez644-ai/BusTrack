@@ -12,20 +12,31 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.login.ForgotPasswordActivity
 import com.example.bustrack_app.utils.Resource
 import com.example.bustrack_app.viewmodels.LoginViewModel
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import ui.admin.AdminDashboardActivity
 import ui.principal.PrincipalDashboardActivity
 import utils.ViewUtils
-// IMPORT ADD KIYA: Taake intent ko pata chale Signup Activity kahan hai
 
 class LoginActivity : AppCompatActivity() {
 
     private val viewModel: LoginViewModel by viewModels()
+    private lateinit var googleSignInClient: GoogleSignInClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
+
+        // Configure Google Sign-In
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
 
         val tilEmail = findViewById<TextInputLayout>(R.id.tilEmail)
         val tilPassword = findViewById<TextInputLayout>(R.id.tilPassword)
@@ -75,9 +86,19 @@ class LoginActivity : AppCompatActivity() {
             }, 200)
         }
 
+        val googleLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account.idToken?.let { viewModel.loginWithGoogle(it) }
+            } catch (e: ApiException) {
+                Toast.makeText(this, "Google sign in failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         btnGoogle.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            viewModel.loginWithGoogle()
+            googleLauncher.launch(googleSignInClient.signInIntent)
         }
 
         observeLogin()

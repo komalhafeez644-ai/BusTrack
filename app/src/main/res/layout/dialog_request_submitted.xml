@@ -1,99 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardCornerRadius="24dp"
-    app:cardElevation="0dp"
+    app:cardCornerRadius="28dp"
+    app:cardElevation="8dp"
     app:cardBackgroundColor="@color/white"
-    android:layout_margin="20dp">
+    android:layout_margin="24dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingTop="40dp">
 
+        <!-- Animated Success Icon Area -->
         <FrameLayout
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:layout_marginTop="32dp"
+            android:layout_width="110dp"
+            android:layout_height="110dp"
             android:background="@drawable/bg_bus_circle_blue"
-            android:backgroundTint="#F0F7FF">
+            android:backgroundTint="@color/icon_bg_blue">
 
             <ImageView
-                android:layout_width="60dp"
-                android:layout_height="60dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
                 android:layout_gravity="center"
                 android:src="@drawable/check_circle"
-                app:tint="#2563EB" />
+                app:tint="@color/primaryDark"
+                android:contentDescription="@string/request_submitted_title" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_circle_outline"
+                android:backgroundTint="@color/icon_bg_blue"
+                android:alpha="0.5" />
         </FrameLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Request Submitted"
-            android:textColor="#0F172A"
-            android:textSize="22sp"
+            android:layout_marginTop="32dp"
+            android:text="@string/request_submitted_title"
+            android:textColor="@color/primaryDark"
+            android:textSize="24sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:layout_marginHorizontal="32dp"
-            android:text="Your request has been sent to administration. Tracking will be enabled after verification."
+            android:layout_marginHorizontal="40dp"
+            android:text="@string/request_submitted_msg"
             android:textAlignment="center"
-            android:textColor="#64748B"
-            android:textSize="14sp" />
-
-        <View
-            android:layout_width="80dp"
-            android:layout_height="2dp"
-            android:layout_marginTop="32dp"
-            android:background="#F1F5F9" />
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:lineSpacingExtra="4dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDone"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginHorizontal="24dp"
-            android:layout_marginTop="32dp"
-            android:layout_marginBottom="24dp"
-            android:text="Done"
+            android:layout_height="60dp"
+            android:layout_marginHorizontal="32dp"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="32dp"
+            android:text="@string/ok_label"
             android:textColor="@color/white"
             android:textAllCaps="false"
             android:textSize="16sp"
             android:textStyle="bold"
-            app:cornerRadius="12dp"
-            app:backgroundTint="#051024" />
+            app:cornerRadius="16dp"
+            app:backgroundTint="@color/primaryDark"
+            app:elevation="4dp" />
 
-        <!-- Bottom Ref Bar -->
-        <RelativeLayout
+        <!-- Bottom Status Bar -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="#F8FAFC"
-            android:paddingHorizontal="24dp">
+            android:layout_height="56dp"
+            android:background="@color/bg_light"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="32dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/security_shield"
+                app:tint="@color/text_hint"
+                android:contentDescription="@string/verification_in_progress" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_centerVertical="true"
-                android:text="REF: TRK-9921-A"
-                android:textColor="#94A3B8"
+                android:layout_marginStart="8dp"
+                android:text="@string/verification_in_progress"
+                android:textColor="@color/text_hint"
                 android:textSize="11sp"
-                android:letterSpacing="0.1" />
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
 
-            <ImageView
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:src="@drawable/security_shield"
-                app:tint="#CBD5E1" />
-        </RelativeLayout>
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ref_bus_p"
+                android:textColor="@color/divider"
+                android:textSize="11sp" />
+        </LinearLayout>
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>

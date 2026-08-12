@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.example.bustrack_app.models.AdminModel
+import com.example.bustrack_app.models.ParentModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -13,11 +14,15 @@ class ProfileViewModel : ViewModel() {
     private val _adminData = MutableLiveData<AdminModel>()
     val adminData: LiveData<AdminModel> get() = _adminData
 
+    private val _parentData = MutableLiveData<ParentModel?>()
+    val parentData: LiveData<ParentModel?> get() = _parentData
+
     private val db = Firebase.firestore
     private val auth = Firebase.auth
 
     init {
         loadUserProfile()
+        loadParentData()
     }
 
     fun loadUserProfile() {
@@ -40,6 +45,15 @@ class ProfileViewModel : ViewModel() {
                     isDriverNotifyEnabled = snapshot.getBoolean("driverAlert") ?: false
                 )
                 _adminData.postValue(admin)
+            }
+        }
+    }
+
+    fun loadParentData() {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("parents").document(uid).addSnapshotListener { snapshot, _ ->
+            if (snapshot != null && snapshot.exists()) {
+                _parentData.postValue(snapshot.toObject(ParentModel::class.java))
             }
         }
     }

@@ -44,6 +44,16 @@ object FirebaseRepository {
             .addOnCompleteListener { onComplete(it.isSuccessful) }
     }
 
+    fun fetchStudentById(studentId: String, onResult: (StudentModel?) -> Unit) {
+        db.collection("students").document(studentId).get()
+            .addOnSuccessListener { snapshot ->
+                onResult(snapshot.toObject<StudentModel>())
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+
     // --- DRIVERS ---
     fun fetchDrivers(onResult: (List<DriverModel>) -> Unit) {
         db.collection("drivers").addSnapshotListener { snapshot, _ ->
@@ -62,6 +72,15 @@ object FirebaseRepository {
             "latitude" to lat,
             "longitude" to lng,
             "lastUpdated" to System.currentTimeMillis()
+        )
+        db.collection("drivers").document(driverId).update(updates)
+    }
+
+    fun updateDriverStats(driverId: String, eta: String, speed: Double, load: String) {
+        val updates = mapOf(
+            "eta" to eta,
+            "speed" to speed,
+            "load" to load
         )
         db.collection("drivers").document(driverId).update(updates)
     }
@@ -97,6 +116,31 @@ object FirebaseRepository {
         db.collection("routes").addSnapshotListener { snapshot, _ ->
             val list = snapshot?.documents?.mapNotNull { it.toObject<RouteModel>() } ?: emptyList()
             onResult(list)
+        }
+    }
+
+    // --- TRACKING REQUESTS ---
+    fun fetchTrackingRequests(onResult: (List<TrackingRequestModel>) -> Unit) {
+        db.collection("trackingRequests").addSnapshotListener { snapshot, _ ->
+            val list = snapshot?.documents?.mapNotNull { it.toObject<TrackingRequestModel>() } ?: emptyList()
+            onResult(list)
+        }
+    }
+
+    fun updateTrackingRequestStatus(requestId: String, status: String, reviewedBy: String, onComplete: (Boolean) -> Unit) {
+        val updates = mapOf(
+            "status" to status,
+            "reviewedAt" to com.google.firebase.Timestamp.now(),
+            "reviewedBy" to reviewedBy
+        )
+        db.collection("trackingRequests").document(requestId).update(updates)
+            .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
+    // --- PARENTS ---
+    fun fetchParent(parentId: String, onResult: (ParentModel?) -> Unit) {
+        db.collection("parents").document(parentId).addSnapshotListener { snapshot, _ ->
+            onResult(snapshot?.toObject<ParentModel>())
         }
     }
 }

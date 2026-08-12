@@ -33,6 +33,7 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.addLayerAbove
 import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.layers.generated.symbolLayer
@@ -53,9 +54,14 @@ import com.mapbox.turf.TurfMisc
 
 import android.location.Geocoder
 import android.location.Location
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
 import java.util.Locale
 
 class TrackDriverActivity : AppCompatActivity() {
+
+    enum class TrackingCameraMode { DRIVER_FOLLOW, ROUTE_OVERVIEW }
+    private var currentCameraMode = TrackingCameraMode.DRIVER_FOLLOW
 
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<FrameLayout>
     private var mapView: MapView? = null
@@ -67,9 +73,11 @@ class TrackDriverActivity : AppCompatActivity() {
     private lateinit var stopsAdapter: NavigationStopsAdapter
     private val ROUTE_SOURCE_ID = "route-source-id"
     private val TRAVELED_ROUTE_SOURCE_ID = "traveled-route-source-id"
+    private val STOPS_SOURCE_ID = "stops-source-id"
     private val ROUTE_LAYER_ID = "route-layer-id"
     private val TRAVELED_ROUTE_LAYER_ID = "traveled-route-layer-id"
     private val ROUTE_CASING_LAYER_ID = "route-casing-layer-id"
+    private val STOPS_LAYER_ID = "stops-layer-id"
     private val DRIVER_SOURCE_ID = "driver-source-id"
     private val DRIVER_LAYER_ID = "driver-layer-id"
     
@@ -107,6 +115,7 @@ class TrackDriverActivity : AppCompatActivity() {
             findViewById<ImageView>(R.id.btnBack)?.setOnClickListener { finish() }
 
             findViewById<View>(R.id.btnRecenter)?.setOnClickListener {
+                currentCameraMode = TrackingCameraMode.DRIVER_FOLLOW
                 viewModel.targetDriver.value?.let { driver ->
                     if (driver.latitude != 0.0 && driver.longitude != 0.0) {
                         val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
@@ -152,14 +161,15 @@ class TrackDriverActivity : AppCompatActivity() {
             }
 
             bottomSheet.findViewById<View>(R.id.btnViewRoute)?.setOnClickListener {
+                currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
                 viewModel.assignedRoute.value?.let { route ->
                     if (route.pathPoints.isNotEmpty()) {
                         val points = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
                         val cameraOptions = mapView?.mapboxMap?.cameraForCoordinates(
                             points,
-                            EdgeInsets(100.0, 100.0, 350.0, 100.0), // Padding to keep route visible above bottom sheet
-                            null,
-                            null
+                            EdgeInsets(100.0, 60.0, 350.0, 60.0), // Optimized padding for Admin view
+                            0.0,
+                            0.0
                         )
                         cameraOptions?.let {
                             mapView?.mapboxMap?.flyTo(it, MapAnimationOptions.mapAnimationOptions { duration(1500) })
@@ -305,7 +315,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     }
 
                     if (!style.styleLayerExists(DRIVER_LAYER_ID)) {
-                        style.addLayer(symbolLayer(DRIVER_LAYER_ID, DRIVER_SOURCE_ID) {
+                        val layer = symbolLayer(DRIVER_LAYER_ID, DRIVER_SOURCE_ID) {
                             iconImage("bus-icon")
                             iconSize(interpolate {
                                 exponential(1.5)
@@ -330,7 +340,13 @@ class TrackDriverActivity : AppCompatActivity() {
                             textHaloWidth(1.0)
                             textIgnorePlacement(true)
                             textAllowOverlap(true)
-                        })
+                        }
+                        
+                        if (style.styleLayerExists(STOPS_LAYER_ID)) {
+                            style.addLayerAbove(layer, STOPS_LAYER_ID)
+                        } else {
+                            style.addLayer(layer)
+                        }
                     } else {
                         val layer = style.getLayer(DRIVER_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.SymbolLayer
                         layer?.textField(locationName)
@@ -355,15 +371,17 @@ class TrackDriverActivity : AppCompatActivity() {
                 calculateProgress(driver, route)
             }
             
-            // Apply a tilted 3D perspective to the map
-            mapView?.mapboxMap?.flyTo(
-                CameraOptions.Builder()
-                    .center(targetPoint)
-                    .zoom(17.0)
-                    .pitch(60.0) // 3D tilt
-                    .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(1000) }
-            )
+            // Apply a tilted 3D perspective only if in Follow Mode
+            if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                mapView?.mapboxMap?.flyTo(
+                    CameraOptions.Builder()
+                        .center(targetPoint)
+                        .zoom(17.0)
+                        .pitch(60.0) // 3D tilt
+                        .build(),
+                    MapAnimationOptions.mapAnimationOptions { duration(1000) }
+                )
+            }
         } catch (e: Exception) {
             Log.e("TrackDriverActivity", "Error updating UI", e)
         }
@@ -438,44 +456,32 @@ class TrackDriverActivity : AppCompatActivity() {
                     style.addSource(geoJsonSource(TRAVELED_ROUTE_SOURCE_ID) { geometry(LineString.fromLngLats(emptyList())) })
                 }
 
+                // 1. Traveled Portion (Bottom)
                 if (!style.styleLayerExists(TRAVELED_ROUTE_LAYER_ID)) {
                     style.addLayer(lineLayer(TRAVELED_ROUTE_LAYER_ID, TRAVELED_ROUTE_SOURCE_ID) {
-                        lineColor(Color.parseColor("#94A3B8"))
+                        lineColor(Color.parseColor("#94A3B8")) // Light Gray
                         lineWidth(interpolate {
-                            exponential(1.5)
+                            linear()
                             zoom()
-                            stop(10.0, 2.0)
-                            stop(18.0, 14.0)
+                            stop(10.0, 3.0)
+                            stop(14.0, 7.0)
+                            stop(18.0, 11.0)
                         })
-                        lineOpacity(0.9)
+                        lineOpacity(0.8)
                         lineJoin(LineJoin.ROUND)
                         lineCap(LineCap.ROUND)
                     })
                 }
 
-                // Add a casing layer (Dark Navy Edges) for the upcoming route
+                // 2. Upcoming Casing (Above Traveled)
                 if (!style.styleLayerExists(ROUTE_CASING_LAYER_ID)) {
-                    style.addLayerBelow(lineLayer(ROUTE_CASING_LAYER_ID, ROUTE_SOURCE_ID) {
-                        lineColor(Color.parseColor("#1E3A8A"))
+                    style.addLayerAbove(lineLayer(ROUTE_CASING_LAYER_ID, ROUTE_SOURCE_ID) {
+                        lineColor(Color.parseColor("#0D1B3E")) // Dark Navy
                         lineWidth(interpolate {
-                            exponential(1.5)
+                            linear()
                             zoom()
-                            stop(10.0, 4.0)
-                            stop(18.0, 22.0)
-                        })
-                        lineOpacity(1.0)
-                        lineJoin(LineJoin.ROUND)
-                        lineCap(LineCap.ROUND)
-                    }, TRAVELED_ROUTE_LAYER_ID)
-                }
-
-                if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
-                    style.addLayerBelow(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
-                        lineColor(Color.parseColor("#3B82F6"))
-                        lineWidth(interpolate {
-                            exponential(1.5)
-                            zoom()
-                            stop(10.0, 2.0)
+                            stop(10.0, 5.0)
+                            stop(14.0, 10.0)
                             stop(18.0, 16.0)
                         })
                         lineOpacity(1.0)
@@ -483,27 +489,60 @@ class TrackDriverActivity : AppCompatActivity() {
                         lineCap(LineCap.ROUND)
                     }, TRAVELED_ROUTE_LAYER_ID)
                 }
+
+                // 3. Upcoming Main Route (Above Casing)
+                if (!style.styleLayerExists(ROUTE_LAYER_ID)) {
+                    style.addLayerAbove(lineLayer(ROUTE_LAYER_ID, ROUTE_SOURCE_ID) {
+                        lineColor(Color.parseColor("#007AFF")) // Bright Blue
+                        lineWidth(interpolate {
+                            linear()
+                            zoom()
+                            stop(10.0, 3.0)
+                            stop(14.0, 7.0)
+                            stop(18.0, 11.0)
+                        })
+                        lineOpacity(1.0)
+                        lineJoin(LineJoin.ROUND)
+                        lineCap(LineCap.ROUND)
+                    }, ROUTE_CASING_LAYER_ID)
+                }
+
+                // 4. Stops Layer (Above everything else)
+                val stopFeatures = route.stopsList.map { stop ->
+                    Feature.fromGeometry(Point.fromLngLat(stop.longitude, stop.latitude)).apply {
+                        addStringProperty("name", stop.stopName)
+                    }
+                }
+                val stopCollection = FeatureCollection.fromFeatures(stopFeatures)
+
+                if (!style.styleSourceExists(STOPS_SOURCE_ID)) {
+                    style.addSource(geoJsonSource(STOPS_SOURCE_ID) {
+                        featureCollection(stopCollection)
+                    })
+                } else {
+                    (style.getSource(STOPS_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                        ?.featureCollection(stopCollection)
+                }
+
+                if (!style.styleLayerExists(STOPS_LAYER_ID)) {
+                    style.addLayerAbove(symbolLayer(STOPS_LAYER_ID, STOPS_SOURCE_ID) {
+                        iconImage("stop-icon")
+                        iconSize(0.8) // Consistent with Driver Dashboard
+                        iconAllowOverlap(true)
+                        iconIgnorePlacement(true)
+
+                        textField(get("name"))
+                        textSize(10.0)
+                        textOffset(listOf(0.0, 1.5))
+                        textColor(Color.BLACK)
+                        textHaloColor(Color.WHITE)
+                        textHaloWidth(1.0)
+                        textIgnorePlacement(true)
+                        textAllowOverlap(true)
+                    }, ROUTE_LAYER_ID)
+                }
             } catch (e: Exception) {
                 Log.e("TrackDriverActivity", "Error drawing route", e)
-            }
-        }
-
-        pointAnnotationManager?.let { pam ->
-            stopMarkers.forEach { pam.delete(it) }
-            stopMarkers.clear()
-            
-            route.stopsList.forEach { stop ->
-                val options = PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(stop.longitude, stop.latitude))
-                    .withIconImage("stop-icon")
-                    .withIconSize(1.0)
-                    .withTextField(stop.stopName)
-                    .withTextSize(10.0)
-                    .withTextOffset(listOf(0.0, 1.5))
-                    .withTextColor(Color.BLACK)
-                    .withTextHaloColor(Color.WHITE)
-                    .withTextHaloWidth(1.0)
-                pam.create(options)?.let { stopMarkers.add(it) }
             }
         }
     }

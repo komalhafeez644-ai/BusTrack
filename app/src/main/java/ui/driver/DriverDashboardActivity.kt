@@ -102,6 +102,20 @@ import com.mapbox.navigation.base.route.NavigationRouterCallback
 import com.mapbox.navigation.voice.api.MapboxVoiceInstructionsPlayer
 import com.mapbox.navigation.voice.model.SpeechAnnouncement
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
+import com.mapbox.maps.extension.style.layers.getLayer
+import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.addLayerBelow
+import com.mapbox.maps.extension.style.layers.generated.lineLayer
+import com.mapbox.maps.extension.style.sources.addSource
+import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.sources.getSource
+import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
+import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
+import com.mapbox.maps.extension.style.expressions.dsl.generated.*
+import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
+import com.mapbox.turf.TurfConstants
+import com.mapbox.turf.TurfMeasurement
+import com.mapbox.turf.TurfMisc
 import kotlin.collections.firstOrNull
 
 class DriverDashboardActivity : AppCompatActivity() {
@@ -117,6 +131,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var isNavigating = false
     private var currentRouteGeometry: String? = null
     private var isVoiceEnabled = true
+    private var fullNavigationPoints: List<Point> = emptyList()
     private lateinit var stopsAdapter: com.example.bustrack_app.adapter.NavigationStopsAdapter
     private lateinit var bottomSheetBehavior: com.google.android.material.bottomsheet.BottomSheetBehavior<View>
 
@@ -141,6 +156,12 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var mapboxNavigation: MapboxNavigation? = null
     private var voiceInstructionsPlayer: MapboxVoiceInstructionsPlayer? = null
     private val attendancePromptedStops = mutableSetOf<Int>()
+
+    private val NAV_ROUTE_SOURCE_ID = "nav-route-source"
+    private val NAV_TRAVELED_SOURCE_ID = "nav-traveled-source"
+    private val NAV_ROUTE_LAYER_ID = "nav-route-layer"
+    private val NAV_ROUTE_CASING_LAYER_ID = "nav-route-casing-layer"
+    private val NAV_TRAVELED_LAYER_ID = "nav-traveled-layer"
 
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -261,10 +282,17 @@ class DriverDashboardActivity : AppCompatActivity() {
             val routes = result.navigationRoutes
             if (routes.isNotEmpty()) {
                 val route = routes[0]
-                val points = route.directionsRoute.geometry()?.let {
+                fullNavigationPoints = route.directionsRoute.geometry()?.let {
                     LineString.fromPolyline(it, 6).coordinates()
                 } ?: emptyList()
-                drawPointsOnMap(points)
+
+                if (isNavigating) {
+                    currentLocation?.let { loc ->
+                        updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                    }
+                } else {
+                    drawPointsOnMap(fullNavigationPoints)
+                }
             }
         }
     }
@@ -282,6 +310,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             runOnUiThread {
                 currentLocation = androidLocation
                 checkArrivalAtStart()
+                
+                if (isNavigating) {
+                    updateNavigationRouteProgress(Point.fromLngLat(androidLocation.longitude, androidLocation.latitude))
+                }
             }
         }
     }
@@ -301,10 +333,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val tvSpeed = sheet.findViewById<TextView>(R.id.tvSpeedSheet)
                 val tvLoad = sheet.findViewById<TextView>(R.id.tvLoadSheet)
 
-                tvEta?.text = if (durationRemaining <= 1) "Arriving" else "${durationRemaining.toInt()} min"
+                val etaString = if (durationRemaining <= 1) "Arriving" else "${durationRemaining.toInt()} min"
+                tvEta?.text = etaString
                 
                 // Get Speed from Puck (Enhanced Location)
-                val speedKph = currentLocation?.let { (it.speed * 3.6).toInt() } ?: 0
+                val speedKphDouble = (currentLocation?.speed?.times(3.6)) ?: 0.0
+                val speedKph = speedKphDouble.toInt()
                 tvSpeed?.text = "$speedKph km/h"
                 binding.tvSpeedNav.text = "$speedKph"
 
@@ -402,22 +436,41 @@ class DriverDashboardActivity : AppCompatActivity() {
         val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(java.util.Date())
         
         // Initial value while fetching
-        if (tvLoad?.text == "--") tvLoad.text = "0/0"
+        if (tvLoad?.text == "--" || tvLoad?.text.isNullOrEmpty()) tvLoad?.text = "0/0"
 
         com.example.bustrack_app.data.FirebaseRepository.fetchStudentsByRoute(routeName) { students ->
             com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { allAttendance ->
                 val records = allAttendance.filter { it.route == routeName && it.date == today }
                 val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
                 
+                val loadString: String
+                if (isMorning) {
+                    // Morning: Starts at 0 / Total. Increases as students board (Present Pickup)
+                    val presentCount = records.count { it.morningPickup.equals("Present", true) }
+                    loadString = "$presentCount/${students.size}"
+                } else {
+                    // Evening: Starts at Present / Present. Decreases as students get off (Dropped)
+                    // First, find how many students are expected for evening (those present for college pickup)
+                    val eveningExpected = records.count { it.eveningPickup.equals("Present", true) }
+                    // Count how many have been dropped off
+                    val droppedCount = records.count { it.eveningDrop.equals("Dropped", true) }
+                    val currentLoad = eveningExpected - droppedCount
+                    loadString = "${if (currentLoad < 0) 0 else currentLoad}/$eveningExpected"
+                }
+                
                 runOnUiThread {
-                    if (isMorning) {
-                        val present = records.count { it.morningPickup.equals("Present", true) }
-                        tvLoad?.text = "$present/${students.size}"
-                    } else {
-                        val eveningPresent = records.count { it.eveningPickup.equals("Present", true) }
-                        val dropped = records.count { it.eveningDrop.equals("Dropped", true) || it.eveningDrop.equals("Present", true) }
-                        val currentLoad = eveningPresent - dropped
-                        tvLoad?.text = "${if (currentLoad < 0) 0 else currentLoad}/$eveningPresent"
+                    tvLoad?.text = loadString
+                    
+                    // Sync with Firestore for Admin tracking
+                    viewModel.currentDriver.value?.id?.let { driverId ->
+                        val etaVal = binding.bottomSummaryCard.findViewById<TextView>(R.id.tvEtaSheet)?.text?.toString() ?: "On Way"
+                        val speedVal = (currentLocation?.speed?.times(3.6)) ?: 0.0
+                        com.example.bustrack_app.data.FirebaseRepository.updateDriverStats(
+                            driverId,
+                            etaVal,
+                            speedVal,
+                            loadString
+                        )
                     }
                 }
             }
@@ -572,33 +625,20 @@ class DriverDashboardActivity : AppCompatActivity() {
             return
         }
         
-        if (isNearStart) {
-            val points = if (route.pathPoints.isNotEmpty()) {
-                route.pathPoints
-                    .filter { it.latitude != 0.0 && it.longitude != 0.0 }
-                    .map { Point.fromLngLat(it.longitude, it.latitude) }
-            } else if (route.stopsList.isNotEmpty()) {
-                route.stopsList
-                    .filter { it.latitude != 0.0 && it.longitude != 0.0 }
-                    .map { Point.fromLngLat(it.longitude, it.latitude) }
-            } else {
-                emptyList()
-            }
-
-            if (points.isNotEmpty()) {
-                drawPointsOnMap(points)
-            }
+        val points = if (route.pathPoints.isNotEmpty()) {
+            route.pathPoints
+                .filter { it.latitude != 0.0 && it.longitude != 0.0 }
+                .map { Point.fromLngLat(it.longitude, it.latitude) }
+        } else if (route.stopsList.isNotEmpty()) {
+            route.stopsList
+                .filter { it.latitude != 0.0 && it.longitude != 0.0 }
+                .map { Point.fromLngLat(it.longitude, it.latitude) }
         } else {
-            polylineAnnotationManager?.deleteAll()
-            pointAnnotationManager?.deleteAll()
-            currentLocation?.let { 
-                mapView?.mapboxMap?.setCamera(
-                    CameraOptions.Builder()
-                        .center(Point.fromLngLat(it.longitude, it.latitude))
-                        .zoom(15.0)
-                        .build()
-                )
-            }
+            emptyList()
+        }
+
+        if (points.isNotEmpty()) {
+            drawPointsOnMap(points)
         }
     }
 
@@ -724,16 +764,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun drawPointsOnMap(points: List<Point>) {
         if (points.isEmpty()) return
 
-        polylineAnnotationManager?.deleteAll()
-        val polylineOptions = PolylineAnnotationOptions()
-            .withPoints(points)
-            .withLineColor("#007AFF") // Clean, crisp Apple-style blue
-            .withLineWidth(4.0) // Significantly thinner for a precise look
-        polylineAnnotationManager?.create(polylineOptions)
+        // 1. Draw Route (Only if NOT navigating, because navigation uses LineLayers)
+        if (!isNavigating) {
+            polylineAnnotationManager?.deleteAll()
+            val polylineOptions = PolylineAnnotationOptions()
+                .withPoints(points)
+                .withLineColor("#1565C0") // Professional Blue for Dashboard
+                .withLineWidth(4.0) 
+                .withLineOpacity(0.8)
+            polylineAnnotationManager?.create(polylineOptions)
+        }
 
+        // 2. Draw Stop Markers (ALWAYS drawn in both modes)
         pointAnnotationManager?.deleteAll()
-
-        // Add Markers for all stops in the route
         assignedRoute?.stopsList?.forEach { stop ->
             addMarker(Point.fromLngLat(stop.longitude, stop.latitude), R.drawable.ic_marker_dest, stop.stopName)
         }
@@ -743,21 +786,67 @@ class DriverDashboardActivity : AppCompatActivity() {
             addMarker(points.first(), R.drawable.green_dot)
         }
 
-        if (points.size == 1) {
-            mapView?.mapboxMap?.setCamera(
-                CameraOptions.Builder()
-                    .center(points[0])
-                    .zoom(15.0)
-                    .build()
-            )
+        if (isNavigating) return // Skip manual camera fitting during navigation
+
+
+        val cameraOptions = if (points.size == 1) {
+            CameraOptions.Builder()
+                .center(points[0])
+                .zoom(15.0)
+                .pitch(0.0)
+                .bearing(0.0)
+                .build()
         } else {
-            val camera = mapView?.mapboxMap?.cameraForCoordinates(
+            mapView?.mapboxMap?.cameraForCoordinates(
                 points,
                 EdgeInsets(350.0, 100.0, 150.0, 100.0),
-                null,
-                null
+                0.0, // bearing
+                0.0  // pitch
             )
-            camera?.let { mapView?.mapboxMap?.setCamera(it) }
+        }
+        
+        cameraOptions?.let {
+            mapView?.camera?.flyTo(
+                it,
+                MapAnimationOptions.mapAnimationOptions {
+                    duration(1500)
+                }
+            )
+        }
+    }
+
+    private fun updateNavigationRouteProgress(currentPos: Point) {
+        if (fullNavigationPoints.size < 2) return
+        try {
+            val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
+            val snappedP = snappedPoint.geometry() as? Point ?: return
+            
+            var splitIndex = 0
+            var minDistance = Double.MAX_VALUE
+            for (i in fullNavigationPoints.indices) {
+                val dist = TurfMeasurement.distance(currentPos, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
+                if (dist < minDistance) {
+                    minDistance = dist
+                    splitIndex = i
+                }
+            }
+
+            val traveledPoints = fullNavigationPoints.subList(0, splitIndex + 1).toMutableList()
+            traveledPoints.add(snappedP)
+            
+            val upcomingPoints = mutableListOf<Point>()
+            upcomingPoints.add(snappedP)
+            upcomingPoints.addAll(fullNavigationPoints.subList(splitIndex + 1, fullNavigationPoints.size))
+
+            mapView?.mapboxMap?.getStyle { style ->
+                (style.getSource(NAV_TRAVELED_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                    ?.geometry(LineString.fromLngLats(traveledPoints))
+                
+                (style.getSource(NAV_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                    ?.geometry(LineString.fromLngLats(upcomingPoints))
+            }
+        } catch (e: Exception) {
+            Log.e("NavDebug", "Error splitting route", e)
         }
     }
 
@@ -934,10 +1023,13 @@ class DriverDashboardActivity : AppCompatActivity() {
             mapView?.viewport?.makeFollowPuckViewportState(
                 FollowPuckViewportStateOptions.Builder()
                     .zoom(19.0) // Deep zoom for inDrive feel
-                    .pitch(70.0) // High tilt for 3D navigation
+                    .pitch(65.0) // High tilt for 3D navigation
+                    .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
                     .build()
             )!!
         )
+        // Offset puck downwards to see road ahead
+        mapView?.mapboxMap?.setCamera(CameraOptions.Builder().padding(EdgeInsets(450.0, 0.0, 150.0, 0.0)).build())
     }
 
     private fun followPuckNorthUp() {
@@ -1077,18 +1169,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         nav.startTripSession()
                     }
 
-                    val zoom = 18.0
-                    val tilt = 65.0
-
-                    mapView?.viewport?.transitionTo(
-                        mapView?.viewport?.makeFollowPuckViewportState(
-                            FollowPuckViewportStateOptions.Builder()
-                                .zoom(zoom)
-                                .pitch(tilt)
-                                .build()
-                        )!!
-                    )
-
+                    startFollowingPuck()
                     setNavigationMode(true)
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
@@ -1119,11 +1200,32 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // 3. Immersive Navigation Night Style (Google Maps look)
                 updateBottomSheetTheme(true)
 
-                mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") {
+                mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
+                    // 1. Setup Navigation Style Layers FIRST (so they stay at the bottom)
+                    setupNavigationLayers(style)
+                    
+                    // 2. Hide unwanted green/cyan traffic/road edge lines
+                    style.styleLayers.forEach { layer ->
+                        if (layer.id.contains("traffic") || layer.id.contains("congestion") || layer.id.contains("road-casing")) {
+                            style.getLayer(layer.id)?.visibility(Visibility.NONE)
+                        }
+                    }
+
+                    // 3. Recreate managers AFTER setupNavigationLayers (so they are added ON TOP)
+                    polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
+                    pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+
                     mapView?.location?.pulsingEnabled = false
+
                     mapboxNavigation?.getNavigationRoutes()?.firstOrNull()?.let { navRoute ->
-                        val points = LineString.fromPolyline(navRoute.directionsRoute.geometry()!!, 6).coordinates()
-                        drawPointsOnMap(points)
+                        fullNavigationPoints = LineString.fromPolyline(navRoute.directionsRoute.geometry()!!, 6).coordinates()
+                        
+                        // Draw stops and labels
+                        drawPointsOnMap(fullNavigationPoints)
+
+                        currentLocation?.let { loc ->
+                            updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                        }
                     }
                 }
 
@@ -1142,7 +1244,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                 layoutMapControls.animate().translationY(-240f).setDuration(500).start()
                 btnRecenter.animate().translationY(-240f).setDuration(500).start()
             } else {
-                // Restore Dashboard UI
+                // 1. Immediately stop navigation logic to free up map
+                mapboxNavigation?.stopTripSession()
+                mapboxNavigation?.setNavigationRoutes(emptyList())
+                fullNavigationPoints = emptyList()
+                mapView?.viewport?.idle()
+                
+                // Reset camera padding to center for Dashboard
+                mapView?.mapboxMap?.setCamera(CameraOptions.Builder().padding(EdgeInsets(0.0, 0.0, 0.0, 0.0)).build())
+
+                // 2. Restore Dashboard UI
                 toolbar.visibility = View.VISIBLE
                 headerBg.visibility = View.VISIBLE
                 dashboardTopContent.visibility = View.VISIBLE
@@ -1150,29 +1261,20 @@ class DriverDashboardActivity : AppCompatActivity() {
                 
                 updateBottomSheetTheme(false)
 
+                // Restore Light Style for Dashboard
                 mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+                    // Recreate managers for the new style
+                    polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
+                    pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+
                     mapView?.location?.pulsingEnabled = true
                     updateMapDisplay()
                 }
 
-                mapboxNavigation?.stopTripSession()
-                mapboxNavigation?.setNavigationRoutes(emptyList())
-
-                mapView?.viewport?.idle()
                 binding.layoutMapControls.visibility = View.GONE
                 binding.layoutMapControls.translationY = 0f
                 binding.btnRecenter.visibility = View.GONE
                 binding.btnRecenter.translationY = 0f
-
-                mapView?.camera?.easeTo(
-                    CameraOptions.Builder()
-                        .zoom(14.0)
-                        .pitch(0.0)
-                        .build(),
-                    MapAnimationOptions.mapAnimationOptions {
-                        duration(1000)
-                    }
-                )
 
                 cardRouteDetails.visibility = View.VISIBLE
                 btnStartNavigation.visibility = View.VISIBLE
@@ -1202,7 +1304,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         
         val cameraOptions = mapView?.mapboxMap?.cameraForCoordinates(
             points,
-            EdgeInsets(200.0, 100.0, 450.0, 100.0), // Padding for bottom sheet
+            EdgeInsets(150.0, 80.0, 180.0, 80.0), // Optimized padding to avoid excessive zoom-out
             0.0,
             0.0
         )
@@ -1214,6 +1316,60 @@ class DriverDashboardActivity : AppCompatActivity() {
                     duration(1500)
                 }
             )
+        }
+    }
+
+    private fun setupNavigationLayers(style: Style) {
+        if (!style.styleSourceExists(NAV_ROUTE_SOURCE_ID)) {
+            style.addSource(geoJsonSource(NAV_ROUTE_SOURCE_ID))
+        }
+        if (!style.styleSourceExists(NAV_TRAVELED_SOURCE_ID)) {
+            style.addSource(geoJsonSource(NAV_TRAVELED_SOURCE_ID))
+        }
+
+        if (!style.styleLayerExists(NAV_TRAVELED_LAYER_ID)) {
+            style.addLayer(lineLayer(NAV_TRAVELED_LAYER_ID, NAV_TRAVELED_SOURCE_ID) {
+                lineColor("#94A3B8") // Traveled: Light Gray
+                lineWidth(interpolate {
+                    linear()
+                    zoom()
+                    stop(12.0, 5.0)
+                    stop(18.0, 11.0)
+                })
+                lineOpacity(0.8)
+                lineJoin(LineJoin.ROUND)
+                lineCap(LineCap.ROUND)
+            })
+        }
+
+        if (!style.styleLayerExists(NAV_ROUTE_CASING_LAYER_ID)) {
+            style.addLayer(lineLayer(NAV_ROUTE_CASING_LAYER_ID, NAV_ROUTE_SOURCE_ID) {
+                lineColor("#0D1B3E") // Casing: Dark Navy
+                lineWidth(interpolate {
+                    linear()
+                    zoom()
+                    stop(12.0, 8.0)
+                    stop(18.0, 16.0)
+                })
+                lineOpacity(1.0)
+                lineJoin(LineJoin.ROUND)
+                lineCap(LineCap.ROUND)
+            })
+        }
+
+        if (!style.styleLayerExists(NAV_ROUTE_LAYER_ID)) {
+            style.addLayer(lineLayer(NAV_ROUTE_LAYER_ID, NAV_ROUTE_SOURCE_ID) {
+                lineColor("#007AFF") // Main: Bright Blue
+                lineWidth(interpolate {
+                    linear()
+                    zoom()
+                    stop(12.0, 5.0)
+                    stop(18.0, 11.0)
+                })
+                lineOpacity(1.0)
+                lineJoin(LineJoin.ROUND)
+                lineCap(LineCap.ROUND)
+            })
         }
     }
 

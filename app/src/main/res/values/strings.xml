@@ -166,4 +166,38 @@
     <string name="welcome_principal">WELCOME PRINCIPAL, 👋</string>
     <string name="profile">Profile</string>
     <string name="mark_all_present">MARK ALL PRESENT</string>
+
+    <!-- Parent Tracking Request Flow -->
+    <string name="welcome_bustrack">Welcome to BusTrack!</string>
+    <string name="complete_info_subtitle">Please complete your information to enable live bus tracking.</string>
+    <string name="parent_name_label">Parent Name</string>
+    <string name="parent_name_hint">Enter your full name</string>
+    <string name="cnic_label">CNIC</string>
+    <string name="cnic_hint">Enter your CNIC</string>
+    <string name="phone_label">Phone Number</string>
+    <string name="phone_hint">Enter your phone number</string>
+    <string name="child_name_label">Child Name</string>
+    <string name="child_name_hint">Enter child\'s full name</string>
+    <string name="relationship_label">Relationship with Child</string>
+    <string name="student_id_label">Student ID</string>
+    <string name="student_id_hint">Enter Student ID</string>
+    <string name="select_relationship">Select Relationship</string>
+    <string name="continue_label">Continue</string>
+    <string name="request_submitted_title">Request Submitted!</string>
+    <string name="request_submitted_msg">Your tracking request has been submitted successfully. Please wait for Admin approval to enable live bus tracking.</string>
+    <string name="ok_label">OK</string>
+    <string name="verification_in_progress">Verification in progress</string>
+    <string name="ref_bus_p">REF: BUS-P</string>
+    <string name="secure_info">Information is secure and encrypted</string>
+    <string name="verification_required">Verification Required</string>
+
+    <!-- Replace with your actual Web Client ID from Firebase Console / google-services.json -->
+    <string name="default_web_client_id">127976454752-rachqeicq8su1478t13lcp0bsi135cjl.apps.googleusercontent.com</string>
+
+    <string-array name="relationship_options">
+        <item>Father</item>
+        <item>Mother</item>
+        <item>Guardian</item>
+        <item>Other</item>
+    </string-array>
 </resources>

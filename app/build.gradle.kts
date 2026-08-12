@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.play.services.maps)
+    implementation(libs.play.services.auth)
     implementation(libs.mapbox.maps)
     implementation(libs.mapbox.navigation)
     implementation(libs.mapbox.voice)

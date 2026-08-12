@@ -27,11 +27,37 @@ class SplashActivity : AppCompatActivity() {
             }
         }
 
-        // Delay for 3 seconds then go to IntroActivity
+        // Delay for 3 seconds then decide navigation
         Handler(Looper.getMainLooper()).postDelayed({
-            val intent = Intent(this, IntroActivity::class.java)
-            startActivity(intent)
-            finish()
+            checkSessionAndNavigate()
         }, 3000)
+    }
+
+    private fun checkSessionAndNavigate() {
+        val currentUser = Firebase.auth.currentUser
+        if (currentUser != null) {
+            // User is logged in, fetch role and go to dashboard
+            lifecycleScope.launch {
+                try {
+                    val role = AuthRepository().getCurrentUserRole()
+                    val targetClass = when (role) {
+                        "admin" -> ui.admin.AdminDashboardActivity::class.java
+                        "principal" -> ui.principal.PrincipalDashboardActivity::class.java
+                        "driver" -> ui.driver.DriverDashboardActivity::class.java
+                        else -> ui.parent.ParentDashboardActivity::class.java
+                    }
+                    startActivity(Intent(this@SplashActivity, targetClass))
+                    finish()
+                } catch (e: Exception) {
+                    // Fallback to Login if role fetch fails
+                    startActivity(Intent(this@SplashActivity, IntroActivity::class.java))
+                    finish()
+                }
+            }
+        } else {
+            // No user logged in, show Intro
+            startActivity(Intent(this, IntroActivity::class.java))
+            finish()
+        }
     }
 }

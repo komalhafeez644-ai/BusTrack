@@ -7,17 +7,21 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
+import com.example.bustrack_app.models.TrackingRequestModel
+import com.example.bustrack_app.viewmodels.TrackingRequestsViewModel
 import com.google.android.material.chip.ChipGroup
 
 class TrackingRequestsActivity : AppCompatActivity() {
 
     private lateinit var rvRequests: RecyclerView
     private lateinit var adapter: TrackingRequestAdapter
-    private var allRequests = listOf<ParentRequest>()
+    private val viewModel: TrackingRequestsViewModel by viewModels()
+    private var allRequests = listOf<TrackingRequestModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,46 +34,39 @@ class TrackingRequestsActivity : AppCompatActivity() {
         rvRequests = findViewById(R.id.rvRequests)
         rvRequests.layoutManager = LinearLayoutManager(this)
         
-        // Mock data with multi-child support and enabled routes
-        allRequests = listOf(
-            ParentRequest("John Doe", "Pending", listOf(
-                ChildInfo("Elena Rodriguez", "#SR-9921")
-            )),
-            ParentRequest("Sara Ahmed", "Approved", listOf(
-                ChildInfo("Ali Hassan", "#SR-2045", "Route-01 (Gulshan)"),
-                ChildInfo("Zain Ahmed", "#SR-042", "Route-08 (North)")
-            )),
-            ParentRequest("M. Bilal", "Approved", listOf(
-                ChildInfo("Hassan Bilal", "#SR-088", "Route-03 (Defence)")
-            )),
-            ParentRequest("Hamza Ali", "Rejected", listOf(
-                ChildInfo("Fatima Hamza", "STD-2024-105")
-            )),
-            ParentRequest("Irfan Khan", "Pending", listOf(
-                ChildInfo("Zoya Khan", "#SR-1011")
-            ))
-        )
-        
-        adapter = TrackingRequestAdapter(allRequests.filter { it.status == "Pending" }) { request ->
+        adapter = TrackingRequestAdapter(emptyList()) { request ->
             val intent = Intent(this, TrackingApprovalDetailActivity::class.java)
+            intent.putExtra("REQUEST_ID", request.requestId)
+            intent.putExtra("PARENT_ID", request.parentId)
+            intent.putExtra("STUDENT_ID", request.studentId)
             intent.putExtra("PARENT_NAME", request.parentName)
             intent.putExtra("STATUS", request.status)
-            
-            // Pass all children data as JSON
-            val gson = com.google.gson.Gson()
-            val childrenJson = gson.toJson(request.children)
-            intent.putExtra("CHILDREN_JSON", childrenJson)
-
             startActivity(intent)
         }
         rvRequests.adapter = adapter
 
         setupFilters()
+        observeViewModel()
+        viewModel.loadRequests()
+    }
+
+    private fun observeViewModel() {
+        viewModel.requests.observe(this) { requests ->
+            allRequests = requests
+            val chipGroup = findViewById<ChipGroup>(R.id.chipGroupStatus)
+            val filterStatus = when (chipGroup.checkedChipId) {
+                R.id.chipApproved -> "Approved"
+                R.id.chipRejected -> "Rejected"
+                else -> "Pending"
+            }
+            updateList(filterStatus)
+        }
     }
 
     override fun onResume() {
         super.onResume()
         utils.NavigationUtils.setupBottomNavigation(this)
+        viewModel.loadRequests()
     }
 
     private fun setupFilters() {
@@ -85,28 +82,16 @@ class TrackingRequestsActivity : AppCompatActivity() {
     }
 
     private fun updateList(status: String) {
-        val filteredList = allRequests.filter { it.status == status }
+        val filteredList = allRequests.filter { it.status.equals(status, ignoreCase = true) }
         adapter.updateData(filteredList)
     }
 
-    data class ParentRequest(
-        val parentName: String,
-        val status: String,
-        val children: List<ChildInfo>
-    )
-
-    data class ChildInfo(
-        val name: String,
-        val id: String,
-        val enabledRoute: String? = null
-    )
-
     class TrackingRequestAdapter(
-        private var requests: List<ParentRequest>,
-        private val onItemClick: (ParentRequest) -> Unit
+        private var requests: List<TrackingRequestModel>,
+        private val onItemClick: (TrackingRequestModel) -> Unit
     ) : RecyclerView.Adapter<TrackingRequestAdapter.ViewHolder>() {
 
-        fun updateData(newRequests: List<ParentRequest>) {
+        fun updateData(newRequests: List<TrackingRequestModel>) {
             requests = newRequests
             notifyDataSetChanged()
         }
@@ -125,15 +110,15 @@ class TrackingRequestsActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val request = requests[position]
             holder.tvParentName.text = request.parentName
-            holder.tvStatus.text = request.status
+            holder.tvStatus.text = request.status.replaceFirstChar { it.uppercase() }
             
             // Set status color
-            when (request.status) {
-                "Approved" -> {
+            when (request.status.lowercase()) {
+                "approved" -> {
                     holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
                     holder.tvStatus.setTextColor(android.graphics.Color.parseColor("#15803D"))
                 }
-                "Rejected" -> {
+                "rejected" -> {
                     holder.tvStatus.setBackgroundResource(R.drawable.bg_status_badge_red)
                     holder.tvStatus.setTextColor(android.graphics.Color.parseColor("#991B1B"))
                 }
@@ -143,22 +128,15 @@ class TrackingRequestsActivity : AppCompatActivity() {
                 }
             }
 
-            // Dynamically add children to the card
+            // Dynamically add student info to the card
             holder.containerChildren.removeAllViews()
-            request.children.forEach { child ->
-                val childView = LayoutInflater.from(holder.itemView.context).inflate(R.layout.layout_child_request_item, holder.containerChildren, false)
-                childView.findViewById<TextView>(R.id.tvStudentInfo).text = "Child: ${child.name} (${child.id})"
-                
-                val tvRoute = childView.findViewById<TextView>(R.id.tvEnabledRoute)
-                if (child.enabledRoute != null) {
-                    tvRoute.text = "Tracking: ${child.enabledRoute}"
-                    tvRoute.visibility = View.VISIBLE
-                } else {
-                    tvRoute.visibility = View.GONE
-                }
-                
-                holder.containerChildren.addView(childView)
-            }
+            val childView = LayoutInflater.from(holder.itemView.context).inflate(R.layout.layout_child_request_item, holder.containerChildren, false)
+            childView.findViewById<TextView>(R.id.tvStudentInfo).text = "Student ID: ${request.studentId}"
+            
+            val tvRoute = childView.findViewById<TextView>(R.id.tvEnabledRoute)
+            tvRoute.visibility = View.GONE
+            
+            holder.containerChildren.addView(childView)
 
             holder.itemView.setOnClickListener { onItemClick(request) }
         }

@@ -30,23 +30,16 @@ class LoginViewModel : ViewModel() {
         }
     }
 
-    fun loginWithGoogle() {
+    fun loginWithGoogle(idToken: String) {
         viewModelScope.launch {
             loginState.value = Resource.Loading()
-            
-            // Handle Firestore entry for Google login
-            val user = Firebase.auth.currentUser
-            if (user != null) {
-                val db = Firebase.firestore
-                val userData = mapOf(
-                    "email" to user.email,
-                    "fullName" to (user.displayName ?: "Parent Name"),
-                    "role" to "user"
-                )
-                db.collection("users").document(user.uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
+            val result = repository.signInWithGoogle(idToken)
+            val successRoles = listOf("admin", "principal", "driver", "parent", "user")
+            if (result in successRoles) {
+                loginState.value = Resource.Success(result!!)
+            } else {
+                loginState.value = Resource.Error(result ?: "Google Login Failed")
             }
-            
-            loginState.value = Resource.Success("user") 
         }
     }
 }

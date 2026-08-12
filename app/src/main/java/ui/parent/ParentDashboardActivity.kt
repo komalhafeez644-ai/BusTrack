@@ -1,20 +1,30 @@
 package ui.parent
 
+import android.app.Dialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
-import android.widget.ImageView
-import android.widget.TextView
-import android.widget.Toast
+import android.view.ViewGroup
+import android.view.Window
+import android.widget.*
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.ParentRepository
 import com.example.bustrack_app.data.StudentRepository
+import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.StudentModel
 import com.example.bustrack_app.viewmodels.ProfileViewModel
 import com.bumptech.glide.Glide
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.textfield.TextInputLayout
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.mapbox.geojson.Point
@@ -24,6 +34,7 @@ import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import kotlinx.coroutines.launch
 import ui.admin.*
 import ui_authentication.LoginActivity
 
@@ -32,6 +43,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     private var mapView: MapView? = null
     private lateinit var drawerLayout: DrawerLayout
     private val profileViewModel: ProfileViewModel by viewModels()
+    private val parentRepository = ParentRepository()
     private var myChild: StudentModel? = null
     
     private val busLocations = listOf(
@@ -55,11 +67,235 @@ class ParentDashboardActivity : AppCompatActivity() {
         setupUI()
         setupDrawerListeners()
         loadParentAndChildData()
+
+        // Automatically show Info Bottom Sheet for UI Flow
+        mapView?.postDelayed({
+            showParentInfoBottomSheet()
+        }, 1000)
         
         // Handle Drawer opening if coming back from shared screens
         if (intent.getBooleanExtra("OPEN_DRAWER", false)) {
             drawerLayout.openDrawer(GravityCompat.END)
         }
+    }
+
+    private fun showParentInfoBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this, R.style.TransparentBottomSheetDialog)
+        val view = layoutInflater.inflate(R.layout.layout_parent_info_bottom_sheet, null)
+        bottomSheetDialog.setContentView(view)
+
+        // Find views
+        val etParentName = view.findViewById<EditText>(R.id.etParentName)
+        val etCnic = view.findViewById<EditText>(R.id.etCnic)
+        val etPhone = view.findViewById<EditText>(R.id.etPhone)
+        val etChildName = view.findViewById<EditText>(R.id.etChildName)
+        val etStudentId = view.findViewById<EditText>(R.id.etStudentId)
+        val actvRelationship = view.findViewById<AutoCompleteTextView>(R.id.actvRelationship)
+        
+        val tilParentName = view.findViewById<TextInputLayout>(R.id.tilParentName)
+        val tilCnic = view.findViewById<TextInputLayout>(R.id.tilCnic)
+        val tilPhone = view.findViewById<TextInputLayout>(R.id.tilPhone)
+        val tilChildName = view.findViewById<TextInputLayout>(R.id.tilChildName)
+        val tilStudentId = view.findViewById<TextInputLayout>(R.id.tilStudentId)
+        val tilRelationship = view.findViewById<TextInputLayout>(R.id.tilRelationship)
+
+        // Dropdown setup
+        val options = resources.getStringArray(R.array.relationship_options)
+        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, options)
+        actvRelationship.setAdapter(adapter)
+        
+        // Use a modern, elevated background for the dropdown popup
+        actvRelationship.setDropDownBackgroundResource(R.drawable.bg_dropdown_popup)
+
+        // Parent Name Formatting (Rajesh Sharma)
+        etParentName.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s.isNullOrEmpty()) return
+                isUpdating = true
+                val input = s.toString()
+                val capitalized = input.split(" ").joinToString(" ") { word ->
+                    word.lowercase().replaceFirstChar { it.uppercase() }
+                }
+                if (capitalized != input) {
+                    val selection = etParentName.selectionStart
+                    etParentName.setText(capitalized)
+                    etParentName.setSelection(selection.coerceAtMost(capitalized.length))
+                }
+                isUpdating = false
+            }
+        })
+
+        // Child Name Formatting (Rajesh Sharma)
+        etChildName.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s.isNullOrEmpty()) return
+                isUpdating = true
+                val input = s.toString()
+                val capitalized = input.split(" ").joinToString(" ") { word ->
+                    word.lowercase().replaceFirstChar { it.uppercase() }
+                }
+                if (capitalized != input) {
+                    val selection = etChildName.selectionStart
+                    etChildName.setText(capitalized)
+                    etChildName.setSelection(selection.coerceAtMost(capitalized.length))
+                }
+                isUpdating = false
+            }
+        })
+
+        // Student ID Formatting Logic (ABC-123)
+        etStudentId.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s == null) return
+                isUpdating = true
+
+                val original = s.toString().replace("-", "").uppercase()
+                val letters = original.filter { it.isLetter() }.take(3)
+                val numbers = original.substring(letters.length.coerceAtMost(original.length))
+                    .filter { it.isDigit() }.take(3)
+
+                val formatted = StringBuilder()
+                formatted.append(letters)
+                if (letters.length == 3) {
+                    formatted.append("-")
+                    formatted.append(numbers)
+                }
+
+                if (formatted.toString() != s.toString()) {
+                    etStudentId.setText(formatted.toString())
+                    etStudentId.setSelection(formatted.length)
+                }
+                isUpdating = false
+            }
+        })
+
+        // CNIC Formatting Logic (XXXXX-XXXXXXX-X)
+        etCnic.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s == null) return
+                isUpdating = true
+
+                val digits = s.toString().replace("-", "").filter { it.isDigit() }.take(13)
+                val formatted = StringBuilder()
+                for (i in digits.indices) {
+                    formatted.append(digits[i])
+                    if ((i == 4 || i == 11) && i != digits.length - 1) {
+                        formatted.append("-")
+                    }
+                }
+
+                if (formatted.toString() != s.toString()) {
+                    etCnic.setText(formatted.toString())
+                    etCnic.setSelection(formatted.length)
+                }
+                isUpdating = false
+            }
+        })
+
+        view.findViewById<View>(R.id.btnContinue).setOnClickListener {
+            // Simple Validation
+            var isValid = true
+
+            if (etParentName.text.isNullOrEmpty()) {
+                tilParentName.error = "Required"; isValid = false
+            } else tilParentName.error = null
+
+            if (etCnic.text.isNullOrEmpty() || etCnic.text.toString().replace("-", "").length != 13) {
+                tilCnic.error = "Enter 13 digit CNIC"; isValid = false
+            } else tilCnic.error = null
+
+            if (etPhone.text.isNullOrEmpty() || etPhone.text?.length != 11) {
+                tilPhone.error = "Enter 11 digit number"; isValid = false
+            } else tilPhone.error = null
+
+            if (etChildName.text.isNullOrEmpty()) {
+                tilChildName.error = "Required"; isValid = false
+            } else tilChildName.error = null
+
+            if (etStudentId.text.isNullOrEmpty() || etStudentId.text.toString().length != 7) {
+                tilStudentId.error = "Format: GCW-XXX"; isValid = false
+            } else tilStudentId.error = null
+
+            if (actvRelationship.text.isNullOrEmpty()) {
+                tilRelationship.error = "Required"; isValid = false
+            } else tilRelationship.error = null
+
+            if (isValid) {
+                utils.ViewUtils.applyClickEffect(it)
+                
+                val parentName = etParentName.text.toString()
+                val cnic = etCnic.text.toString()
+                val phone = etPhone.text.toString()
+                val relationship = actvRelationship.text.toString()
+                val studentId = etStudentId.text.toString()
+
+                lifecycleScope.launch {
+                    it.isEnabled = false
+                    
+                    val parentModel = ParentModel(
+                        name = parentName,
+                        cnic = cnic,
+                        phone = phone,
+                        relationship = relationship
+                    )
+
+                    val (saveProfileSuccess, profileError) = parentRepository.saveParentData(parentModel)
+                    if (saveProfileSuccess) {
+                        val (requestSuccess, requestError) = parentRepository.submitTrackingRequest(
+                            studentId = studentId,
+                            parentName = parentName,
+                            phone = phone,
+                            relationship = relationship
+                        )
+                        
+                        if (requestSuccess) {
+                            bottomSheetDialog.dismiss()
+                            showRequestSubmittedDialog()
+                        } else {
+                            Toast.makeText(this@ParentDashboardActivity, "Request Error: $requestError", Toast.LENGTH_LONG).show()
+                            it.isEnabled = true
+                        }
+                    } else {
+                        Toast.makeText(this@ParentDashboardActivity, "Profile Error: $profileError", Toast.LENGTH_LONG).show()
+                        it.isEnabled = true
+                    }
+                }
+            }
+        }
+
+        bottomSheetDialog.show()
+    }
+
+    private fun showRequestSubmittedDialog() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(R.layout.dialog_request_submitted)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        
+        // Fix Popup Size
+        val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
+        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        dialog.setCancelable(false)
+
+        dialog.findViewById<View>(R.id.btnDone).setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun setupMapAnnotations() {
