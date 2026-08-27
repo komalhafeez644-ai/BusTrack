@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@color/white"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="12dp"
+    android:paddingHorizontal="16dp">
+
+    <TextView
+        android:id="@+id/tvStudentId"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="#FC-9021"
+        android:textColor="#79747E"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="180dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="16dp">
+
+        <FrameLayout
+            android:id="@+id/frameAvatar"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_status_badge_red"
+            android:backgroundTint="#E3F2FD">
+            <TextView
+                android:id="@+id/txtAvatar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="AJ"
+                android:textColor="#1976D2"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvStudentName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="Arjun Jayaram"
+            android:textColor="#1D1B20"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvRoute"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="Route 1"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvStop"
+        android:layout_width="150dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="Oak Ridge Estates"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvMorningPickup"
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="07:15 AM"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvMorningDrop"
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="08:00 AM"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvEveningPickup"
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="02:30 PM"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvEveningDrop"
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="03:15 PM"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvDate"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:paddingEnd="16dp"
+        android:text="24/05/2026"
+        android:textColor="#49454F"
+        android:textSize="13sp" />
+
+</LinearLayout>

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="28dp"
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingTop="40dp">
+
+        <!-- Animated Success/Status Icon Area -->
+        <FrameLayout
+            android:layout_width="110dp"
+            android:layout_height="110dp"
+            android:background="@drawable/bg_bus_circle_blue"
+            android:backgroundTint="@color/icon_bg_blue">
+
+            <ImageView
+                android:id="@+id/ivStatusIcon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:src="@drawable/check_circle"
+                app:tint="@color/primaryDark"
+                android:contentDescription="Status Icon" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_circle_outline"
+                android:backgroundTint="@color/icon_bg_blue"
+                android:alpha="0.5" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/tvStatusTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_marginHorizontal="32dp"
+            android:text="Request Submitted!"
+            android:textColor="@color/primaryDark"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:textAlignment="center" />
+
+        <TextView
+            android:id="@+id/tvStatusMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginHorizontal="32dp"
+            android:layout_marginBottom="40dp"
+            android:text="Your tracking request has been submitted successfully. Please wait for Admin approval to enable live bus tracking."
+            android:gravity="center"
+            android:textAlignment="center"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- OK Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOk"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="32dp"
+            android:layout_marginBottom="24dp"
+            android:text="OK"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            app:cornerRadius="16dp"
+            app:backgroundTint="@color/primaryDark"
+            android:visibility="gone" />
+
+        <!-- Bottom Status Bar -->
+        <LinearLayout
+            android:id="@+id/bottomStatusBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/bg_light"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="32dp">
+
+            <ImageView
+                android:id="@+id/ivFooterIcon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/security_shield"
+                app:tint="@color/text_hint" />
+
+            <TextView
+                android:id="@+id/tvFooterStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Verification in Progress"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:letterSpacing="0.05" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

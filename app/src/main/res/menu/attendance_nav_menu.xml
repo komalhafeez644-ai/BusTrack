@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_dashboard"
+        android:icon="@drawable/ic_nav_home"
+        android:title="Home" />
+    <item
+        android:id="@+id/nav_route"
+        android:icon="@drawable/bus"
+        android:title="Route" />
+    <item
+        android:id="@+id/nav_students"
+        android:icon="@drawable/attendance"
+        android:title="Attendance" />
+    <item
+        android:id="@+id/nav_alerts"
+        android:icon="@drawable/notification"
+        android:title="Maps" />
+    <item
+        android:id="@+id/nav_profile"
+        android:icon="@drawable/settings"
+        android:title="setting" />
+</menu>

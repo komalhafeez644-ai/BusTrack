@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_light"
+    android:fitsSystemWindows="true"
+    tools:context=".ui.driver.DriverDashboardActivity">
+
+    <!-- Main Content Area -->
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:id="@+id/mainContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- 1. Full Screen Map Background -->
+
+            <!-- 2. Top Header (Always Visible) -->
+            <com.mapbox.maps.MapView
+                android:id="@+id/mapView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                tools:layout_editor_absoluteX="0dp"
+                tools:layout_editor_absoluteY="90dp" />
+
+            <View
+                android:id="@+id/headerBg"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:background="#0D1B3E"
+                android:elevation="0dp"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:layout_marginTop="24dp"
+                android:paddingHorizontal="16dp"
+                android:elevation="0dp"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <!-- Profile Area (Photo + Name) -->
+                <LinearLayout
+                    android:id="@+id/layoutProfileArea"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackground"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/layoutActions"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivProfile"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/ic_driver"
+                        android:background="@color/white"
+                        android:padding="1dp"
+                        app:shapeAppearanceOverlay="@style/CircleImage"
+                        app:strokeColor="@color/status_green"
+                        app:strokeWidth="1.5dp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvGreeting"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="GOOD MORNING, 👋"
+                            android:textColor="#80FFFFFF"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvDriverName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="John Driver"
+                            android:textColor="@color/white"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:ellipsize="end"
+                            android:singleLine="true" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Actions on the Right -->
+                <LinearLayout
+                    android:id="@+id/layoutActions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <FrameLayout
+                        android:id="@+id/btnNotifications"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center" android:src="@drawable/notification" app:tint="@color/white" />
+                        <TextView android:layout_width="14dp" android:layout_height="14dp" android:layout_gravity="top|end" android:layout_marginTop="4dp" android:layout_marginEnd="4dp" android:background="@drawable/bg_badge" android:backgroundTint="#EF4444" android:gravity="center" android:text="3" android:textColor="@color/white" android:textSize="8sp" android:textStyle="bold" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/btnMenuDrawer"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="4dp"
+                        android:background="?attr/selectableItemBackgroundBorderless">
+                        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_menu" app:tint="@color/white" />
+                    </FrameLayout>
+                </LinearLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- 3. Top Controls Overlay Section -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/dynamicCenterSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:layout_constraintTop_toBottomOf="@id/toolbar">
+
+                <!-- DASHBOARD MODE: Info Bar and Route Card -->
+                <LinearLayout
+                    android:id="@+id/dashboardTopContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    app:layout_constraintTop_toTopOf="parent">
+
+                    <!-- Shared Info Bar -->
+                    <LinearLayout
+                        android:id="@+id/infoBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp"
+                        android:weightSum="3">
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/directions_bus" app:tint="@color/accent_blue" /><LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:orientation="vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bus ID" android:textColor="#94A3B8" android:textSize="10sp" /><TextView android:id="@+id/tvBusNumberInfo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BUS-1023" android:textColor="@color/white" android:textStyle="bold" android:textSize="12sp" /></LinearLayout></LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/alt_route" app:tint="@color/status_green" /><LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:orientation="vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route" android:textColor="#94A3B8" android:textSize="10sp" /><TextView android:id="@+id/tvRouteNameInfo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Route 7A" android:textColor="@color/white" android:textStyle="bold" android:textSize="12sp" /></LinearLayout></LinearLayout>
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/outline_calendar_month_24" app:tint="#A855F7" /><LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:orientation="vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Date" android:textColor="#94A3B8" android:textSize="10sp" /><TextView android:id="@+id/tvCurrentDate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="24 May 2025" android:textColor="@color/white" android:textStyle="bold" android:textSize="12sp" /></LinearLayout></LinearLayout>
+                    </LinearLayout>
+
+                    <!-- DASHBOARD MODE: Route Details Card -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardRouteDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="8dp"
+                        app:cardBackgroundColor="@color/white"
+                        app:cardCornerRadius="16dp"
+                        app:cardElevation="8dp"
+                        android:visibility="visible">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+                            <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                                <View android:id="@+id/dotS" android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/green_dot" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="@id/tvStartLabel" app:layout_constraintBottom_toBottomOf="@id/tvStartLabel"/><View android:layout_width="1dp" android:layout_height="30dp" android:background="#CBD5E1" app:layout_constraintTop_toBottomOf="@id/dotS" app:layout_constraintStart_toStartOf="@id/dotS" app:layout_constraintEnd_toEndOf="@id/dotS"/><View android:id="@+id/dotE" android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/redcircle" android:backgroundTint="#EF4444" android:layout_marginTop="32dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/dotS"/>
+                                <TextView android:id="@+id/tvStartLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="Start Location" android:textColor="#22C55E" android:textSize="10sp" android:textStyle="bold" app:layout_constraintStart_toEndOf="@id/dotS" app:layout_constraintTop_toTopOf="parent" /><TextView android:id="@+id/tvStartAddress" android:layout_width="0dp" android:layout_height="wrap_content" android:text="Main Terminal, City Center" android:textColor="@color/text_primary" android:textSize="14sp" android:textStyle="bold" app:layout_constraintStart_toStartOf="@id/tvStartLabel" app:layout_constraintTop_toBottomOf="@id/tvStartLabel" />
+                                <TextView android:id="@+id/tvEndLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="Stop 1" android:textColor="#EF4444" android:textSize="10sp" android:textStyle="bold" app:layout_constraintStart_toEndOf="@id/dotE" app:layout_constraintTop_toTopOf="@id/dotE" /><TextView android:id="@+id/tvEndAddress" android:layout_width="0dp" android:layout_height="wrap_content" android:text="Green Town, Sector B" android:textColor="@color/text_primary" android:textSize="14sp" android:textStyle="bold" app:layout_constraintStart_toStartOf="@id/tvEndLabel" app:layout_constraintTop_toBottomOf="@id/tvEndLabel" />
+                            </androidx.constraintlayout.widget.ConstraintLayout>
+                            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#F1F5F9" android:layout_marginVertical="12dp" />
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="3">
+                                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/outline_location" app:tint="@color/accent_blue" /><TextView android:id="@+id/tvTotalStops" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="12" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="12sp" /></LinearLayout>
+                                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/road" app:tint="#22C55E" /><TextView android:id="@+id/tvEstDistance" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="18.6 km" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="12sp" /></LinearLayout>
+                                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center_vertical"><ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/time" app:tint="#F59E0B" /><TextView android:id="@+id/tvEstDuration" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="45 min" android:textColor="@color/text_primary" android:textStyle="bold" android:textSize="12sp" /></LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- NAVIGATION MODE: Instruction Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/instructionCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="8dp"
+                    app:cardBackgroundColor="#004D40"
+                    app:cardCornerRadius="16dp"
+                    app:layout_constraintTop_toTopOf="parent"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+                    <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="20dp">
+                        <ImageView android:id="@+id/ivArrow" android:layout_width="48dp" android:layout_height="48dp" android:src="@android:drawable/ic_menu_directions" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:tint="@color/white" />
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="20dp"
+                            android:orientation="vertical"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintEnd_toStartOf="@id/speedometer"
+                            app:layout_constraintStart_toEndOf="@id/ivArrow"
+                            app:layout_constraintTop_toTopOf="parent">
+
+                            <TextView
+                                android:id="@+id/tvNextInstruction"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Head north"
+                                android:textColor="@color/white"
+                                android:textSize="28sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvNextStreet"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Then left turn"
+                                android:textColor="#B2DFDB"
+                                android:textSize="18sp" />
+                        </LinearLayout>
+                        <FrameLayout android:id="@+id/speedometer" android:layout_width="65dp" android:layout_height="65dp" android:background="@drawable/bg_map_button_theme" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" android:alpha="0.95"><LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:orientation="vertical"><TextView android:id="@+id/tvSpeedNav" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="--" android:textColor="@color/white" android:textSize="22sp" android:textStyle="bold" /><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="km/h" android:textColor="#B0BEC5" android:textSize="10sp" /></LinearLayout></FrameLayout>
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- 4. Bottom Controls Area -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStartNavigation"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="32dp"
+                android:text="START NAVIGATION"
+                android:textAllCaps="true"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:backgroundTint="#22C55E"
+                app:cornerRadius="12dp"
+                app:icon="@drawable/direction"
+                app:iconGravity="textStart"
+                app:iconPadding="12dp"
+                app:iconTint="@color/white"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:visibility="visible" />
+
+            <!-- Map Controls (Google Style) -->
+            <LinearLayout
+                android:id="@+id/layoutMapControls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="16dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone"
+                tools:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <!-- North / Compass -->
+                <ImageButton
+                    android:id="@+id/btnNorth"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_map_button_theme"
+                    android:elevation="8dp"
+                    android:padding="14dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_compass" />
+
+                <!-- Search -->
+                <ImageButton
+                    android:id="@+id/btnSearchMap"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_map_button_theme"
+                    android:elevation="8dp"
+                    android:padding="16dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/search"
+                    app:tint="@color/white" />
+
+                <!-- Sound -->
+                <ImageButton
+                    android:id="@+id/btnSound"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_map_button_theme"
+                    android:elevation="8dp"
+                    android:padding="16dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/notification_active"
+                    app:tint="@color/white" />
+
+                <!-- Alert / Emergency Button (Google Maps Style Circular) -->
+                <FrameLayout
+                    android:id="@+id/btnAlert"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:background="@drawable/bg_map_button_theme"
+                    android:backgroundTint="#000000"
+                    android:elevation="8dp"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/warning"
+                        app:tint="#FF8F00" />
+                </FrameLayout>
+
+            </LinearLayout>
+
+            <!-- Re-centre Button (Black Pill Style) -->
+            <LinearLayout
+                android:id="@+id/btnRecenter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_recenter_pill"
+                android:backgroundTint="#000000"
+                android:elevation="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="28dp"
+                android:paddingVertical="18dp"
+                android:minHeight="60dp"
+                android:visibility="gone"
+                tools:visibility="visible"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/direction"
+                    android:rotation="45"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="Re-centre"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Persistent Bottom Sheet -->
+        <FrameLayout
+            android:id="@+id/bottomSummaryCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:visibility="gone"
+            tools:visibility="visible"
+            app:behavior_hideable="true"
+            app:behavior_peekHeight="140dp"
+            app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+            <include layout="@layout/layout_navigation_bottom_sheet" />
+        </FrameLayout>
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <!-- Drawer Content -->
+    <include layout="@layout/layout_admin_drawer" />
+
+</androidx.drawerlayout.widget.DrawerLayout>
