@@ -36,7 +36,7 @@ import com.mapbox.maps.plugin.gestures.gestures
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.LayoutInflater
-import android.view.ViewGroup
+import android.view.View
 
 class LiveTrackingActivity : AppCompatActivity() {
 
@@ -113,11 +113,11 @@ class LiveTrackingActivity : AppCompatActivity() {
         // Hide Search Bar for Parents as they only see one bus
         findViewById<View>(R.id.searchContainer)?.visibility = View.GONE
         findViewById<View>(R.id.searchSuggestionsCard)?.visibility = View.GONE
-        
+
         // Match Parent Module Style
         findViewById<View>(R.id.header)?.setBackgroundResource(R.drawable.bg_header_blue)
         findViewById<TextView>(R.id.tvHeaderTitle)?.text = "Live Bus Tracking"
-        
+
         // Hide Bottom Nav if it exists (Parents use their own dashboard navigation)
         findViewById<View>(R.id.bottomNavInclude)?.visibility = View.GONE
     }
@@ -145,7 +145,7 @@ class LiveTrackingActivity : AppCompatActivity() {
         // Setup Search Suggestions
         val rvSuggestions = findViewById<RecyclerView>(R.id.rvSearchSuggestions)
         val cardSuggestions = findViewById<View>(R.id.searchSuggestionsCard)
-        
+
         rvSuggestions.layoutManager = LinearLayoutManager(this)
         searchAdapter = BusSearchAdapter { driver ->
             isUserInteracting = false
@@ -182,10 +182,10 @@ class LiveTrackingActivity : AppCompatActivity() {
         findViewById<EditText>(R.id.etSearchBus)?.addTextChangedListener { text ->
             val query = text.toString().lowercase()
             val drivers = viewModel.allDriversForSearch.value ?: emptyList()
-            
+
             if (query.isNotEmpty()) {
-                val filtered = drivers.filter { 
-                    it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true 
+                val filtered = drivers.filter {
+                    it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true
                 }
                 searchAdapter.updateData(filtered)
                 cardSuggestions.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
@@ -201,7 +201,7 @@ class LiveTrackingActivity : AppCompatActivity() {
                 // Reset map rotation to North
                 mapView?.mapboxMap?.flyTo(CameraOptions.Builder().bearing(0.0).build())
             }
-            
+
             controls.findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
                 isUserInteracting = false
                 val drivers = viewModel.activeDrivers.value
@@ -295,16 +295,16 @@ class LiveTrackingActivity : AppCompatActivity() {
         // 2. Add or update markers for active drivers
         drivers.forEach { driver ->
             val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-            
+
             if (driverMarkers.containsKey(driver.driverId)) {
                 val annotation = driverMarkers[driver.driverId]!!
                 val prevPoint = driverPreviousPositions[driver.driverId]
-                
+
                 if (prevPoint != null && (prevPoint.latitude() != targetPoint.latitude() || prevPoint.longitude() != targetPoint.longitude())) {
                     // Calculate Rotation (Bearing)
                     val bearing = calculateBearing(prevPoint, targetPoint)
                     annotation.iconRotate = bearing.toDouble()
-                    
+
                     // Smooth Animate Position
                     animateMarker(annotation, prevPoint, targetPoint)
                 } else {
@@ -378,19 +378,25 @@ class LiveTrackingActivity : AppCompatActivity() {
             null
         )
         camera?.let {
-            mapView?.mapboxMap?.flyTo(it, MapAnimationOptions.mapAnimationOptions { duration(1000) })
+            // This runs on every driver-location Firestore update (see the "3. Camera
+            // handling" block below), same as TrackDriverActivity's bug: flyTo()'s
+            // dramatic globe animation kept getting interrupted by the next update
+            // before it finished, which is what looked like blinking. easeTo() is a
+            // direct pan/zoom with no globe-orbit effect, so an interruption is a
+            // non-issue - it just smoothly redirects toward the newer target instead.
+            mapView?.mapboxMap?.easeTo(it, MapAnimationOptions.mapAnimationOptions { duration(800) })
         }
     }
 
     private fun focusOnDriver(driver: DriverModel) {
         if (driver.latitude != 0.0) {
             val point = Point.fromLngLat(driver.longitude, driver.latitude)
-            mapView?.mapboxMap?.flyTo(
+            mapView?.mapboxMap?.easeTo(
                 CameraOptions.Builder()
                     .center(point)
                     .zoom(15.0)
                     .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(1000) }
+                MapAnimationOptions.mapAnimationOptions { duration(800) }
             )
         }
     }
@@ -401,7 +407,7 @@ class LiveTrackingActivity : AppCompatActivity() {
             card.visibility = View.GONE
             return
         }
-        
+
         if (card.visibility == View.GONE) {
             card.visibility = View.VISIBLE
             card.alpha = 0f
@@ -412,7 +418,7 @@ class LiveTrackingActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status}"
-        
+
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
         findViewById<TextView>(R.id.tvLoad)?.text = driver.load
@@ -425,7 +431,7 @@ class LiveTrackingActivity : AppCompatActivity() {
 
     override fun onStart() { super.onStart(); mapView?.onStart() }
     override fun onStop() { super.onStop(); mapView?.onStop() }
-    
+
     private fun bitmapFromDrawableRes(context: Context, resourceId: Int): Bitmap? {
         if (bitmapCache.containsKey(resourceId)) return bitmapCache[resourceId]
         val drawable = ContextCompat.getDrawable(context, resourceId)
@@ -446,10 +452,10 @@ class LiveTrackingActivity : AppCompatActivity() {
         return null
     }
 
-    override fun onDestroy() { 
+    override fun onDestroy() {
         super.onDestroy()
         bitmapCache.clear()
-        mapView?.onDestroy() 
+        mapView?.onDestroy()
     }
 
     inner class BusSearchAdapter(private val onItemSelected: (DriverModel) -> Unit) :
@@ -468,7 +474,7 @@ class LiveTrackingActivity : AppCompatActivity() {
             val tvStatus: TextView = view.findViewById(R.id.tvStatus)
 
             init {
-                view.setOnClickListener { 
+                view.setOnClickListener {
                     val pos = bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) {
                         onItemSelected(drivers[pos])
@@ -487,7 +493,7 @@ class LiveTrackingActivity : AppCompatActivity() {
             holder.tvBusId.text = item.assignedBus ?: item.name
             holder.tvRouteInfo.text = "Route: ${item.route ?: "N/A"}"
             holder.tvStatus.text = item.status
-            
+
             if (item.status.equals("Active", true) || item.status.equals("ACTIVE", true)) {
                 holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
             } else {

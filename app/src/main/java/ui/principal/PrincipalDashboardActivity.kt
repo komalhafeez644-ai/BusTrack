@@ -66,7 +66,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         supportActionBar?.hide()
 
         drawerLayout = findViewById(R.id.drawerLayout)
-        
+
         findViewById<View>(R.id.btnMenuDrawer).setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             drawerLayout.openDrawer(GravityCompat.END)
@@ -142,7 +142,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         // Setup Search Suggestions
         val rvSuggestions = findViewById<RecyclerView>(R.id.rvSearchSuggestions)
         val cardSuggestions = findViewById<View>(R.id.searchSuggestionsCard)
-        
+
         rvSuggestions.layoutManager = LinearLayoutManager(this)
         searchAdapter = BusSearchAdapter { driver ->
             isUserInteracting = false
@@ -179,10 +179,10 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         findViewById<EditText>(R.id.etSearchBus)?.addTextChangedListener { text ->
             val query = text.toString().lowercase()
             val drivers = liveTrackingViewModel.allDriversForSearch.value ?: emptyList()
-            
+
             if (query.isNotEmpty()) {
-                val filtered = drivers.filter { 
-                    it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true 
+                val filtered = drivers.filter {
+                    it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true
                 }
                 searchAdapter.updateData(filtered)
                 cardSuggestions.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
@@ -197,7 +197,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             // Reset map rotation to North
             mapView?.mapboxMap?.flyTo(CameraOptions.Builder().bearing(0.0).build())
         }
-        
+
         findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
             isUserInteracting = false
             val drivers = liveTrackingViewModel.activeDrivers.value
@@ -290,16 +290,16 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         // 2. Add or update markers for active drivers
         drivers.forEach { driver ->
             val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-            
+
             if (driverMarkers.containsKey(driver.driverId)) {
                 val annotation = driverMarkers[driver.driverId]!!
                 val prevPoint = driverPreviousPositions[driver.driverId]
-                
+
                 if (prevPoint != null && (prevPoint.latitude() != targetPoint.latitude() || prevPoint.longitude() != targetPoint.longitude())) {
                     // Calculate Rotation (Bearing)
                     val bearing = calculateBearing(prevPoint, targetPoint)
                     annotation.iconRotate = bearing.toDouble()
-                    
+
                     // Smooth Animate Position
                     animateMarker(annotation, prevPoint, targetPoint)
                 } else {
@@ -373,19 +373,24 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             null
         )
         camera?.let {
-            mapView?.mapboxMap?.flyTo(it, MapAnimationOptions.mapAnimationOptions { duration(1000) })
+            // Same fix as TrackDriverActivity/LiveTrackingActivity: this runs on every
+            // driver-location update, and flyTo()'s dramatic globe animation kept
+            // getting interrupted before finishing (updates every 1-3s vs 1000ms
+            // animation) - that's what showed up as blinking. easeTo() has no globe
+            // effect, so being interrupted just redirects smoothly instead.
+            mapView?.mapboxMap?.easeTo(it, MapAnimationOptions.mapAnimationOptions { duration(800) })
         }
     }
 
     private fun focusOnDriver(driver: DriverModel) {
         if (driver.latitude != 0.0) {
             val point = Point.fromLngLat(driver.longitude, driver.latitude)
-            mapView?.mapboxMap?.flyTo(
+            mapView?.mapboxMap?.easeTo(
                 CameraOptions.Builder()
                     .center(point)
                     .zoom(15.0)
                     .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(1000) }
+                MapAnimationOptions.mapAnimationOptions { duration(800) }
             )
         }
     }
@@ -396,7 +401,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             card.visibility = View.GONE
             return
         }
-        
+
         if (card.visibility == View.GONE) {
             card.visibility = View.VISIBLE
             card.alpha = 0f
@@ -407,7 +412,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status}"
-        
+
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
         findViewById<TextView>(R.id.tvLoad)?.text = driver.load
@@ -417,14 +422,14 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         profileViewModel.adminData.observe(this) { user ->
             // Update Dashboard Header
             findViewById<TextView>(R.id.tvPrincipalName).text = user.fullName
-            
+
             // Update Drawer Header
             findViewById<TextView>(R.id.drawerName)?.text = user.fullName
             findViewById<TextView>(R.id.drawerEmail)?.text = user.email
-            
+
             val profileImageView = findViewById<ImageView>(R.id.ivProfile)
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
-            
+
             if (user.profileImageUrl.isNotEmpty()) {
                 Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(profileImageView)
                 Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
@@ -573,7 +578,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             val tvStatus: TextView = view.findViewById(R.id.tvStatus)
 
             init {
-                view.setOnClickListener { 
+                view.setOnClickListener {
                     val pos = bindingAdapterPosition
                     if (pos != RecyclerView.NO_POSITION) {
                         onItemSelected(drivers[pos])
@@ -592,7 +597,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             holder.tvBusId.text = item.assignedBus ?: item.name
             holder.tvRouteInfo.text = "Route: ${item.route ?: "N/A"}"
             holder.tvStatus.text = item.status
-            
+
             if (item.status.equals("Active", true) || item.status.equals("ACTIVE", true)) {
                 holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
             } else {

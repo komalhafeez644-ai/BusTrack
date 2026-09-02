@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.text.Editable
+import com.mapbox.maps.plugin.animation.flyTo
 import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
@@ -40,6 +41,7 @@ import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -74,6 +76,11 @@ class ParentDashboardActivity : AppCompatActivity() {
     private var isUnavailablePopupDismissed = false
     private val studentListeners = mutableMapOf<String, ListenerRegistration>()
     private val driverMarkers = mutableMapOf<String, com.mapbox.maps.plugin.annotation.generated.PointAnnotation>()
+    // Reused across every live-location update instead of being recreated each time
+    // (see updateMapMarkers fix below) - creating a brand new annotation manager /
+    // deleting+recreating every marker on every 1-3s Firestore update was the source of
+    // the bus icon visibly flickering/blinking on the Parent dashboard map.
+    private var driverPointAnnotationManager: com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager? = null
 
     private val busLocations = listOf(
         Point.fromLngLat(67.0011, 24.8607) to "Bus-01",
@@ -227,47 +234,76 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateMapMarkers(drivers: List<DriverModel>) {
-        val annotationApi = mapView?.annotations
-        val pointAnnotationManager = annotationApi?.createPointAnnotationManager() ?: return
+        // Reuse one PointAnnotationManager for the whole activity lifetime instead of
+        // creating a new one on every update (was happening every 1-3s on every live
+        // location push, a real source of visible flicker on its own).
+        val pointAnnotationManager = driverPointAnnotationManager ?: run {
+            val manager = mapView?.annotations?.createPointAnnotationManager() ?: return
+            driverPointAnnotationManager = manager
+            // Click listener only needs to be attached once, when the manager is first created.
+            manager.addClickListener { annotation ->
+                val currentDrivers = liveTrackingViewModel.activeDrivers.value
+                val clickedDriver = currentDrivers?.find {
+                    it.assignedBus == annotation.textField || it.name == annotation.textField
+                }
+                clickedDriver?.let { updateDriverCard(it) }
+                true
+            }
+            manager
+        }
 
-        pointAnnotationManager.deleteAll()
-        driverMarkers.clear()
+        // Update-in-place instead of deleteAll()+recreate every update: the previous
+        // code wiped every marker and rebuilt them from scratch on every single
+        // location push, which made the bus icon itself blink/flicker on screen (a
+        // second, more visible source of the same "blinking" symptom, separate from the
+        // camera flyTo() issue fixed in TrackDriverActivity/LiveTrackingActivity/
+        // PrincipalDashboardActivity). Now: move existing markers, add only new ones,
+        // remove only ones for drivers that dropped off.
+        val currentDriverIds = drivers.map { it.driverId }.toSet()
+
+        // Remove markers for drivers no longer present
+        val idsToRemove = driverMarkers.keys - currentDriverIds
+        idsToRemove.forEach { id ->
+            driverMarkers[id]?.let { pointAnnotationManager.delete(it) }
+            driverMarkers.remove(id)
+        }
 
         drivers.forEach { driver ->
             val point = Point.fromLngLat(driver.longitude, driver.latitude)
-            val options = PointAnnotationOptions()
-                .withPoint(point)
-                .withIconImage("bus-icon")
-                .withIconSize(1.5)
-                .withTextField(driver.assignedBus ?: driver.name)
-                .withTextOffset(listOf(0.0, 2.0))
-                .withTextColor(Color.BLUE)
-                .withTextHaloColor(Color.WHITE)
-                .withTextHaloWidth(1.0)
+            val existing = driverMarkers[driver.driverId]
+            if (existing != null) {
+                // Already on the map - just move it, no delete/recreate flicker.
+                existing.point = point
+                existing.textField = driver.assignedBus ?: driver.name
+                pointAnnotationManager.update(existing)
+            } else {
+                val options = PointAnnotationOptions()
+                    .withPoint(point)
+                    .withIconImage("bus-icon")
+                    .withIconSize(1.5)
+                    .withTextField(driver.assignedBus ?: driver.name)
+                    .withTextOffset(listOf(0.0, 2.0))
+                    .withTextColor(Color.BLUE)
+                    .withTextHaloColor(Color.WHITE)
+                    .withTextHaloWidth(1.0)
 
-            val annotation = pointAnnotationManager.create(options)
-            driverMarkers[driver.driverId] = annotation
-        }
-
-        // Add Click Listener to show card on marker tap
-        pointAnnotationManager.addClickListener { annotation ->
-            val drivers = liveTrackingViewModel.activeDrivers.value
-            val clickedDriver = drivers?.find {
-                it.assignedBus == annotation.textField || it.name == annotation.textField
+                val annotation = pointAnnotationManager.create(options)
+                driverMarkers[driver.driverId] = annotation
             }
-            clickedDriver?.let { updateDriverCard(it) }
-            true
         }
 
         // Smooth Camera flyTo (Only if card is not already visible)
         if (drivers.isNotEmpty() && findViewById<View>(R.id.driverCard)?.visibility == View.GONE) {
             val point = Point.fromLngLat(drivers[0].longitude, drivers[0].latitude)
-            mapView?.mapboxMap?.flyTo(
+            // Same fix as the other tracking screens: easeTo() instead of flyTo() so a
+            // newer update interrupting the animation doesn't look like a blink.
+            mapView?.mapboxMap?.easeTo(
                 CameraOptions.Builder()
                     .center(point)
                     .zoom(14.0)
                     .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(1500) }
+                MapAnimationOptions.mapAnimationOptions { duration(800) }
+
             )
         }
     }
