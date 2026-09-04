@@ -59,7 +59,8 @@
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
                 android:src="@drawable/settings"
-                app:tint="#2563EB" />
+                app:tint="#2563EB"
+                android:visibility="gone"/>
         </RelativeLayout>
     </com.google.android.material.card.MaterialCardView>
 

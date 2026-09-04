@@ -35,6 +35,7 @@ import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.LocationPuck3D
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.viewport
 import com.mapbox.maps.plugin.viewport.data.FollowPuckViewportStateOptions
@@ -101,7 +102,11 @@ import com.mapbox.navigation.base.route.NavigationRoute
 import com.mapbox.navigation.base.route.RouterFailure
 import com.mapbox.navigation.base.route.NavigationRouterCallback
 import com.mapbox.navigation.voice.api.MapboxVoiceInstructionsPlayer
+import com.mapbox.navigation.voice.api.MapboxSpeechApi
 import com.mapbox.navigation.voice.model.SpeechAnnouncement
+import com.mapbox.navigation.voice.model.SpeechError
+import com.mapbox.navigation.voice.options.MapboxSpeechApiOptions
+import com.mapbox.navigation.voice.options.VoiceInstructionsPlayerOptions
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.maps.extension.style.layers.getLayer
@@ -212,6 +217,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private var mapboxNavigation: MapboxNavigation? = null
     private var voiceInstructionsPlayer: MapboxVoiceInstructionsPlayer? = null
+    private var speechApi: MapboxSpeechApi? = null
     private val attendancePromptedStops = mutableSetOf<Int>()
 
     private val NAV_ROUTE_SOURCE_ID = "nav-route-source"
@@ -316,23 +322,27 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
         mapboxNavigation?.registerOffRouteObserver(offRouteObserver)
 
+        val locale = java.util.Locale.getDefault().language
+
+        if (speechApi == null) {
+            speechApi = MapboxSpeechApi(this, locale)
+        }
         if (voiceInstructionsPlayer == null) {
-            voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(
-                this,
-                java.util.Locale.getDefault().language
-            )
+            voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(this, locale)
         }
     }
 
     private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
         if (isVoiceEnabled) {
-            val announcement = voiceInstructions.announcement()
-            Log.d("VoiceDebug", "Playing announcement: $announcement")
-            voiceInstructionsPlayer?.play(
-                SpeechAnnouncement.Builder(announcement ?: "")
-                    .ssmlAnnouncement(voiceInstructions.ssmlAnnouncement())
-                    .build()
-            ) { }
+            speechApi?.generate(voiceInstructions) { expected ->
+                val value = expected.value
+                if (value != null) {
+                    voiceInstructionsPlayer?.play(value.announcement) { speechAnnouncement ->
+                        // Release the announcement's resources once playback finishes
+                        speechApi?.clean(speechAnnouncement)
+                    }
+                }
+            }
         }
     }
 
@@ -967,8 +977,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapView?.location?.apply {
             enabled = isDutyEnabled
             pulsingEnabled = isDutyEnabled
-            locationPuck = com.mapbox.maps.plugin.LocationPuck2D(
-                topImage = com.mapbox.maps.ImageHolder.from(R.drawable.blue_bus)
+            locationPuck = LocationPuck3D(
+                modelUri = "asset://bus.glb",
+                modelScale = listOf(15f, 15f, 15f),
+                modelRotation = listOf(0f, 0f, 180f)
             )
         }
     }
@@ -2197,7 +2209,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapboxNavigation?.unregisterLocationObserver(locationObserver)
         mapboxNavigation?.unregisterRouteProgressObserver(routeProgressObserver)
         mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
-        voiceInstructionsPlayer?.shutdown()
+
+        // Use proper cleanup if available, or just nullify
+        voiceInstructionsPlayer = null
+        speechApi = null
+
         MapboxNavigationApp.detach(this)
 
         bitmapCache.clear()

@@ -90,6 +90,9 @@
                     android:text="MORNING"
                     android:textSize="13sp"
                     android:textStyle="bold"
+                    android:textColor="@color/toggle_button_text_selector"
+                    app:backgroundTint="@color/toggle_button_background_selector"
+                    app:iconTint="@color/toggle_button_text_selector"
                     app:cornerRadius="12dp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -101,6 +104,9 @@
                     android:text="EVENING"
                     android:textSize="13sp"
                     android:textStyle="bold"
+                    android:textColor="@color/toggle_button_text_selector"
+                    app:backgroundTint="@color/toggle_button_background_selector"
+                    app:iconTint="@color/toggle_button_text_selector"
                     app:cornerRadius="12dp" />
 
             </com.google.android.material.button.MaterialButtonToggleGroup>

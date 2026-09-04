@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -34,11 +35,23 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
+import com.mapbox.maps.extension.style.layers.generated.modelLayer
+import com.mapbox.maps.extension.style.layers.generated.symbolLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.ModelType
+import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.sources.addSource
+import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.getLayer
+import com.mapbox.maps.extension.style.sources.getSource
+import com.mapbox.maps.extension.style.expressions.dsl.generated.*
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.gestures.gestures
 import ui.admin.*
@@ -59,6 +72,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private var unavailableDialog: android.app.Dialog? = null
     private var isUnavailablePopupDismissed = false
 
+    private val BUS_SOURCE_ID = "bus-source"
+    private val BUS_MODEL_LAYER_ID = "bus-model-layer"
+    private val BUS_LABEL_LAYER_ID = "bus-label-layer"
+    private val BUS_MODEL_ID = "bus-model-id"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_principal_dashboard)
@@ -75,6 +93,8 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         // Initialize Mapbox Map
         mapView = findViewById(R.id.mapView)
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
+            style.addStyleModel(BUS_MODEL_ID, "asset://bus.glb")
+
             val annotationApi = mapView?.annotations
             pointAnnotationManager = annotationApi?.createPointAnnotationManager()
 
@@ -274,54 +294,65 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateMarkers(drivers: List<DriverModel>) {
-        val currentIds = drivers.map { it.driverId }.toSet()
-
-        // 1. Remove markers for drivers who are no longer active
-        val iterator = driverMarkers.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (!currentIds.contains(entry.key)) {
-                pointAnnotationManager?.delete(entry.value)
-                iterator.remove()
-                driverPreviousPositions.remove(entry.key)
-            }
-        }
-
-        // 2. Add or update markers for active drivers
-        drivers.forEach { driver ->
-            val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-
-            if (driverMarkers.containsKey(driver.driverId)) {
-                val annotation = driverMarkers[driver.driverId]!!
+        mapView?.mapboxMap?.getStyle { style ->
+            val features = drivers.filter { it.latitude != 0.0 && it.longitude != 0.0 }.map { driver ->
+                val point = Point.fromLngLat(driver.longitude, driver.latitude)
                 val prevPoint = driverPreviousPositions[driver.driverId]
-
-                if (prevPoint != null && (prevPoint.latitude() != targetPoint.latitude() || prevPoint.longitude() != targetPoint.longitude())) {
-                    // Calculate Rotation (Bearing)
-                    val bearing = calculateBearing(prevPoint, targetPoint)
-                    annotation.iconRotate = bearing.toDouble()
-
-                    // Smooth Animate Position
-                    animateMarker(annotation, prevPoint, targetPoint)
+                val bearing = if (prevPoint != null && (prevPoint.latitude() != point.latitude() || prevPoint.longitude() != point.longitude())) {
+                    calculateBearing(prevPoint, point).toDouble()
                 } else {
-                    annotation.point = targetPoint
+                    0.0
                 }
-            } else {
-                val options = PointAnnotationOptions()
-                    .withPoint(targetPoint)
-                    .withIconImage("bus-icon")
-                    .withIconSize(1.5)
-                    .withTextField(driver.assignedBus ?: driver.name)
-                    .withTextOffset(listOf(0.0, 2.0))
-                    .withTextColor(android.graphics.Color.WHITE)
-                    .withTextHaloColor(android.graphics.Color.BLACK)
-                    .withTextHaloWidth(1.0)
+                driverPreviousPositions[driver.driverId] = point
 
-                val annotation = pointAnnotationManager?.create(options)
-                if (annotation != null) {
-                    driverMarkers[driver.driverId] = annotation
+                Feature.fromGeometry(point).apply {
+                    addStringProperty("driverId", driver.driverId)
+                    addStringProperty("name", driver.assignedBus ?: driver.name)
+                    addNumberProperty("bearing", bearing + 180.0)
                 }
             }
-            driverPreviousPositions[driver.driverId] = targetPoint
+
+            if (!style.styleSourceExists(BUS_SOURCE_ID)) {
+                style.addSource(geoJsonSource(BUS_SOURCE_ID) {
+                    featureCollection(FeatureCollection.fromFeatures(features))
+                })
+            } else {
+                val source = style.getSource(BUS_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+                source?.featureCollection(FeatureCollection.fromFeatures(features))
+            }
+
+            if (!style.styleLayerExists(BUS_MODEL_LAYER_ID)) {
+                style.addLayer(modelLayer(BUS_MODEL_LAYER_ID, BUS_SOURCE_ID) {
+                    modelId(BUS_MODEL_ID)
+                    modelType(ModelType.COMMON_3D)
+                    modelScale(listOf(15.0, 15.0, 15.0))
+                    modelRotation(array {
+                        literal(0.0)
+                        literal(0.0)
+                        get("bearing")
+                    })
+                })
+            } else {
+                (style.getLayer(BUS_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer)
+                    ?.modelRotation(array {
+                        literal(0.0)
+                        literal(0.0)
+                        get("bearing")
+                    })
+            }
+
+            if (!style.styleLayerExists(BUS_LABEL_LAYER_ID)) {
+                style.addLayer(symbolLayer(BUS_LABEL_LAYER_ID, BUS_SOURCE_ID) {
+                    textField(get("name"))
+                    textSize(12.0)
+                    textColor(Color.WHITE)
+                    textHaloColor(Color.BLACK)
+                    textHaloWidth(1.0)
+                    textOffset(listOf(0.0, -3.0))
+                    textIgnorePlacement(true)
+                    textAllowOverlap(true)
+                })
+            }
         }
 
         // 3. Camera handling
@@ -470,20 +501,22 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             startActivity(Intent(this, PrincipalProfileActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.END)
         }
-        findViewById<View>(R.id.drawerSettings)?.setOnClickListener {
-            utils.ViewUtils.applyClickEffect(it)
-            val intent = Intent(this, NotificationSettingsActivity::class.java)
-            intent.putExtra("FROM_USER", "admin")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
-        }
-        findViewById<View>(R.id.drawerPreferences)?.setOnClickListener {
-            utils.ViewUtils.applyClickEffect(it)
-            val intent = Intent(this, PreferencesActivity::class.java)
-            intent.putExtra("FROM_USER", "admin")
-            startActivity(intent)
-            drawerLayout.closeDrawer(GravityCompat.END)
-        }
+        /* Hide Preferences & Settings per Task requirements
+                findViewById<View>(R.id.drawerSettings)?.setOnClickListener {
+                    utils.ViewUtils.applyClickEffect(it)
+                    val intent = Intent(this, NotificationSettingsActivity::class.java)
+                    intent.putExtra("FROM_USER", "admin")
+                    startActivity(intent)
+                    drawerLayout.closeDrawer(GravityCompat.END)
+                }
+                findViewById<View>(R.id.drawerPreferences)?.setOnClickListener {
+                    utils.ViewUtils.applyClickEffect(it)
+                    val intent = Intent(this, PreferencesActivity::class.java)
+                    intent.putExtra("FROM_USER", "admin")
+                    startActivity(intent)
+                    drawerLayout.closeDrawer(GravityCompat.END)
+                }
+        */
         findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, PrivacyPolicyActivityActivity::class.java)

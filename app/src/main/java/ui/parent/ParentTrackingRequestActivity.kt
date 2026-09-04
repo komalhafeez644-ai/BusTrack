@@ -96,6 +96,7 @@ class ParentTrackingRequestActivity : AppCompatActivity(), OnMapReadyCallback {
             alpha = 0.5f
             setOnClickListener { Toast.makeText(this@ParentTrackingRequestActivity, lockMessage, Toast.LENGTH_SHORT).show() }
         }
+/* Hide Preferences & Settings per Task requirements
         findViewById<View>(R.id.drawerSettings)?.apply {
             alpha = 0.5f
             setOnClickListener { Toast.makeText(this@ParentTrackingRequestActivity, lockMessage, Toast.LENGTH_SHORT).show() }
@@ -104,6 +105,7 @@ class ParentTrackingRequestActivity : AppCompatActivity(), OnMapReadyCallback {
             alpha = 0.5f
             setOnClickListener { Toast.makeText(this@ParentTrackingRequestActivity, lockMessage, Toast.LENGTH_SHORT).show() }
         }
+*/
     }
 
     private fun loadParentData() {

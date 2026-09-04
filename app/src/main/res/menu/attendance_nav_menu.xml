@@ -16,8 +16,5 @@
         android:id="@+id/nav_alerts"
         android:icon="@drawable/notification"
         android:title="Maps" />
-    <item
-        android:id="@+id/nav_profile"
-        android:icon="@drawable/settings"
-        android:title="setting" />
+    <!-- Removed Settings item per Task requirements -->
 </menu>

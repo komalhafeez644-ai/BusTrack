@@ -77,7 +77,9 @@
                     android:layout_weight="1"
                     android:text="Parents"
                     android:textAllCaps="false"
-                    android:textColor="@color/primaryDark"
+                    android:textColor="@color/toggle_button_text_selector"
+                    app:backgroundTint="@color/toggle_button_background_selector"
+                    app:iconTint="@color/toggle_button_text_selector"
                     app:strokeColor="@color/primaryDark" />
 
                 <com.google.android.material.button.MaterialButton
@@ -88,7 +90,9 @@
                     android:layout_weight="1"
                     android:text="Drivers"
                     android:textAllCaps="false"
-                    android:textColor="@color/primaryDark"
+                    android:textColor="@color/toggle_button_text_selector"
+                    app:backgroundTint="@color/toggle_button_background_selector"
+                    app:iconTint="@color/toggle_button_text_selector"
                     app:strokeColor="@color/primaryDark" />
 
             </com.google.android.material.button.MaterialButtonToggleGroup>
@@ -176,6 +180,16 @@
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="top"
+                android:inputType="textMultiLine"
+                android:lines="4"
+                android:textColor="@color/black"
+                android:textSize="14sp" />
+
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
@@ -217,15 +231,6 @@
                 android:textColorHint="@color/lightGray"
                 android:hint="Type your message here...">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etMessage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:textColor="@color/black"
-                    android:textSize="14sp"
-                    android:inputType="textMultiLine"
-                    android:lines="4" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.button.MaterialButton

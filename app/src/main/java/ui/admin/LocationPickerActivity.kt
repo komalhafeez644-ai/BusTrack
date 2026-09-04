@@ -12,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -58,6 +59,7 @@ class LocationPickerActivity : AppCompatActivity() {
     private lateinit var searchEngine: SearchEngine
     private var searchJob: Job? = null
     private lateinit var searchAdapter: SearchResultAdapter
+    private var lastSearchQuery: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,7 +128,13 @@ class LocationPickerActivity : AppCompatActivity() {
             binding.tvSelectedAddress.text = name
             binding.etSearchLocation.setText(name)
             binding.rvSearchResults.visibility = View.GONE
+            binding.searchProgress.visibility = View.GONE
+            binding.btnClearSearch.visibility = View.VISIBLE
             binding.etSearchLocation.clearFocus()
+            
+            // Hide keyboard
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.hideSoftInputFromWindow(binding.etSearchLocation.windowToken, 0)
         }
     }
 
@@ -179,11 +187,14 @@ class LocationPickerActivity : AppCompatActivity() {
                 
                 searchJob?.cancel()
                 if (query.length >= 2) {
+                    binding.searchProgress.visibility = View.VISIBLE
+                    binding.btnClearSearch.visibility = View.GONE // Hide clear while searching
                     searchJob = lifecycleScope.launch {
                         delay(600)
                         performSearch(query)
                     }
                 } else {
+                    binding.searchProgress.visibility = View.GONE
                     binding.rvSearchResults.visibility = View.GONE
                 }
             }
@@ -193,12 +204,18 @@ class LocationPickerActivity : AppCompatActivity() {
         binding.btnClearSearch.setOnClickListener {
             binding.etSearchLocation.text.clear()
             binding.rvSearchResults.visibility = View.GONE
+            binding.searchProgress.visibility = View.GONE
+            searchJob?.cancel()
         }
 
         binding.etSearchLocation.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 val query = binding.etSearchLocation.text.toString().trim()
-                if (query.isNotEmpty()) performSearch(query)
+                if (query.isNotEmpty()) {
+                    binding.searchProgress.visibility = View.VISIBLE
+                    binding.btnClearSearch.visibility = View.GONE
+                    performSearch(query)
+                }
                 true
             } else false
         }
@@ -206,6 +223,7 @@ class LocationPickerActivity : AppCompatActivity() {
 
     private fun performSearch(query: String) {
         val cleanQuery = query.trim()
+        lastSearchQuery = cleanQuery
         lifecycleScope.launch {
             try {
                 // 1. Repository Search (Firestore Global Locations)
@@ -239,10 +257,14 @@ class LocationPickerActivity : AppCompatActivity() {
 
                 searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
                     override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                        if (cleanQuery != lastSearchQuery) return
+                        
                         val combined = mutableListOf<Any>()
                         combined.addAll(finalCustomResults)
                         combined.addAll(suggestions)
                         runOnUiThread {
+                            binding.searchProgress.visibility = View.GONE
+                            binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
                             if (combined.isNotEmpty()) {
                                 searchAdapter.setResults(combined)
                                 binding.rvSearchResults.visibility = View.VISIBLE
@@ -252,7 +274,11 @@ class LocationPickerActivity : AppCompatActivity() {
                         }
                     }
                     override fun onError(e: Exception) {
+                        if (cleanQuery != lastSearchQuery) return
+
                         runOnUiThread {
+                            binding.searchProgress.visibility = View.GONE
+                            binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
                             if (finalCustomResults.isNotEmpty()) {
                                 searchAdapter.setResults(finalCustomResults)
                                 binding.rvSearchResults.visibility = View.VISIBLE

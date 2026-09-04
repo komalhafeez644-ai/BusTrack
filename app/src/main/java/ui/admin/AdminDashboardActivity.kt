@@ -145,6 +145,7 @@ class AdminDashboardActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
+/* Hide Preferences & Settings per Task requirements
         findViewById<View>(R.id.drawerSettings)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, NotificationSettingsActivity::class.java)
@@ -160,6 +161,7 @@ class AdminDashboardActivity : AppCompatActivity() {
             startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
+*/
 
         findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)

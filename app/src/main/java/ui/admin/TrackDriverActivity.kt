@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
+import android.location.Geocoder
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -27,40 +28,41 @@ import com.example.bustrack_app.models.DriverModel
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.viewmodels.TrackDriverViewModel
 import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.mapbox.api.directions.v5.DirectionsCriteria
+import com.mapbox.api.directions.v5.MapboxDirections
+import com.mapbox.api.directions.v5.models.DirectionsResponse
+import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.extension.style.expressions.dsl.generated.get
+import com.mapbox.maps.extension.style.expressions.dsl.generated.interpolate
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.addLayerAbove
-import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
+import com.mapbox.maps.extension.style.layers.generated.modelLayer
 import com.mapbox.maps.extension.style.layers.generated.symbolLayer
+import com.mapbox.maps.extension.style.layers.getLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
+import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
+import com.mapbox.maps.extension.style.layers.properties.generated.ModelType
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
-import com.mapbox.maps.extension.style.layers.getLayer
 import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
-import com.mapbox.maps.plugin.annotation.generated.*
-import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
-import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
-import com.mapbox.maps.extension.style.expressions.dsl.generated.*
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfMisc
-
-import android.location.Geocoder
-import android.location.Location
-import com.mapbox.geojson.Feature
-import com.mapbox.geojson.FeatureCollection
-import com.mapbox.api.directions.v5.MapboxDirections
-import com.mapbox.api.directions.v5.models.DirectionsResponse
-import com.mapbox.api.directions.v5.models.RouteOptions
-import com.mapbox.api.directions.v5.DirectionsCriteria
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -74,10 +76,10 @@ class TrackDriverActivity : AppCompatActivity() {
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<FrameLayout>
     private var mapView: MapView? = null
     private val viewModel: TrackDriverViewModel by viewModels()
-    
+
     private var pointAnnotationManager: PointAnnotationManager? = null
     private val stopMarkers = mutableListOf<PointAnnotation>()
-    
+
     private lateinit var stopsAdapter: NavigationStopsAdapter
     private val ROUTE_SOURCE_ID = "route-source-id"
     private val TRAVELED_ROUTE_SOURCE_ID = "traveled-route-source-id"
@@ -88,7 +90,9 @@ class TrackDriverActivity : AppCompatActivity() {
     private val STOPS_LAYER_ID = "stops-layer-id"
     private val DRIVER_SOURCE_ID = "driver-source-id"
     private val DRIVER_LAYER_ID = "driver-layer-id"
-    
+    private val DRIVER_MODEL_LAYER_ID = "driver-model-layer"
+    private val DRIVER_MODEL_ID = "driver-bus-model" // registered id for the low-poly bus.glb
+
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
     private var currentRouteId: String? = null
     private var previousPoint: Point? = null
@@ -111,12 +115,15 @@ class TrackDriverActivity : AppCompatActivity() {
             mapView = findViewById(R.id.mapView)
             mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
                 pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
-                
+
+                // Register the 3D bus model from app/src/main/assets/bus.glb
+                style.addStyleModel(DRIVER_MODEL_ID, "asset://bus.glb")
+
                 // Use a realistic blue bus icon for a "3D" navigation look
                 bitmapFromDrawableRes(this, R.drawable.blue_bus)?.let { style.addImage("bus-icon", it) }
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)?.let { style.addImage("stop-icon", it) }
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest_grey)?.let { style.addImage("stop-icon-grey", it) }
-                
+
                 observeViewModel()
             }
 
@@ -146,7 +153,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     }
                 }
             }
-            
+
         } catch (e: Exception) {
             Log.e("TrackDriverActivity", "Crash in onCreate", e)
             Toast.makeText(this, "Error initializing tracking", Toast.LENGTH_LONG).show()
@@ -163,7 +170,7 @@ class TrackDriverActivity : AppCompatActivity() {
         if (bottomSheet != null) {
             bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
             bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-            
+
             // Ensure Bottom Sheet is in Light Mode for Admin
             forceLightBottomSheet(bottomSheet)
 
@@ -176,7 +183,7 @@ class TrackDriverActivity : AppCompatActivity() {
             bottomSheet.findViewById<View>(R.id.btnViewAllStops)?.setOnClickListener {
                 bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             }
-            
+
             bottomSheet.findViewById<View>(R.id.btnCloseNav)?.setOnClickListener {
                 finish()
             }
@@ -206,25 +213,25 @@ class TrackDriverActivity : AppCompatActivity() {
     private fun forceLightBottomSheet(sheet: View) {
         // Force background to white dialog style
         sheet.findViewById<View>(R.id.bottomSheetContainer)?.setBackgroundResource(R.drawable.bg_bottom_sheet_dialog)
-        
+
         // Force text colors to dark for light background
         val colorTextPrimary = Color.parseColor("#0F172A")
         val colorTextSecondary = Color.parseColor("#64748B")
-        
+
         // Outline Buttons Theme for Admin
         val btnClose = sheet.findViewById<View>(R.id.btnCloseNav)
         val btnRoute = sheet.findViewById<View>(R.id.btnViewRoute)
         val outlineColor = Color.parseColor("#CBD5E1")
-        
+
         btnClose?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
         btnRoute?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
-        
+
         btnClose?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineColor)
         btnRoute?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineColor)
 
-        (sheet.findViewById<ViewGroup>(R.id.btnCloseNav)?.getChildAt(0) as? ImageView)?.imageTintList = 
+        (sheet.findViewById<ViewGroup>(R.id.btnCloseNav)?.getChildAt(0) as? ImageView)?.imageTintList =
             android.content.res.ColorStateList.valueOf(Color.parseColor("#64748B"))
-        (sheet.findViewById<ViewGroup>(R.id.btnViewRoute)?.getChildAt(0) as? ImageView)?.imageTintList = 
+        (sheet.findViewById<ViewGroup>(R.id.btnViewRoute)?.getChildAt(0) as? ImageView)?.imageTintList =
             android.content.res.ColorStateList.valueOf(Color.parseColor("#2563EB"))
 
         sheet.findViewById<TextView>(R.id.tvBusIdSheet)?.setTextColor(colorTextPrimary)
@@ -232,20 +239,20 @@ class TrackDriverActivity : AppCompatActivity() {
         sheet.findViewById<TextView>(R.id.tvDriverNameSheet)?.setTextColor(colorTextPrimary)
         sheet.findViewById<TextView>(R.id.tvCurrentLocSheet)?.setTextColor(colorTextSecondary)
         sheet.findViewById<TextView>(R.id.tvUpcomingLabel)?.setTextColor(colorTextPrimary)
-        
+
         // Force label and value colors for live stats
         sheet.findViewById<TextView>(R.id.tvEtaLabel)?.setTextColor(colorTextSecondary)
         sheet.findViewById<TextView>(R.id.tvSpeedLabel)?.setTextColor(colorTextSecondary)
         sheet.findViewById<TextView>(R.id.tvLoadLabel)?.setTextColor(colorTextSecondary)
-        
+
         sheet.findViewById<TextView>(R.id.tvEtaSheet)?.setTextColor(colorTextPrimary)
         sheet.findViewById<TextView>(R.id.tvSpeedSheet)?.setTextColor(colorTextPrimary)
         sheet.findViewById<TextView>(R.id.tvLoadSheet)?.setTextColor(colorTextPrimary)
-        
+
         // Force Card colors
         sheet.findViewById<com.google.android.material.card.MaterialCardView>(R.id.cardHeader)?.setCardBackgroundColor(Color.WHITE)
         sheet.findViewById<View>(R.id.dividerHeader)?.setBackgroundColor(Color.parseColor("#F1F5F9"))
-        
+
         // Ensure stops list is also in light mode
         if (::stopsAdapter.isInitialized) {
             stopsAdapter.setTheme(false)
@@ -255,15 +262,15 @@ class TrackDriverActivity : AppCompatActivity() {
     private fun observeViewModel() {
         viewModel.targetDriver.observe(this) { driver ->
             if (driver != null) {
-                val isStatusActive = driver.status.equals("Active", true) || 
-                                    driver.status.equals("ACTIVE", true) || 
-                                    driver.status.equals("On Duty", true)
-                
+                val isStatusActive = driver.status.equals("Active", true) ||
+                        driver.status.equals("ACTIVE", true) ||
+                        driver.status.equals("On Duty", true)
+
                 val isNavigating = driver.isNavigating || !driver.currentRoutePolyline.isNullOrEmpty()
-                
+
                 val currentTime = System.currentTimeMillis()
                 val isDataRecent = (currentTime - driver.lastUpdated) < 1800000 // 30 mins window
-                
+
                 if (isStatusActive && isNavigating && isDataRecent && driver.latitude != 0.0) {
                     unavailableDialog?.dismiss()
                     unavailableDialog = null
@@ -278,7 +285,7 @@ class TrackDriverActivity : AppCompatActivity() {
         }
 
         viewModel.assignedRoute.observe(this) { route ->
-            route?.let { 
+            route?.let {
                 if (currentRouteId != it.id) {
                     currentRouteId = it.id
                     drawInitialRoute(it)
@@ -296,7 +303,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
         unavailableDialog = Dialog(this)
         unavailableDialog?.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-        unavailableDialog?.setContentView(R.layout.dialog_request_submitted) 
+        unavailableDialog?.setContentView(R.layout.dialog_request_submitted)
         unavailableDialog?.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         unavailableDialog?.setCancelable(false)
 
@@ -319,7 +326,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
         val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
         unavailableDialog?.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-        
+
         unavailableDialog?.show()
     }
 
@@ -330,7 +337,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvBusIdSheet)?.text = driver.assignedBus ?: "BUS-101"
                 it.findViewById<TextView>(R.id.tvRouteSheet)?.text = driver.route ?: "Route"
                 it.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver.name
-                
+
                 var locationName = ""
                 val geocoder = Geocoder(this@TrackDriverActivity, Locale.getDefault())
                 try {
@@ -341,7 +348,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         val street = addr.thoroughfare
                         val subLocality = addr.subLocality
                         val locality = addr.locality
-                        
+
                         val cleanLocation = when {
                             street != null && subLocality != null -> "$street, $subLocality"
                             street != null -> street
@@ -350,7 +357,7 @@ class TrackDriverActivity : AppCompatActivity() {
                             locality != null -> locality
                             else -> "Near Route"
                         }
-                        
+
                         locationName = cleanLocation
                         val fullAddress = addr.getAddressLine(0)
                         val cleanedAddress = fullAddress.replace(Regex("[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}"), "")
@@ -359,7 +366,7 @@ class TrackDriverActivity : AppCompatActivity() {
                             .removePrefix(",")
                             .removeSuffix(",")
                             .trim()
-                        
+
                         it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = cleanedAddress
                     } else {
                         locationName = "Moving"
@@ -389,19 +396,18 @@ class TrackDriverActivity : AppCompatActivity() {
                         source?.geometry(targetPoint)
                     }
 
+                    if (!style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
+                        style.addLayer(modelLayer(DRIVER_MODEL_LAYER_ID, DRIVER_SOURCE_ID) {
+                            modelId(DRIVER_MODEL_ID)
+                            modelType(ModelType.COMMON_3D)
+                            modelScale(listOf(5.0, 5.0, 5.0)) // low-poly assets are usually smaller units — tune this after first run
+                            modelRotation(listOf(0.0, 0.0, 180.0))
+                        })
+                    }
+
                     if (!style.styleLayerExists(DRIVER_LAYER_ID)) {
                         val layer = symbolLayer(DRIVER_LAYER_ID, DRIVER_SOURCE_ID) {
-                            iconImage("bus-icon")
-                            iconSize(interpolate {
-                                exponential(1.5)
-                                zoom()
-                                stop(10.0, 1.0)
-                                stop(18.0, 2.5)
-                            })
-                            iconAllowOverlap(true)
-                            iconIgnorePlacement(true)
-                            iconRotationAlignment(com.mapbox.maps.extension.style.layers.properties.generated.IconRotationAlignment.MAP)
-                            
+                            // iconImage is removed for 3D look
                             textField(locationName)
                             textSize(interpolate {
                                 exponential(1.5)
@@ -416,20 +422,21 @@ class TrackDriverActivity : AppCompatActivity() {
                             textIgnorePlacement(true)
                             textAllowOverlap(true)
                         }
-                        
+
                         if (style.styleLayerExists(STOPS_LAYER_ID)) {
                             style.addLayerAbove(layer, STOPS_LAYER_ID)
                         } else {
                             style.addLayer(layer)
                         }
                     } else {
-                        val layer = style.getLayer(DRIVER_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.SymbolLayer
-                        layer?.textField(locationName)
-                        
+                        val symbolLayer = style.getLayer(DRIVER_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.SymbolLayer
+                        symbolLayer?.textField(locationName)
+
                         previousPoint?.let { start ->
                             if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
                                 val bearing = calculateBearing(start, targetPoint)
-                                layer?.iconRotate(bearing.toDouble())
+                                val modelLayer = style.getLayer(DRIVER_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer
+                                modelLayer?.modelRotation(listOf(0.0, 0.0, bearing.toDouble() + 180.0))
                                 animateDriver(start, targetPoint)
                             }
                         }
@@ -443,24 +450,24 @@ class TrackDriverActivity : AppCompatActivity() {
 
             viewModel.assignedRoute.value?.let { route ->
                 updateRouteSplitting(targetPoint, route, driver)
-                
+
                 // Identify next stop status precisely from Driver's navigation state
                 val globalNextIdx = driver.nextStopIndex
                 if (globalNextIdx < route.stopsList.size) {
                     val stopPoint = Point.fromLngLat(route.stopsList[globalNextIdx].longitude, route.stopsList[globalNextIdx].latitude)
                     val distance = TurfMeasurement.distance(targetPoint, stopPoint, TurfConstants.UNIT_METERS)
-                    
+
                     // Check if driver has reported arrival or is within radius
                     val hasArrived = driver.stopArrivalTimes.containsKey(globalNextIdx.toString()) || distance < 150.0
                     val status = if (hasArrived) "ARRIVED" else "NEXT"
-                    
+
                     // The index should never decrease during a trip
                     stopsAdapter.updateStops(route.stopsList, globalNextIdx, status)
                 } else {
                     calculateProgress(driver, route) // Fallback to distance-based
                 }
             }
-            
+
             // Apply a tilted 3D perspective
             if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
                 val currentCamera = mapView?.mapboxMap?.cameraState
@@ -501,7 +508,7 @@ class TrackDriverActivity : AppCompatActivity() {
             val lat = start.latitude() + (end.latitude() - start.latitude()) * fraction
             val lng = start.longitude() + (end.longitude() - start.longitude()) * fraction
             val currentPoint = Point.fromLngLat(lng, lat)
-            
+
             mapView?.mapboxMap?.getStyle { style ->
                 val source = style.getSource(DRIVER_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
                 source?.geometry(currentPoint)
@@ -528,7 +535,7 @@ class TrackDriverActivity : AppCompatActivity() {
         val driverPoint = Point.fromLngLat(driver.longitude, driver.latitude)
         var closestIdx = 0
         var minDistance = Double.MAX_VALUE
-        
+
         for (i in route.stopsList.indices) {
             val stop = route.stopsList[i]
             val stopPoint = Point.fromLngLat(stop.longitude, stop.latitude)
@@ -541,7 +548,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
         val hasArrived = driver.stopArrivalTimes.containsKey(closestIdx.toString()) || minDistance < 150.0
         val status = if (hasArrived) "ARRIVED" else "NEXT"
-        
+
         // Use the driver's nextStopIndex to ensure we don't go backwards
         val displayIdx = Math.max(closestIdx, driver.nextStopIndex)
         stopsAdapter.updateStops(route.stopsList, displayIdx, status)
@@ -557,7 +564,7 @@ class TrackDriverActivity : AppCompatActivity() {
             try {
                 // Initialize sources with empty geometry first to prevent showing full route from start
                 val emptyLine = LineString.fromLngLats(emptyList())
-                
+
                 if (!style.styleSourceExists(ROUTE_SOURCE_ID)) {
                     style.addSource(geoJsonSource(ROUTE_SOURCE_ID) { geometry(emptyLine) })
                 } else {
@@ -678,12 +685,12 @@ class TrackDriverActivity : AppCompatActivity() {
             // If the driver has uploaded a dynamic navigation route, use it!
             if (!driver.currentRoutePolyline.isNullOrEmpty()) {
                 val dynamicUpcoming = LineString.fromPolyline(driver.currentRoutePolyline!!, 6)
-                
+
                 mapView?.mapboxMap?.getStyle { style ->
                     // Update main active route with dynamic geometry from driver
                     (style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                         ?.geometry(dynamicUpcoming)
-                    
+
                     // Update traveled portion if available from driver's actual history
                     if (!driver.traveledPolyline.isNullOrEmpty()) {
                         val dynamicTraveled = LineString.fromPolyline(driver.traveledPolyline!!, 6)
@@ -700,11 +707,11 @@ class TrackDriverActivity : AppCompatActivity() {
             val globalNextIdx = driver.nextStopIndex.coerceIn(0, route.stopsList.size - 1)
             val nextStop = route.stopsList[globalNextIdx]
             val destination = Point.fromLngLat(nextStop.longitude, nextStop.latitude)
-            
+
             // Optimization: Only recalculate if the bus has moved significantly (>50m) or target stop changed
             val distToLastOrigin = lastCalculatedOrigin?.let { TurfMeasurement.distance(currentPos, it, TurfConstants.UNIT_METERS) } ?: Double.MAX_VALUE
             val hasDestChanged = lastCalculatedDest?.let { it.latitude() != destination.latitude() || it.longitude() != destination.longitude() } ?: true
-            
+
             if (distToLastOrigin > 50.0 || hasDestChanged) {
                 lastCalculatedOrigin = currentPos
                 lastCalculatedDest = destination
@@ -750,10 +757,10 @@ class TrackDriverActivity : AppCompatActivity() {
                 val splitIndex = findClosestPathIndex(currentPos, fullPath)
                 val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullPath)
                 val snappedP = snappedPoint.geometry() as? Point
-                
+
                 val history = fullPath.subList(0, splitIndex + 1).toMutableList()
                 snappedP?.let { history.add(it) }
-                
+
                 if (history.size >= 2) {
                     mapView?.mapboxMap?.getStyle { style ->
                         (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
@@ -787,9 +794,9 @@ class TrackDriverActivity : AppCompatActivity() {
             return drawable.bitmap
         }
         if (drawable != null) {
-            val bitmap = Bitmap.createBitmap(drawable.intrinsicWidth.takeIf { it > 0 } ?: 64, 
-                                            drawable.intrinsicHeight.takeIf { it > 0 } ?: 64, 
-                                            Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(drawable.intrinsicWidth.takeIf { it > 0 } ?: 64,
+                drawable.intrinsicHeight.takeIf { it > 0 } ?: 64,
+                Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             drawable.setBounds(0, 0, canvas.width, canvas.height)
             drawable.draw(canvas)
@@ -801,9 +808,9 @@ class TrackDriverActivity : AppCompatActivity() {
 
     override fun onStart() { super.onStart(); mapView?.onStart() }
     override fun onStop() { super.onStop(); mapView?.onStop() }
-    override fun onDestroy() { 
+    override fun onDestroy() {
         super.onDestroy()
         bitmapCache.clear()
-        mapView?.onDestroy() 
+        mapView?.onDestroy()
     }
 }

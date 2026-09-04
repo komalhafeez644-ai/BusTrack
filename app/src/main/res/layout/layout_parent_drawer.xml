@@ -115,7 +115,8 @@
                 android:layout_height="wrap_content"
                 android:background="?attr/selectableItemBackground"
                 android:gravity="center_vertical"
-                android:padding="14dp">
+                android:padding="14dp"
+                android:visibility="gone">
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
@@ -138,7 +139,8 @@
                 android:layout_height="wrap_content"
                 android:background="?attr/selectableItemBackground"
                 android:gravity="center_vertical"
-                android:padding="14dp">
+                android:padding="14dp"
+                android:visibility="gone">
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"

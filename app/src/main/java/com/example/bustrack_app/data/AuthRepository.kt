@@ -1,6 +1,7 @@
 package com.example.bustrack_app.data
 
 import android.util.Log
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -11,6 +12,21 @@ class AuthRepository {
 
     private val auth = Firebase.auth
     private val db = Firebase.firestore
+
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
+        val user = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
+        val email = user.email ?: return Result.failure(Exception("User email not found"))
+
+        return try {
+            val credential = EmailAuthProvider.getCredential(email, currentPassword)
+            user.reauthenticate(credential).await()
+            user.updatePassword(newPassword).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Change Password Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
 
     /**
      * Tries to login and returns Role (String) or Error Message (String).
