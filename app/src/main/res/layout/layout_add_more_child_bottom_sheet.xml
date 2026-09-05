@@ -98,6 +98,7 @@
             android:layout_height="60dp"
             android:text="Add Child"
             android:textAllCaps="false"
+            android:textColor="@color/white"
             android:textSize="16sp"
             android:textStyle="bold"
             app:cornerRadius="16dp"

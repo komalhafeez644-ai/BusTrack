@@ -5,6 +5,8 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.ktx.toObject
 import com.google.firebase.firestore.ListenerRegistration
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 
 /**
  * Modern way to handle all database operations in one place.
@@ -252,6 +254,32 @@ object FirebaseRepository {
             .addOnFailureListener { onComplete(false) }
     }
 
+    private val unreadListeners = mutableListOf<ListenerRegistration>()
+    private val _unreadCount = androidx.lifecycle.MutableLiveData<Int>()
+    val unreadCount: androidx.lifecycle.LiveData<Int> get() = _unreadCount
+
+    fun startUnreadCountListener(uid: String, role: String) {
+        if (unreadListeners.isNotEmpty()) return // Already listening
+        
+        val query = db.collection("notifications")
+            .whereEqualTo("isRead", false)
+            .where(com.google.firebase.firestore.Filter.or(
+                com.google.firebase.firestore.Filter.equalTo("recipientId", uid),
+                com.google.firebase.firestore.Filter.equalTo("recipientRole", role)
+            ))
+
+        val reg = query.addSnapshotListener { snapshot, _ ->
+            _unreadCount.postValue(snapshot?.size() ?: 0)
+        }
+        
+        unreadListeners.add(reg)
+    }
+
+    fun stopUnreadCountListener() {
+        unreadListeners.forEach { it.remove() }
+        unreadListeners.clear()
+    }
+
     /**
      * Attendance-related notification (Task 5): tells a student's approved parent(s)
      * when their child is marked Absent or Leave (Present is the expected default, so
@@ -296,7 +324,12 @@ object FirebaseRepository {
 
     // --- TRACKING REQUESTS ---
     fun fetchTrackingRequests(onResult: (List<TrackingRequestModel>) -> Unit) {
-        db.collection("trackingRequests").addSnapshotListener { snapshot, _ ->
+        db.collection("trackingRequests").addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                android.util.Log.e("FirebaseRepo", "Error fetching tracking requests: ${error.message}", error)
+                onResult(emptyList())
+                return@addSnapshotListener
+            }
             val list = snapshot?.documents?.mapNotNull { it.toObject<TrackingRequestModel>() } ?: emptyList()
             onResult(list)
         }
@@ -316,7 +349,8 @@ object FirebaseRepository {
             "trackingEnabled" to trackingEnabled,
             "trackingState" to trackingState,
             "reviewedAt" to com.google.firebase.Timestamp.now(),
-            "reviewedBy" to reviewedBy
+            "reviewedBy" to reviewedBy,
+            "isSeenByAdmin" to true
         )
         
         if (status == "REWORK") {
@@ -333,12 +367,17 @@ object FirebaseRepository {
         val updates = mutableMapOf<String, Any>(
             "status" to status,
             "reviewedAt" to com.google.firebase.Timestamp.now(),
-            "reviewedBy" to reviewedBy
+            "reviewedBy" to reviewedBy,
+            "isSeenByAdmin" to true
         )
         trackingRoute?.let { updates["assignedTrackingRoute"] = it }
 
         db.collection("trackingRequests").document(requestId).update(updates)
             .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
+    fun markTrackingRequestAsSeen(requestId: String) {
+        db.collection("trackingRequests").document(requestId).update("isSeenByAdmin", true)
     }
 
     // --- PARENTS ---

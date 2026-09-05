@@ -538,7 +538,9 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            startActivity(Intent(this, ChangePasswordActivity::class.java))
+            val intent = Intent(this, ChangePasswordActivity::class.java)
+            intent.putExtra("FROM_USER", "principal")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 

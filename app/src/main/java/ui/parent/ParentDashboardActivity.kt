@@ -354,6 +354,14 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        // Make Header Profile Clickable
+        val headerAction = View.OnClickListener {
+            ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, ParentProfileActivity::class.java))
+        }
+        findViewById<View>(R.id.ivProfile)?.setOnClickListener(headerAction)
+        findViewById<View>(R.id.tvParentName)?.setOnClickListener(headerAction)
+
         findViewById<View>(R.id.btnMenuDrawer)?.setOnClickListener {
             if (statusDialog != null && statusDialog!!.isShowing) return@setOnClickListener
             ViewUtils.applyClickEffect(it)
@@ -491,7 +499,7 @@ class ParentDashboardActivity : AppCompatActivity() {
         })
 
         view.findViewById<View>(R.id.btnContinue).setOnClickListener {
-            ViewUtils.applyPressEffect(it)
+            ViewUtils.applyClickEffect(it)
             var isValid = true
             if (etParentName.text.isNullOrEmpty()) { tilParentName.error = "Required"; isValid = false } else tilParentName.error = null
 
@@ -528,19 +536,39 @@ class ParentDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.drawerAttendance)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, StudentAttendanceActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
         findViewById<View>(R.id.drawerNotifications)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ParentNotificationsActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
         findViewById<View>(R.id.drawerFaq)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ParentFaqActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ChangePasswordActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
+        findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener { ViewUtils.applyClickEffect(it); val intent = Intent(this, ChangePasswordActivity::class.java); intent.putExtra("FROM_USER", "parent"); startActivity(intent); drawerLayout.closeDrawer(GravityCompat.END) }
         findViewById<View>(R.id.drawerLogout)?.setOnClickListener { ViewUtils.applyClickEffect(it); Firebase.auth.signOut(); val intent = Intent(this, LoginActivity::class.java); intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK; startActivity(intent); finish() }
     }
 
     private fun loadProfileData() {
+        // Source of truth: Use name from 'parents' collection (entered in form)
+        profileViewModel.parentData.observe(this) { parent ->
+            if (parent != null) {
+                val displayName = parent.name.ifEmpty { "Parent User" }
+                findViewById<TextView>(R.id.tvParentName)?.text = displayName
+                findViewById<TextView>(R.id.drawerName)?.text = displayName
+            }
+        }
+
+        // Account/User info: Emails and Photos
         profileViewModel.adminData.observe(this) { user ->
-            val parentName = user.fullName.ifEmpty { "Parent User" }
-            val displayResult = if (parentName.contains("Admin", true)) "Parent User" else parentName
-            findViewById<TextView>(R.id.tvParentName)?.text = displayResult
-            findViewById<TextView>(R.id.drawerName)?.text = displayResult
+            // Fallback for name if parentData isn't loaded yet or is null
+            if (profileViewModel.parentData.value == null) {
+                val fallbackName = user.fullName.ifEmpty { "Parent User" }
+                findViewById<TextView>(R.id.tvParentName)?.text = fallbackName
+                findViewById<TextView>(R.id.drawerName)?.text = fallbackName
+            }
+            
             findViewById<TextView>(R.id.drawerEmail)?.text = user.email
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
-            if (user.profileImageUrl.isNotEmpty()) Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
+            val headerImageView = findViewById<ImageView>(R.id.ivProfile)
+            
+            if (user.profileImageUrl.isNotEmpty()) {
+                Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
+                if (headerImageView != null) {
+                    Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(headerImageView)
+                }
+            }
         }
     }
 

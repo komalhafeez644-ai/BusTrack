@@ -33,6 +33,12 @@ class ParentRepository {
             db.collection("parents").document(uid)
                 .set(parentData, SetOptions.merge())
                 .await()
+
+            // Sync name to basic user profile as well
+            db.collection("users").document(uid)
+                .update("fullName", parent.name)
+                .await()
+
             Pair(true, null)
         } catch (e: Exception) {
             Log.e("ParentRepository", "Error saving parent data: ${e.message}", e)
@@ -53,7 +59,10 @@ class ParentRepository {
                 "requestId" to requestId,
                 "parentId" to uid,
                 "studentId" to studentId,
-                "status" to "pending",
+                "status" to "PENDING",
+                "trackingEnabled" to false,
+                "trackingState" to "PENDING",
+                "isSeenByAdmin" to false,
                 "submittedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                 "parentName" to parentName,
                 "phone" to phone,
@@ -63,14 +72,6 @@ class ParentRepository {
             db.collection("trackingRequests").document(requestId)
                 .set(request)
                 .await()
-
-            FirebaseRepository.sendNotification(
-                recipientRole = "admin",
-                title = "New Tracking Request",
-                message = "$parentName requested tracking access for student ID $studentId.",
-                type = "TRACKING_REQUEST",
-                relatedId = requestId
-            )
 
             Pair(true, null)
         } catch (e: Exception) {

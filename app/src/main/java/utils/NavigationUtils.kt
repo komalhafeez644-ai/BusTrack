@@ -4,7 +4,11 @@ import android.app.Activity
 import android.content.Intent
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.FirebaseRepository
+import com.google.firebase.auth.FirebaseAuth
 import ui.admin.*
 
 object NavigationUtils {
@@ -27,6 +31,27 @@ object NavigationUtils {
             is AttendanceActivity -> navAttendance?.isSelected = true
             is TrackingRequestsActivity -> navRequests?.isSelected = true
             is TransportAlertsActivity -> navAlerts?.isSelected = true
+        }
+
+        // --- BADGE LOGIC ---
+        if (activity is AppCompatActivity) {
+            val tvBadge = activity.findViewById<TextView>(R.id.tvUnseenAlertsBadgeNav)
+            if (tvBadge != null) {
+                FirebaseRepository.unreadCount.observe(activity) { count ->
+                    if (count > 0) {
+                        tvBadge.text = count.toString()
+                        tvBadge.visibility = View.VISIBLE
+                    } else {
+                        tvBadge.visibility = View.GONE
+                    }
+                }
+            }
+            
+            // Ensure listener is running
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid != null && FirebaseRepository.unreadCount.value == null) {
+                FirebaseRepository.startUnreadCountListener(uid, "admin")
+            }
         }
 
         // --- CLICK LISTENERS ---

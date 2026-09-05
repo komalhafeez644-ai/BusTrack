@@ -3,6 +3,8 @@ package ui.admin
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -86,7 +88,7 @@ class TransportAlertsActivity : AppCompatActivity() {
 
         // FAB ANNOUNCE / BROADCAST
         if (hideAdminChrome) {
-            binding.fabAnnounce.visibility = android.view.View.GONE
+            binding.fabAnnounce.visibility = View.GONE
         } else {
             binding.fabAnnounce.setOnClickListener {
                 utils.ViewUtils.applyClickEffect(it)
@@ -98,7 +100,7 @@ class TransportAlertsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (hideAdminChrome) {
-            binding.bottomNavInclude.root.visibility = android.view.View.GONE
+            binding.bottomNavInclude.root.visibility = View.GONE
         } else {
             NavigationUtils.setupBottomNavigation(this)
         }

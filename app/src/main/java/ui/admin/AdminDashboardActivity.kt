@@ -40,6 +40,21 @@ class AdminDashboardActivity : AppCompatActivity() {
         setupClickListeners()
         setupDrawerListeners()
         observeProfileData()
+        observeDashboardStats()
+    }
+
+    private fun observeDashboardStats() {
+        // Observe Tracking Requests for count
+        com.example.bustrack_app.data.FirebaseRepository.fetchTrackingRequests { requests ->
+            val unseenCount = requests.count { !it.isSeenByAdmin && it.status.uppercase() == "PENDING" }
+            val tvBadge = findViewById<TextView>(R.id.tvPendingRequestsCount)
+            if (unseenCount > 0) {
+                tvBadge?.text = unseenCount.toString()
+                tvBadge?.visibility = View.VISIBLE
+            } else {
+                tvBadge?.visibility = View.GONE
+            }
+        }
     }
 
     private fun observeProfileData() {
@@ -99,9 +114,9 @@ class AdminDashboardActivity : AppCompatActivity() {
             overridePendingTransition(0, 0)
         }
 
-        findViewById<CardView>(R.id.cardApplications)?.setOnClickListener {
+        findViewById<CardView>(R.id.cardTrackingRequests)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            startActivity(Intent(this, BusApplicationsActivity::class.java))
+            startActivity(Intent(this, TrackingRequestsActivity::class.java))
         }
 
         findViewById<CardView>(R.id.cardAttendanceHub)?.setOnClickListener {
@@ -187,7 +202,9 @@ class AdminDashboardActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            startActivity(Intent(this, ChangePasswordActivity::class.java))
+            val intent = Intent(this, ChangePasswordActivity::class.java)
+            intent.putExtra("FROM_USER", "admin")
+            startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
@@ -209,6 +226,8 @@ class AdminDashboardActivity : AppCompatActivity() {
 
         btnConfirm.setOnClickListener {
             dialog.dismiss()
+            com.example.bustrack_app.data.FirebaseRepository.stopUnreadCountListener()
+            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
             val intent = Intent(this, LoginActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(intent)

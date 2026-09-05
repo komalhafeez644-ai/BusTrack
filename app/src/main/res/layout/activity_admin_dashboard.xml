@@ -319,9 +319,9 @@
                         </LinearLayout>
                     </androidx.cardview.widget.CardView>
 
-                    <!-- Manage Applications -->
+                    <!-- Tracking Requests -->
                     <androidx.cardview.widget.CardView
-                        android:id="@+id/cardApplications"
+                        android:id="@+id/cardTrackingRequests"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_columnWeight="1"
@@ -330,39 +330,61 @@
                         app:cardCornerRadius="20dp"
                         app:cardElevation="3dp">
 
-                        <LinearLayout
+                        <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:orientation="vertical"
                             android:padding="16dp">
 
-                            <ImageView
-                                android:layout_width="45dp"
-                                android:layout_height="45dp"
-                                android:background="@drawable/bg_google"
-                                android:backgroundTint="@color/IconBackgroundTint"
-                                android:padding="10dp"
-                                android:src="@drawable/outline_assignment_24"
-                                app:tint="@color/primaryDark" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
+                            <LinearLayout
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="12dp"
                                 android:gravity="center"
-                                android:text="Applications"
-                                android:textColor="@color/primaryDark"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Bus Application"
-                                android:textColor="@color/textColorLight"
-                                android:textSize="11sp" />
+                                android:orientation="vertical">
 
-                        </LinearLayout>
+                                <ImageView
+                                    android:layout_width="45dp"
+                                    android:layout_height="45dp"
+                                    android:background="@drawable/bg_google"
+                                    android:backgroundTint="@color/IconBackgroundTint"
+                                    android:padding="10dp"
+                                    android:src="@drawable/security_shield"
+                                    app:tint="@color/primaryDark" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="12dp"
+                                    android:text="Track Requests"
+                                    android:textColor="@color/primaryDark"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Parent Approval"
+                                    android:textColor="@color/textColorLight"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                            <!-- Pending Badge -->
+                            <TextView
+                                android:id="@+id/tvPendingRequestsCount"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_alignParentTop="true"
+                                android:layout_alignParentEnd="true"
+                                android:background="@drawable/bg_status_badge_red"
+                                android:backgroundTint="#EF4444"
+                                android:gravity="center"
+                                android:text="0"
+                                android:textColor="@color/white"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:visibility="gone"
+                                tools:visibility="visible" />
+
+                        </RelativeLayout>
                     </androidx.cardview.widget.CardView>
 
                     <!-- Attendance Hub -->
@@ -421,38 +443,44 @@
                         app:cardCornerRadius="20dp"
                         app:cardElevation="3dp">
 
-                        <LinearLayout
+                        <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:orientation="vertical"
                             android:padding="16dp">
 
-                            <ImageView
-                                android:layout_width="45dp"
-                                android:layout_height="45dp"
-                                android:background="@drawable/notifications"
-                                android:backgroundTint="@color/IconBackgroundTint"
-                                android:padding="10dp"
-                                android:src="@drawable/notifications"
-                                app:tint="@color/primaryDark" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
+                            <LinearLayout
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="12dp"
-                                android:text="System Alerts"
-                                android:textColor="@color/primaryDark"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Notifications"
-                                android:textColor="@color/textColorLight"
-                                android:textSize="11sp" />
+                                android:gravity="center"
+                                android:orientation="vertical">
 
-                        </LinearLayout>
+                                <ImageView
+                                    android:layout_width="45dp"
+                                    android:layout_height="45dp"
+                                    android:background="@drawable/notifications"
+                                    android:backgroundTint="@color/IconBackgroundTint"
+                                    android:padding="10dp"
+                                    android:src="@drawable/notifications"
+                                    app:tint="@color/primaryDark" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="12dp"
+                                    android:text="System Alerts"
+                                    android:textColor="@color/primaryDark"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Notifications"
+                                    android:textColor="@color/textColorLight"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                        </RelativeLayout>
                     </androidx.cardview.widget.CardView>
                 </GridLayout>
 

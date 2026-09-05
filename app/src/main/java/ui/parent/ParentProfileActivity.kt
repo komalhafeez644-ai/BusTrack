@@ -51,47 +51,34 @@ class ParentProfileActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
-        // Parent Data Observer (Personal Details from original registration/form)
-        viewModel.parentData.observe(this) { data ->
-            if (data != null) {
-                binding.tvParentName.text = data.name
-                binding.tvPhone.text = data.phone.ifEmpty { "Not Provided" }
-                // Use email from Admin/Account data as it's the login account
-                viewModel.adminData.value?.let { admin ->
-                    binding.tvEmail.text = admin.email
-                    binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
-                    if (admin.profileImageUrl.isNotEmpty()) {
-                        Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).into(binding.imgProfile)
-                    }
-                }
+        // Source of truth for Parent's Display Name (from 'parents' collection)
+        viewModel.parentData.observe(this) { parent ->
+            if (parent != null) {
+                binding.tvParentName.text = parent.name
+                binding.tvPhone.text = parent.phone.ifEmpty { "Not Provided" }
             } else {
-                // Fallback to Admin data if Parent data doesn't exist yet
+                // Fallback to basic account name if form not yet submitted
                 viewModel.adminData.value?.let { admin ->
                     binding.tvParentName.text = admin.fullName
-                    binding.tvEmail.text = admin.email
                     binding.tvPhone.text = admin.phone.ifEmpty { "Not Provided" }
-                    binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
-                    if (admin.profileImageUrl.isNotEmpty()) {
-                        Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).into(binding.imgProfile)
-                    }
                 }
             }
             updateChildrenStats()
         }
 
+        // Account/User info for Email, Address and Photo
         viewModel.adminData.observe(this) { admin ->
+            // If parent data doesn't exist yet, use account name as fallback
             if (viewModel.parentData.value == null) {
                 binding.tvParentName.text = admin.fullName
-                binding.tvEmail.text = admin.email
                 binding.tvPhone.text = admin.phone.ifEmpty { "Not Provided" }
-                binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
-            } else {
-                binding.tvEmail.text = admin.email
-                binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
             }
             
+            binding.tvEmail.text = admin.email
+            binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
+            
             if (admin.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).into(binding.imgProfile)
+                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(binding.imgProfile)
             }
         }
 
@@ -155,7 +142,7 @@ class ParentProfileActivity : AppCompatActivity() {
         FormUtils.setupStudentIdFormatting(etStudentId)
 
         btnAdd.setOnClickListener {
-            ViewUtils.applyPressEffect(it)
+            ViewUtils.applyClickEffect(it)
             val name = etChildName.text.toString().trim()
             val studentId = etStudentId.text.toString().trim()
 

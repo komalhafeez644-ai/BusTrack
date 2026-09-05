@@ -17,5 +17,6 @@ data class TrackingRequestModel(
     // Optional snapshot fields for easier display in lists
     val parentName: String = "",
     val phone: String = "",
-    val relationship: String = ""
+    val relationship: String = "",
+    val isSeenByAdmin: Boolean = false
 )

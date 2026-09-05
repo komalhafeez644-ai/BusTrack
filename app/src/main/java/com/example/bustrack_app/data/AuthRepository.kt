@@ -84,16 +84,20 @@ class AuthRepository {
     private suspend fun getOrSyncRole(uid: String, email: String): String {
         val cleanEmail = email.trim().lowercase()
         var role: String? = null
+        var existingName: String? = null
         
-        // Try to fetch role from Firestore
+        // 1. Try to fetch existing profile from Firestore
         try {
             val document = db.collection("users").document(uid).get().await()
-            role = document.getString("role")
+            if (document.exists()) {
+                role = document.getString("role")
+                existingName = document.getString("fullName")
+            }
         } catch (e: Exception) {
             Log.w("AuthRepo", "Firestore read failed: ${e.message}")
         }
 
-        // Fallback if role is missing
+        // 2. Fallback Role Discovery
         if (role == null) {
             role = when (cleanEmail) {
                 "admin@gmail.com" -> "admin"
@@ -105,27 +109,38 @@ class AuthRepository {
                     } catch (e: Exception) { "parent" }
                 }
             }
-
-            // Sync missing document
-            try {
-                val userData = mutableMapOf<String, Any>(
-                    "uid" to uid, 
-                    "email" to cleanEmail, 
-                    "role" to role,
-                    "fullName" to (auth.currentUser?.displayName ?: "User Name")
-                )
-                
-                // Set default Employee ID for pre-created accounts
-                if (role == "admin") userData["employeeId"] = "ADM-2024-001"
-                if (role == "principal") userData["employeeId"] = "PRN-2024-001"
-
-                db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
-            } catch (e: Exception) {
-                Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
-            }
         }
 
-        return if (role == "user") "parent" else role
+        // 3. Sync/Initialize Profile
+        // We only write if the document was missing or role was unknown
+        // We CRITICALLY only set fullName if it doesn't already exist to protect form-entered data
+        try {
+            val userData = mutableMapOf<String, Any>()
+            var needsSync = false
+
+            if (existingName == null) {
+                userData["uid"] = uid
+                userData["email"] = cleanEmail
+                userData["role"] = role ?: "parent"
+                userData["fullName"] = auth.currentUser?.displayName ?: "User Name"
+                
+                if (role == "admin") userData["employeeId"] = "ADM-2024-001"
+                if (role == "principal") userData["employeeId"] = "PRN-2024-001"
+                needsSync = true
+            } else if (role != null) {
+                // If document exists but we want to ensure role is set correctly (e.g. login sync)
+                userData["role"] = role
+                needsSync = true
+            }
+
+            if (needsSync) {
+                db.collection("users").document(uid).set(userData, com.google.firebase.firestore.SetOptions.merge())
+            }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
+        }
+
+        return if (role == "user" || role == null) "parent" else role
     }
 
     // REMOVED: createAdminAccount and createPrincipalAccount as they were using ghost UIDs

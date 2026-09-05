@@ -10,9 +10,11 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.StudentAttendanceModel
 import com.example.bustrack_app.models.StudentModel
+import com.google.android.material.imageview.ShapeableImageView
 
 import com.example.bustrack_app.models.AttendanceRecordModel
 import com.example.bustrack_app.data.FirebaseRepository
@@ -24,6 +26,7 @@ class StudentAttendanceActivity : AppCompatActivity() {
 
     private lateinit var tvStudentName: TextView
     private lateinit var tvStudentId: TextView
+    private lateinit var ivStudentProfile: ShapeableImageView
     private lateinit var rvAttendance: RecyclerView
     private lateinit var rvStudentSelector: RecyclerView
     
@@ -39,6 +42,7 @@ class StudentAttendanceActivity : AppCompatActivity() {
 
         tvStudentName = findViewById(R.id.tvStudentName)
         tvStudentId = findViewById(R.id.tvStudentId)
+        ivStudentProfile = findViewById(R.id.ivStudentProfile)
         rvAttendance = findViewById(R.id.rvAttendance)
         rvStudentSelector = findViewById(R.id.rvStudentSelector)
 
@@ -91,6 +95,12 @@ class StudentAttendanceActivity : AppCompatActivity() {
     private fun loadStudentAttendance(student: StudentModel) {
         tvStudentName.text = student.name
         tvStudentId.text = "ID: ${student.id} | ${student.grade}"
+        
+        if (student.profileImageUrl.isNotEmpty()) {
+            Glide.with(this).load(student.profileImageUrl).placeholder(R.drawable.ic_person).into(ivStudentProfile)
+        } else {
+            ivStudentProfile.setImageResource(R.drawable.ic_person)
+        }
 
         FirebaseRepository.fetchAttendance { list ->
             val studentAttendance = list.filter { it.studentId == student.id }
@@ -113,7 +123,7 @@ class StudentAttendanceActivity : AppCompatActivity() {
         private var selectedPosition = 0
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val ivAvatar: ImageView = view.findViewById(R.id.ivStudentAvatar)
+            val ivAvatar: ShapeableImageView = view.findViewById(R.id.ivStudentAvatar)
             val tvName: TextView = view.findViewById(R.id.tvSelectorName)
         }
 
@@ -126,20 +136,32 @@ class StudentAttendanceActivity : AppCompatActivity() {
             val student = students[position]
             holder.tvName.text = student.name.split(" ")[0] // Show first name only for brevity
             
+            if (student.profileImageUrl.isNotEmpty()) {
+                Glide.with(holder.itemView.context)
+                    .load(student.profileImageUrl)
+                    .placeholder(R.drawable.ic_person)
+                    .into(holder.ivAvatar)
+            } else {
+                holder.ivAvatar.setImageResource(R.drawable.ic_person)
+            }
+
             // Highlight selected child
             if (position == selectedPosition) {
                 holder.ivAvatar.alpha = 1.0f
+                holder.ivAvatar.strokeWidth = 4f
                 holder.tvName.setTextColor(Color.parseColor("#1E3A8A")) // Primary Blue
                 holder.itemView.scaleX = 1.1f
                 holder.itemView.scaleY = 1.1f
             } else {
-                holder.ivAvatar.alpha = 0.5f
+                holder.ivAvatar.alpha = 0.6f
+                holder.ivAvatar.strokeWidth = 0f
                 holder.tvName.setTextColor(Color.GRAY)
                 holder.itemView.scaleX = 1.0f
                 holder.itemView.scaleY = 1.0f
             }
 
             holder.itemView.setOnClickListener {
+                if (selectedPosition == holder.adapterPosition) return@setOnClickListener
                 val previous = selectedPosition
                 selectedPosition = holder.adapterPosition
                 notifyItemChanged(previous)

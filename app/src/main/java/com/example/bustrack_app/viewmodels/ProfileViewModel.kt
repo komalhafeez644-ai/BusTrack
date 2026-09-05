@@ -72,10 +72,21 @@ class ProfileViewModel : ViewModel() {
     fun updateProfile(userData: Map<String, Any>, onResult: (Boolean, String) -> Unit) {
         val uid = auth.currentUser?.uid ?: return
 
+        // Update basic user account
         db.collection("users").document(uid)
             .set(userData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
-                onResult(true, "Profile updated successfully")
+                // If this is a parent, also sync name to parents collection
+                if (userData.containsKey("fullName")) {
+                    val name = userData["fullName"] as String
+                    db.collection("parents").document(uid)
+                        .update("name", name)
+                        .addOnCompleteListener {
+                            onResult(true, "Profile updated successfully")
+                        }
+                } else {
+                    onResult(true, "Profile updated successfully")
+                }
             }
             .addOnFailureListener { e ->
                 onResult(false, e.message ?: "Update failed")

@@ -93,6 +93,7 @@ import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import com.mapbox.navigation.core.trip.session.LocationMatcherResult
 import com.mapbox.navigation.core.trip.session.LocationObserver
+import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.directions.session.RoutesUpdatedResult
@@ -124,6 +125,8 @@ import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfMisc
 import kotlin.collections.firstOrNull
+import com.mapbox.maps.plugin.ModelScaleMode
+import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 
 class DriverDashboardActivity : AppCompatActivity() {
 
@@ -156,30 +159,17 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var activeStopStatus = "NEXT" // NEXT, ARRIVED, PASSED
     private var lastArrivedStopIndex = -1
     private var isCurrentlyAtStop = false
-    // Widened from 50m: map-matched (enhanced) location snaps to the road centerline,
-    // while admin-drawn stop pins are often placed a bit off the road. 50m was too tight
-    // and caused the arrival geofence (and therefore the Attendance Bottom Sheet) to never
-    // trigger in real/emulator testing. 80m + the raw-GPS fallback below fixes that.
     private val ARRIVAL_RADIUS = 80.0 // meters
     private val DEPARTURE_RADIUS = 70.0 // 70 meters to prevent flickering
-    // Raw (non-map-matched) GPS fix, used alongside the enhanced/matched location so a stop
-    // is detected as soon as EITHER reading is within range - fixes cases where map-matching
-    // snaps the puck to the road and away from the actual stop coordinate.
     private var currentRawLocation: Location? = null
 
     private var departureCandidateIndex = -1
     private var departureConfirmCount = 0
     private val DEPARTURE_CONFIRM_THRESHOLD = 3
 
-    // Route polyline (grey/blue) tracking - monotonic (kabhi peeche nahi jaane wala) index.
-    // U-turn/loop ke paas globally-nearest search galat (peeche wala) point pick kar leti thi -
-    // isliye ab search sirf isi index ke AAGE ek chhoti window mein hoti hai.
     private var lastSplitIndex = 0
-    private val SPLIT_SEARCH_WINDOW = 120 // points aage tak hi dhoondo, poori route mein nahi
+    private val SPLIT_SEARCH_WINDOW = 120
 
-    // Backup off-route check: agar Mapbox ka apna OffRouteObserver kisi missed U-turn ko
-    // turant detect nahi karta, to hum khud bhi dekhte hain ki driver planned route se
-    // sustained taur par door to nahi ja raha.
     private var offRouteBackupCount = 0
     private val OFF_ROUTE_BACKUP_THRESHOLD_METERS = 80.0
     private val OFF_ROUTE_BACKUP_CONFIRM_COUNT = 3
@@ -191,18 +181,24 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastDutyToggleTime = 0L
     private val DUTY_SYNC_DEBOUNCE_MS = 3000L
 
-    // Professional driver-app model: On Duty = "available + location sharing ON",
-    // completely independent of navigation. Navigation stopping does NOT turn duty off.
-    // Agar driver On Duty rehte hue app background/close kar de (bina manually Off Duty
-    // kiye) aur koi navigation active na ho, to hum ek GRACE PERIOD dete hain - agar is
-    // waqt ke andar wapas nahi aata, tabhi system automatically Off Duty kar deta hai
-    // (privacy-safe default: hamesha ke liye live location share nahi hoti rehti).
     private val dutyHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var dutyAutoOffRunnable: Runnable? = null
+
+    private var lastAppliedBusScale = -1f
+    private val MIN_BUS_MODEL_SCALE = 1.7f
+    private val MAX_BUS_MODEL_SCALE = 2.0f
+    private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
+    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
+    private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
+    private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
+
+    private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0f
+    private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 2f
     private val DUTY_AUTO_OFF_GRACE_PERIOD_MS = 10 * 60 * 1000L // 10 minutes
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var currentLocation: Location? = null
+    private var isCurrentLocationLive = false
     private var assignedRoute: RouteModel? = null
 
     private var lastFirestoreLocation: Location? = null
@@ -218,7 +214,12 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var mapboxNavigation: MapboxNavigation? = null
     private var voiceInstructionsPlayer: MapboxVoiceInstructionsPlayer? = null
     private var speechApi: MapboxSpeechApi? = null
+    private val navigationLocationProvider = NavigationLocationProvider()
     private val attendancePromptedStops = mutableSetOf<Int>()
+    private var lastValidBearing: Double = 0.0
+    private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8 // m/s (~3 km/h)
+    private var lastRawPositionForSnap: Point? = null
+    private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 3.0
 
     private val NAV_ROUTE_SOURCE_ID = "nav-route-source"
     private val NAV_TRAVELED_SOURCE_ID = "nav-traveled-source"
@@ -264,6 +265,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             setupLocationPuck()
             setupMapGestures()
             updateMapDisplay()
+            mapView?.mapboxMap?.addOnCameraChangeListener(cameraChangeListener)
         }
 
         findViewById<View>(R.id.drawerDutyContainer)?.visibility = View.VISIBLE
@@ -338,7 +340,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val value = expected.value
                 if (value != null) {
                     voiceInstructionsPlayer?.play(value.announcement) { speechAnnouncement ->
-                        // Release the announcement's resources once playback finishes
                         speechApi?.clean(speechAnnouncement)
                     }
                 }
@@ -415,7 +416,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 fullNavigationPoints = route.directionsRoute.geometry()?.let {
                     LineString.fromPolyline(it, 6).coordinates()
                 } ?: emptyList()
-                // Nayi route geometry aayi hai - purana splitIndex ab invalid hai.
                 lastSplitIndex = 0
 
                 if (isNavigating) {
@@ -431,15 +431,31 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private val locationObserver = object : LocationObserver {
         override fun onNewRawLocation(rawLocation: com.mapbox.common.location.Location) {
-            // Keep the raw GPS fix around as a fallback for the arrival-geofence check -
-            // see currentRawLocation / ARRIVAL_RADIUS comments above.
             currentRawLocation = android.location.Location("raw").apply {
                 latitude = rawLocation.latitude
                 longitude = rawLocation.longitude
             }
         }
         override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
-            val enhancedLocation = locationMatcherResult.enhancedLocation
+            val rawEnhancedLocation = locationMatcherResult.enhancedLocation
+
+            val currentSpeed = rawEnhancedLocation.speed ?: 0.0
+            val newBearing = rawEnhancedLocation.bearing
+            if (currentSpeed >= MIN_SPEED_FOR_BEARING_UPDATE && newBearing != null) {
+                lastValidBearing = newBearing
+            }
+            val enhancedLocation = rawEnhancedLocation.toBuilder()
+                .bearing(lastValidBearing)
+                .build()
+
+            val transitionOptions: (android.animation.ValueAnimator.() -> Unit) = { duration = 1000 }
+            navigationLocationProvider.changePosition(
+                location = enhancedLocation,
+                keyPoints = locationMatcherResult.keyPoints,
+                latLngTransitionOptions = transitionOptions,
+                bearingTransitionOptions = transitionOptions
+            )
+
             val androidLocation = android.location.Location("mapbox").apply {
                 latitude = enhancedLocation.latitude
                 longitude = enhancedLocation.longitude
@@ -447,7 +463,9 @@ class DriverDashboardActivity : AppCompatActivity() {
                 bearing = enhancedLocation.bearing?.toFloat() ?: 0f
             }
             runOnUiThread {
+                val wasLive = isCurrentLocationLive
                 currentLocation = androidLocation
+                isCurrentLocationLive = true
 
                 if (isNavigating) {
                     updateNavigationRouteProgress(Point.fromLngLat(androidLocation.longitude, androidLocation.latitude))
@@ -465,6 +483,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                             binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = displayAddr
                         }
                     } catch (e: Exception) {}
+                } else if (!wasLive) {
+                    updateMapDisplay()
                 }
             }
         }
@@ -532,9 +552,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                         var distance = matchedResults[0].toDouble()
 
-                        // Also check against the raw (non-map-matched) GPS fix and take
-                        // whichever is closer - the matched/enhanced puck can be snapped to
-                        // the road and end up further from the stop pin than the true fix is.
                         currentRawLocation?.let { raw ->
                             val rawResults = FloatArray(1)
                             Location.distanceBetween(
@@ -612,10 +629,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
 
-                // Kaunsa stop abhi "LIVE" (currently ARRIVED, geofence ke andar) hai.
-                // Jaise hi confirmed departure hota hai, ye -1 ho jaata hai - us stop ka
-                // status phir "Passed" ban jaata hai (permanently, arrival time ke saath,
-                // jo kabhi recalculate nahi hota).
                 val liveArrivedIndex = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
                     lastArrivedStopIndex
                 } else {
@@ -643,12 +656,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 stops.forEachIndexed { index, stop ->
                     val arrivalTime = stopArrivalTimes[index]
                     if (arrivalTime == "Skipped") {
-                        // Ye stop genuinely visit nahi hui thi - "Arrived" na dikhayein.
                         stop.time = "Skipped"
                     } else if (arrivalTime != null) {
-                        // Ek baar arrival record ho gaya, ye text HAMESHA "Arrived: <time>"
-                        // rahega - status Arrived ho ya Passed, ya bus kitni bhi aage
-                        // stops cover kar le, ye kabhi reset/recalculate nahi hota.
                         stop.time = "Arrived: $arrivalTime"
                     } else if (index == displayStopIndex) {
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
@@ -667,9 +676,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
 
-                // currentStopIndex param ab "liveArrivedIndex" ka role play karta hai: sirf
-                // wahi stop jo ABHI geofence ke andar hai "Arrived" dikhega; jab -1 ho to
-                // koi bhi stop "live" nahi hai - pehle se arrived saare stops "Passed" honge.
                 stopsAdapter.updateStops(stops, liveArrivedIndex)
 
                 val bannerInstructions = routeProgress.bannerInstructions
@@ -758,6 +764,28 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun toMapboxLocation(location: Location): com.mapbox.common.location.Location {
+        val builder = com.mapbox.common.location.Location.Builder()
+            .latitude(location.latitude)
+            .longitude(location.longitude)
+
+        if (location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE && location.hasBearing()) {
+            lastValidBearing = location.bearing.toDouble()
+        }
+        builder.bearing(lastValidBearing)
+
+        if (location.hasSpeed()) {
+            builder.speed(location.speed.toDouble())
+        }
+        return builder.build()
+    }
+
+    private fun feedRawLocationToPuck(location: Location) {
+        navigationLocationProvider.changePosition(
+            location = toMapboxLocation(location)
+        )
+    }
+
     private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
@@ -765,8 +793,14 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null && currentLocation == null) {
+            if (location != null) {
+                val wasLive = isCurrentLocationLive
                 currentLocation = location
+                isCurrentLocationLive = true
+                feedRawLocationToPuck(location)
+                if (!wasLive) {
+                    updateMapDisplay()
+                }
             }
         }
 
@@ -783,7 +817,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 if (!isDutyEnabled) return
 
                 for (location in locationResult.locations) {
+                    val wasLive = isCurrentLocationLive
                     currentLocation = location
+                    isCurrentLocationLive = true
+                    feedRawLocationToPuck(location)
 
                     if (isDutyEnabled) {
                         syncTrackingDataToFirestore(location)
@@ -792,6 +829,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                             runOnUiThread {
                                 updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
                             }
+                        } else if (!wasLive) {
+                            runOnUiThread { updateMapDisplay() }
                         }
                     }
                 }
@@ -878,6 +917,16 @@ class DriverDashboardActivity : AppCompatActivity() {
             return
         }
 
+        val loc = currentLocation
+        if (loc != null && isCurrentLocationLive) {
+            fetchDynamicRoutePreview(route, loc)
+            return
+        }
+
+        drawStaticSavedRoute(route)
+    }
+
+    private fun drawStaticSavedRoute(route: RouteModel) {
         val points = if (route.pathPoints.isNotEmpty()) {
             route.pathPoints
                 .filter { it.latitude != 0.0 && it.longitude != 0.0 }
@@ -893,6 +942,60 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (points.isNotEmpty()) {
             drawPointsOnMap(points)
         }
+    }
+
+    private fun fetchDynamicRoutePreview(route: RouteModel, origin: Location) {
+        val originPoint = Point.fromLngLat(origin.longitude, origin.latitude)
+
+        val remainingStopPoints = route.stopsList
+            .filter { it.latitude != 0.0 && it.longitude != 0.0 }
+            .map { Point.fromLngLat(it.longitude, it.latitude) }
+
+        val destinationPoints = if (remainingStopPoints.isNotEmpty()) {
+            remainingStopPoints
+        } else if (route.pathPoints.isNotEmpty()) {
+            listOf(Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude))
+        } else {
+            emptyList()
+        }
+
+        if (destinationPoints.isEmpty()) {
+            drawStaticSavedRoute(route)
+            return
+        }
+
+        val coordinates = mutableListOf(originPoint)
+        coordinates.addAll(destinationPoints)
+
+        val accessToken = MapboxOptions.accessToken ?: getString(R.string.mapbox_access_token)
+        val routeOptions = RouteOptions.builder()
+            .coordinatesList(coordinates)
+            .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+            .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .geometries(DirectionsCriteria.GEOMETRY_POLYLINE6)
+            .build()
+
+        MapboxDirections.builder()
+            .accessToken(accessToken)
+            .routeOptions(routeOptions)
+            .build()
+            .enqueueCall(object : Callback<DirectionsResponse> {
+                override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                    if (isNavigating) return
+                    val geometry = response.body()?.routes()?.firstOrNull()?.geometry()
+                    if (geometry != null) {
+                        val points = LineString.fromPolyline(geometry, 6).coordinates()
+                        runOnUiThread { drawPointsOnMap(points) }
+                    } else {
+                        runOnUiThread { drawStaticSavedRoute(route) }
+                    }
+                }
+
+                override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                    Log.e("NavDebug", "Dynamic dashboard route preview failed: ${t.message}")
+                    runOnUiThread { drawStaticSavedRoute(route) }
+                }
+            })
     }
 
     override fun onResume() {
@@ -973,16 +1076,63 @@ class DriverDashboardActivity : AppCompatActivity() {
         centerCameraOnUser()
     }
 
+    private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
+        val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
+            .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
+
+        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
+        val apparentTarget = (BUS_MODEL_SCALE_REFERENCE_VALUE * Math.pow(2.0, apparentExponent))
+            .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
+
+        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
+        return (apparentTarget * worldToScreenCompensation).toFloat()
+    }
+
     private fun setupLocationPuck() {
         mapView?.location?.apply {
+            setLocationProvider(navigationLocationProvider)
             enabled = isDutyEnabled
             pulsingEnabled = isDutyEnabled
+            puckBearingEnabled = true
+
+            val initialZoom = mapView?.mapboxMap?.cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM
+            val initialPitch = mapView?.mapboxMap?.cameraState?.pitch ?: 0.0
+            val initialScale = computeBusModelScale(initialZoom, initialPitch)
+
             locationPuck = LocationPuck3D(
                 modelUri = "asset://bus.glb",
-                modelScale = listOf(15f, 15f, 15f),
-                modelRotation = listOf(0f, 0f, 180f)
+                modelScale = listOf(initialScale, initialScale, initialScale),
+                modelScaleMode = ModelScaleMode.MAP,
+                modelTranslation = listOf(0f, 0f, 0f),
+                modelRotation = listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, 90f)
             )
+            lastAppliedBusScale = initialScale
         }
+
+        currentLocation?.let {
+            feedRawLocationToPuck(it)
+        }
+        updateBusModelScaleForZoom()
+    }
+
+    private val cameraChangeListener = OnCameraChangeListener {
+        updateBusModelScaleForZoom()
+    }
+
+    private fun updateBusModelScaleForZoom() {
+        val cameraState = mapView?.mapboxMap?.cameraState ?: return
+        val newScale = computeBusModelScale(cameraState.zoom, cameraState.pitch)
+
+        if (kotlin.math.abs(newScale - lastAppliedBusScale) < 0.05f) return
+        lastAppliedBusScale = newScale
+
+        mapView?.location?.locationPuck = LocationPuck3D(
+            modelUri = "asset://bus.glb",
+            modelScale = listOf(newScale, newScale, newScale),
+            modelScaleMode = ModelScaleMode.MAP,
+            modelTranslation = listOf(0f, 0f, 0f),
+            modelRotation = listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, 90f)
+        )
     }
 
     private fun observeViewModel() {
@@ -1003,6 +1153,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         latitude = driver.latitude
                         longitude = driver.longitude
                     }
+                    isCurrentLocationLive = false
                     centerCameraOnUser()
                 }
             }
@@ -1016,12 +1167,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 tvTotalStops.text = data.stopsCount
 
-                // Switch hamesha Firestore ki ASLI value ke sath sync hota hai - koi
-                // forced-off write nahi hota. (Pehle yahan har fresh launch par
-                // zabardasti OFF likh diya jaata tha, jo real value ke sath race kar ke
-                // switch ko on/off blink kara deta tha.) Debounce sirf isliye rakha hai
-                // taake driver ke abhi-abhi kiye gaye manual toggle ko turant wapas
-                // overwrite na kare jab tak Firestore write server tak pahunch na jaye.
                 val currentTime = System.currentTimeMillis()
                 val isPendingSync = (currentTime - lastDutyToggleTime) < DUTY_SYNC_DEBOUNCE_MS
 
@@ -1119,14 +1264,19 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun updateNavigationRouteProgress(currentPos: Point) {
         if (fullNavigationPoints.size < 2) return
+
+        lastRawPositionForSnap?.let { lastRaw ->
+            val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
+            if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
+                return
+            }
+        }
+        lastRawPositionForSnap = currentPos
+
         try {
             val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
             val snappedP = snappedPoint.geometry() as? Point ?: return
 
-            // 1. splitIndex sirf FORWARD window mein dhoondo (lastSplitIndex se aage), poori
-            // route mein nahi. Ye U-turn/loop ke paas galat (peeche wale) point ko "nearest"
-            // match hone se rokta hai, kyunki wahan route ka aage-peeche hissa geographically
-            // paas-paas hota hai (jisse blue line "stuck"/duplicate dikhti thi).
             val searchStart = lastSplitIndex
             val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
             var splitIndex = searchStart
@@ -1138,13 +1288,17 @@ class DriverDashboardActivity : AppCompatActivity() {
                     splitIndex = i
                 }
             }
-            // Kabhi peeche nahi jaana - monotonic
             splitIndex = maxOf(splitIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
 
-            // Backup off-route check (missed U-turn jaisa case): agar nearest route point
-            // (window ke andar) bhi minDistance se zyada door hai, sustained taur par, to
-            // reroute trigger karo - chahe Mapbox ka apna OffRouteObserver abhi tak na fire hua ho.
+            // NOTE: the bus marker itself is fed from the actual (already map-matched/
+            // jitter-gated) GPS position in locationObserver/feedRawLocationToPuck - not
+            // from snappedP here. snappedP is used ONLY for the drawn traveled/upcoming
+            // route-line split below and for off-route distance checks. Forcing the visual
+            // marker onto the assigned route geometry would hide genuine deviation (e.g. a
+            // wrong turn) behind a bus that always looks like it's on-route - the
+            // off-route detector below is what should catch and react to that instead.
+
             if (isNavigating && minDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
                 offRouteBackupCount++
                 val now = System.currentTimeMillis()
@@ -1160,21 +1314,15 @@ class DriverDashboardActivity : AppCompatActivity() {
                 offRouteBackupCount = 0
             }
 
-            // 2. Traveled (grey) aur upcoming (blue) dono asli route geometry
-            // (fullNavigationPoints) ko splitIndex par slice karke banao - isse dono hamesha
-            // real road shape follow karte hain. Location jump hone par bhi seedhi/straight
-            // line nahi banti, kyunki hum raw GPS points ko jodte hi nahi - sirf existing
-            // route polyline ko cut karte hain.
             val traveledPoints = fullNavigationPoints.subList(0, splitIndex + 1)
 
             val upcomingPoints = mutableListOf<Point>()
-            upcomingPoints.add(snappedP) // Fix: Start blue route exactly on the road, not the raw off-road GPS
+            upcomingPoints.add(snappedP)
             if (splitIndex + 1 < fullNavigationPoints.size) {
                 upcomingPoints.addAll(fullNavigationPoints.subList(splitIndex + 1, fullNavigationPoints.size))
             }
 
             mapView?.mapboxMap?.getStyle { style ->
-                // Draw grey history (already-travelled portion of the real route geometry)
                 var traveledPolyline: String? = null
                 if (traveledPoints.size >= 2) {
                     val traveledLine = LineString.fromLngLats(traveledPoints)
@@ -1183,7 +1331,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                     traveledPolyline = traveledLine.toPolyline(6)
                 }
 
-                // Draw blue upcoming route (remaining path to the next stop)
                 var currentPolyline: String? = null
                 val upcomingLine = LineString.fromLngLats(upcomingPoints)
                 (style.getSource(NAV_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
@@ -1300,7 +1447,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         binding.bottomSummaryCard.findViewById<View>(R.id.btnViewRoute)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            showFullRouteOverview()
+            startFollowingPuck()
         }
 
         binding.btnNotifications.setOnClickListener {
@@ -1432,10 +1579,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .zoom(19.0)
                     .pitch(65.0)
                     .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
+                    .padding(EdgeInsets(450.0, 0.0, 150.0, 0.0))
                     .build()
             )!!
         )
-        mapView?.mapboxMap?.setCamera(CameraOptions.Builder().padding(EdgeInsets(450.0, 0.0, 150.0, 0.0)).build())
     }
 
     private fun followPuckNorthUp() {
@@ -1581,6 +1728,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
+                    isNavigating = true
                     nav.setNavigationRoutes(routes)
 
                     if (ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -1604,10 +1752,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun setNavigationMode(isNavigating: Boolean, reloadStyle: Boolean = true) {
         this.isNavigating = isNavigating
-        // Navigation state badal gayi - agar navigation start hui hai to koi bhi pending
-        // grace-period auto-off timer cancel karo (navigation ke dauran duty auto-off
-        // nahi honi chahiye). Agar navigation stop hui hai, is se duty par KOI asar nahi
-        // padta - duty independent state hai, sirf isDutyEnabled/manual switch control karta hai.
         cancelDutyAutoOffTimer()
         binding.apply {
             if (isNavigating) {
@@ -1636,6 +1780,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
                     pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
 
+                    setupLocationPuck()
                     mapView?.location?.pulsingEnabled = false
 
                     mapboxNavigation?.getNavigationRoutes()?.firstOrNull()?.let { navRoute ->
@@ -1647,6 +1792,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                             updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
                         }
                     }
+
+                    startFollowingPuck()
                 }
 
                 cardRouteDetails.visibility = View.GONE
@@ -1669,7 +1816,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 layoutMapControls.animate().translationY(-240f).setDuration(500).start()
                 btnRecenter.animate().translationY(-240f).setDuration(500).start()
             } else {
-                mapboxNavigation?.stopTripSession()
                 mapboxNavigation?.setNavigationRoutes(emptyList())
                 fullNavigationPoints = emptyList()
                 traveledHistoryPoints.clear()
@@ -1925,8 +2071,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         val drawerDutyLabel = findViewById<TextView>(R.id.tvDrawerDutyLabel)
         val dutySwitch = findViewById<SwitchMaterial>(R.id.switchDuty)
 
-        // Duty ki state kisi bhi tarah (ON ya OFF) explicitly change ho rahi hai -
-        // koi bhi pending grace-period auto-off timer ab stale ho gaya, cancel kar do.
         cancelDutyAutoOffTimer()
 
         this.isDutyEnabled = isOnDuty
@@ -1942,6 +2086,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             startLocationUpdates()
             setupLocationPuck()
 
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                mapboxNavigation?.startTripSession()
+            }
+
             viewModel.currentDriver.value?.driverId?.let { driverId ->
                 com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Active")
             }
@@ -1955,6 +2103,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             if (isNavigating) {
                 setNavigationMode(false, reloadStyle)
             }
+
+            mapboxNavigation?.stopTripSession()
 
             stopArrivalTimes.clear()
             nextGlobalStopIndex = 0
@@ -2082,7 +2232,9 @@ class DriverDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             it.postDelayed({
-                startActivity(Intent(this, ChangePasswordActivity::class.java))
+                val intent = Intent(this, ChangePasswordActivity::class.java)
+                intent.putExtra("FROM_USER", "driver")
+                startActivity(intent)
                 drawerLayout.closeDrawer(GravityCompat.END)
             }, 150)
         }
@@ -2121,10 +2273,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             it.postDelayed({
                 dialog.dismiss()
 
-                // Explicit logout ek unambiguous action hai (grace-period wait karne ki
-                // zaroorat nahi) - turant Off Duty + location sharing band karo, taake
-                // koi doosra driver isi device par login kare to purane driver ki
-                // location kisi surat mein share na ho rahi ho.
                 cancelDutyAutoOffTimer()
                 if (isDutyEnabled) {
                     viewModel.currentDriver.value?.driverId?.let { driverId ->
@@ -2154,17 +2302,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun scheduleDutyAutoOffTimer() {
-        // Sirf tab schedule karo jab driver On Duty hai aur koi navigation active nahi -
-        // navigation ke dauran app background/minimize hone par duty auto-off NAHI hona
-        // chahiye (professional model: Navigation ek independent feature hai, On Duty ka
-        // matlab sirf "location sharing ON" hai).
         if (!isDutyEnabled || isNavigating) return
 
         cancelDutyAutoOffTimer()
 
-        // driverId abhi capture kar lo - Activity/ViewModel baad mein destroy ho sakte
-        // hain, lekin ye Runnable poore app-process ke Main Looper par register hua hai
-        // isliye process zinda rehte hue bhi fire ho sakta hai.
         val driverIdSnapshot = viewModel.currentDriver.value?.driverId ?: return
 
         val runnable = Runnable {
@@ -2186,31 +2327,23 @@ class DriverDashboardActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         mapView?.onStart()
-        // Driver wapas app mein aa gaya - pending auto-off grace timer cancel karo.
         cancelDutyAutoOffTimer()
     }
 
     override fun onStop() {
         super.onStop()
         mapView?.onStop()
-        // App background mein gaya (minimize/switch/close). Agar driver On Duty hai aur
-        // koi navigation active nahi hai, to grace-period timer start karo - agar isi
-        // waqt ke andar wapas nahi aata, tabhi automatically Off Duty hoga.
         scheduleDutyAutoOffTimer()
     }
 
     override fun onDestroy() {
-        // NOTE: Yahan koi immediate "Inactive" write NAHI karte. Duty ka auto-off ab
-        // sirf grace-period timer (onStop mein schedule hota hai) ke through hota hai -
-        // isse "app close" aur "sirf Activity recreate hona (rotation/drawer navigation)"
-        // mein farak ho jaata hai, jo pehle switch ko blink kara raha tha.
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+        mapView?.mapboxMap?.removeOnCameraChangeListener(cameraChangeListener)
         mapboxNavigation?.unregisterRoutesObserver(routesObserver)
         mapboxNavigation?.unregisterLocationObserver(locationObserver)
         mapboxNavigation?.unregisterRouteProgressObserver(routeProgressObserver)
         mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
 
-        // Use proper cleanup if available, or just nullify
         voiceInstructionsPlayer = null
         speechApi = null
 

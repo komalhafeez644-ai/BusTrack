@@ -170,6 +170,20 @@ class TrackingRequestsActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val request = requests[position]
             holder.tvParentName.text = request.parentName
+
+            // Mark as seen if it's a new pending request
+            if (!request.isSeenByAdmin && request.status.uppercase() == "PENDING") {
+                com.example.bustrack_app.data.FirebaseRepository.markTrackingRequestAsSeen(request.requestId)
+            }
+            
+            // Set Request Date
+            request.submittedAt?.let { timestamp ->
+                val date = timestamp.toDate()
+                val format = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+                holder.itemView.findViewById<TextView>(R.id.tvRequestDate).text = "Requested on: ${format.format(date)}"
+            } ?: run {
+                holder.itemView.findViewById<TextView>(R.id.tvRequestDate).text = "Requested just now"
+            }
             
             // Set status color and text based on Final Workflow
             when (request.status.uppercase()) {

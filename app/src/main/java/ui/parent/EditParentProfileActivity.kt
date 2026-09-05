@@ -26,13 +26,22 @@ class EditParentProfileActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
+        // Load name from parentData (Father/Parent Name from form)
+        viewModel.parentData.observe(this) { parent ->
+            if (parent != null) {
+                binding.etFullName.setText(parent.name)
+            }
+        }
+
         viewModel.adminData.observe(this) { data ->
-            binding.etFullName.setText(data.fullName)
+            // Use account name as fallback only if parentData not yet loaded
+            if (viewModel.parentData.value == null) {
+                binding.etFullName.setText(data.fullName)
+            }
+            
             binding.etEmail.setText(data.email)
             binding.etPhone.setText(data.phone)
             binding.etAddress.setText(data.address)
-            // binding.etCity.setText(...) // If city is added to model
-
             if (data.profileImageUrl.isNotEmpty()) {
                 Glide.with(this).load(data.profileImageUrl).placeholder(R.drawable.ic_person).into(binding.imgProfile)
             }

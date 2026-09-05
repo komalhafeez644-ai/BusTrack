@@ -40,9 +40,15 @@ class AlertsViewModel : ViewModel() {
             listeners = FirebaseRepository.listenToNotifications(uid, role) { notifications ->
                 allAlerts = notifications.map { it.toTransportAlert() }
                 _alerts.value = allAlerts
+                
+                // Track unseen count for badges (optional: could expose as LiveData)
+                _unseenCount.value = notifications.count { !it.isRead }
             }
         }
     }
+
+    private val _unseenCount = MutableLiveData<Int>()
+    val unseenCount: LiveData<Int> get() = _unseenCount
 
     private fun com.example.bustrack_app.models.NotificationModel.toTransportAlert(): TransportAlert {
         val (tag, icon) = when (this.type) {
