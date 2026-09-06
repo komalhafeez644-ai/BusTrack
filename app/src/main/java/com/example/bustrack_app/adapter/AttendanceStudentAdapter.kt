@@ -59,7 +59,8 @@ class AttendanceStudentAdapter(
 
             binding.btnPresent.setOnClickListener {
                 ViewUtils.applyClickEffect(it)
-                updateStatus(student, "Present")
+                val currentTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+                updateStatus(student, currentTime)
             }
 
             binding.btnAbsent.setOnClickListener {
@@ -85,7 +86,14 @@ class AttendanceStudentAdapter(
         }
 
         private fun updateUI(status: String) {
-            if (status == "Pending") {
+            val displayStatus = when {
+                status.equals("Pending", true) -> "Pending"
+                status.equals("Absent", true) -> "Absent"
+                status.equals("Leave", true) -> "Leave"
+                else -> "Present"
+            }
+
+            if (displayStatus == "Pending") {
                 binding.layoutMark.visibility = View.VISIBLE
                 binding.layoutStatus.visibility = View.GONE
                 binding.cardStudent.setCardBackgroundColor(Color.WHITE)
@@ -93,9 +101,9 @@ class AttendanceStudentAdapter(
             } else {
                 binding.layoutMark.visibility = View.GONE
                 binding.layoutStatus.visibility = View.VISIBLE
-                binding.tvStatusBadge.text = status.uppercase()
+                binding.tvStatusBadge.text = if (displayStatus == "Present" && !status.equals("Present", true)) status.uppercase() else displayStatus.uppercase()
 
-                when (status) {
+                when (displayStatus) {
                     "Present" -> {
                         binding.tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#DCFCE7"))
                         binding.tvStatusBadge.setTextColor(Color.parseColor("#10B981"))

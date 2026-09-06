@@ -192,8 +192,21 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
 
+    // X/Y here correct a lean baked into the mesh's own coordinate space, separate from the
+    // 90 degree Z value below which only sets facing direction. IMPORTANT: any non-zero X/Y
+    // here interacts badly with turns. puckBearingEnabled rotates the model around the
+    // world-vertical (Z) axis to match heading - that's correct and is the ONLY rotation
+    // that should visibly change as the bus turns. But rotations don't commute: composing a
+    // fixed roll/pitch (X/Y) with a heading-dependent yaw (Z) means the offset's visible
+    // lean axis itself rotates as heading changes, so the model looks upright only near the
+    // heading it was tuned at and increasingly tilted/sideways approaching 90 degrees away
+    // from it - which is exactly the "tilts on left/right turns" symptom. Direct inspection
+    // of bus.glb's own transform chain (see the flattened bus.glb from earlier) showed it is
+    // already correctly upright with no real lean to correct, so both are reset to 0 - do
+    // not re-introduce a non-zero X/Y here to fix a perceived tilt; that tilt was likely
+    // this same offset, not something to compensate for.
     private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0f
-    private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 2f
+    private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0f
     private val DUTY_AUTO_OFF_GRACE_PERIOD_MS = 10 * 60 * 1000L // 10 minutes
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -260,8 +273,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .build()
             )
             setupInitialCamera()
-            polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
-            pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+            recreateAnnotationManagers()
             setupLocationPuck()
             setupMapGestures()
             updateMapDisplay()
@@ -281,7 +293,21 @@ class DriverDashboardActivity : AppCompatActivity() {
         setupDrawerListeners()
         initNavigation()
 
-        setNavigationMode(false, reloadStyle = false)
+        // mapboxNavigation is attached via MapboxNavigationApp, which is process/app-scoped -
+        // its trip session and active route survive this Activity being destroyed and
+        // recreated (backgrounding, a config change, or the OS reclaiming memory), as long as
+        // the process itself isn't killed. So if a route is already active here, navigation
+        // never actually stopped - only this Activity's own UI would go back to showing the
+        // plain dashboard if we unconditionally reset to non-navigating mode below, which is
+        // what made an in-progress navigation session look like it had disappeared when
+        // returning to this screen. Restore navigation mode instead when that's the case.
+        val alreadyNavigating = mapboxNavigation?.getNavigationRoutes()?.isNotEmpty() == true
+        if (alreadyNavigating) {
+            setNavigationMode(true, reloadStyle = true)
+            startFollowingPuck()
+        } else {
+            setNavigationMode(false, reloadStyle = false)
+        }
 
         if (intent.getBooleanExtra("OPEN_DRAWER", false)) {
             drawerLayout.post {
@@ -1191,6 +1217,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                     traveledHistoryPoints.clear()
 
                     viewModel.currentDriver.value?.id?.let { driverId ->
+                        // Same self-write echo risk as the End Navigation fix above: this
+                        // write is read back via this same dashboardData listener, which
+                        // could misread it as a real Duty change and flip isDutyEnabled off -
+                        // this time triggered by an admin reassigning the driver's route
+                        // instead of ending navigation. Same guard, same reason.
+                        lastDutyToggleTime = System.currentTimeMillis()
                         com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
                             driverId, null, null, 0, emptyMap(), false
                         )
@@ -1228,7 +1260,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .withLineOpacity(0.8)
             polylineAnnotationManager?.create(polylineOptions)
 
-            addMarker(points.first(), R.drawable.green_dot)
+            // Smaller than the default marker size (0.8) so this fixed route-start point
+            // doesn't visually read as a live location indicator - that role belongs only to
+            // the 3D bus marker.
+            addMarker(points.first(), R.drawable.green_dot, iconSize = 0.45)
         }
 
         if (isNavigating) return
@@ -1348,13 +1383,13 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
-    private fun addMarker(point: Point, iconRes: Int, title: String? = null) {
+    private fun addMarker(point: Point, iconRes: Int, title: String? = null, iconSize: Double = 0.8) {
         val bitmap = bitmapFromDrawableRes(this, iconRes)
         if (bitmap != null) {
             val options = PointAnnotationOptions()
                 .withPoint(point)
                 .withIconImage(bitmap)
-                .withIconSize(0.8)
+                .withIconSize(iconSize)
 
             title?.let {
                 options.withTextField(it)
@@ -1367,6 +1402,33 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             pointAnnotationManager?.create(options)
         }
+    }
+
+    // Creates fresh point/polyline annotation managers, first properly removing any managers
+    // already held in polylineAnnotationManager/pointAnnotationManager. Each
+    // createXAnnotationManager() call adds its own new layer to the current style; calling it
+    // again without removing the previous manager leaves that old layer (and every marker/
+    // polyline on it, e.g. the route-start green dot) behind on the map, where it stacks up
+    // every time navigation is started again. removeAnnotationManager() is safe to call even
+    // if the underlying style was already swapped out (e.g. by loadStyle) and the old layer is
+    // already gone - it's a no-op in that case rather than throwing.
+    private fun recreateAnnotationManagers() {
+        pointAnnotationManager?.let { mapView?.annotations?.removeAnnotationManager(it) }
+        polylineAnnotationManager?.let { mapView?.annotations?.removeAnnotationManager(it) }
+        polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
+        pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+    }
+
+    // Wipes the active-navigation route/traveled GeoJson sources back to empty geometry. Used
+    // right when navigation (re)starts, before the first real update fills them in, so a
+    // previous session's route geometry can never linger and get drawn as a stray/jumping
+    // segment underneath (or crossing) the new route while the fresh geometry is still loading.
+    private fun clearNavigationRouteGeometry(style: Style) {
+        val empty = LineString.fromLngLats(emptyList())
+        (style.getSource(NAV_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+            ?.geometry(empty)
+        (style.getSource(NAV_TRAVELED_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+            ?.geometry(empty)
     }
 
     private fun setupClickListeners() {
@@ -1696,7 +1758,24 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .map { Point.fromLngLat(it.longitude, it.latitude) }
 
             val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
-            val startIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
+            var startIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
+
+            if (startIndex >= allStops.size) {
+                // Every stop was already marked visited by the PREVIOUS navigation session on
+                // this same route (route fully completed) - without this reset, startIndex
+                // would stay at/past allStops.size forever, leaving zero stops to navigate to
+                // and silently failing with "insufficient valid stops" below every time Start
+                // Navigation is pressed again. Pressing Start Navigation is an explicit,
+                // intentional action, so treat it as starting a brand new session for this
+                // route: clear the previous run's completion state and start over from stop 0.
+                // (This only fires when the WHOLE route was finished - it does not affect the
+                // normal "resume mid-route after accidentally closing navigation" case, where
+                // startIndex is still less than allStops.size and is left untouched below.)
+                stopArrivalTimes.clear()
+                attendancePromptedStops.clear()
+                lastSplitIndex = 0
+                startIndex = 0
+            }
 
             if (startIndex < allStops.size) {
                 navPoints.addAll(allStops.subList(startIndex, allStops.size))
@@ -1770,6 +1849,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
                     setupNavigationLayers(style)
+                    clearNavigationRouteGeometry(style)
 
                     style.styleLayers.forEach { layer ->
                         if (layer.id.contains("traffic") || layer.id.contains("congestion") || layer.id.contains("road-casing")) {
@@ -1777,8 +1857,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         }
                     }
 
-                    polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
-                    pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+                    recreateAnnotationManagers()
 
                     setupLocationPuck()
                     mapView?.location?.pulsingEnabled = false
@@ -1836,8 +1915,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
                         shouldFitCameraToRoute = true
 
-                        polylineAnnotationManager = mapView?.annotations?.createPolylineAnnotationManager()
-                        pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+                        recreateAnnotationManagers()
 
                         setupLocationPuck()
                         mapView?.location?.pulsingEnabled = true
@@ -1865,6 +1943,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
                     val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
+                    // This write is being read back via the dashboardData listener (data.isOnDuty
+                    // in observeViewModel()), which was interpreting it as an actual Duty change
+                    // and flipping isDutyEnabled/the drawer switch off - even though ending
+                    // navigation never touched Duty. lastDutyToggleTime is the exact guard already
+                    // used for manual Duty toggles (see isPendingSync there) to suppress this kind
+                    // of self-triggered echo; it just wasn't being set for this write.
+                    lastDutyToggleTime = System.currentTimeMillis()
                     com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
                         driverId, null, null, nextGlobalStopIndex, arrivalMap, false
                     )

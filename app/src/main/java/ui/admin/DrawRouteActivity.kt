@@ -38,6 +38,7 @@ import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.*
+import com.mapbox.maps.plugin.annotation.Annotation
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import kotlinx.coroutines.Job
@@ -52,21 +53,33 @@ class DrawRouteActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDrawRouteBinding
     private var mapView: MapView? = null
-    private val tapPoints = mutableListOf<Point>()
-    private val roadPathPoints = mutableListOf<Point>()
-    
-    private var circleAnnotationManager: CircleAnnotationManager? = null
+
+    private var sourcePoint: Point? = null
+    private var destinationPoint: Point? = null
+    private var roadPathPoints = mutableListOf<Point>()
+
     private var polylineAnnotationManager: PolylineAnnotationManager? = null
-    private var searchMarkerManager: PointAnnotationManager? = null
-    
+    private var pointAnnotationManager: PointAnnotationManager? = null
+    private var sourceMarker: PointAnnotation? = null
+    private var destinationMarker: PointAnnotation? = null
+
     private var startAddress: String = ""
     private var endAddress: String = ""
     private var searchJob: Job? = null
     private lateinit var searchEngine: SearchEngine
-    
+
     private lateinit var searchAdapter: SearchAdapter
     private val routeCache = mutableMapOf<String, String>()
-    
+
+    private var isSearchingSource = true
+
+    // Stale-search fix: har naye search attempt (ya selection/clear) par ye badhta hai.
+    // performSearch() apna khud ka async coroutine spawn karta hai jo searchJob.cancel() se
+    // cancel NAHI hota - is liye purani/dheemi query ka result baad mein aakar UI ko galat
+    // taur par overwrite/hide kar deta tha (suggestion dikh kar gayab hona, select na hona).
+    // Ab har UI-update se pehle check hota hai ki ye result abhi bhi "latest" request ka hai.
+    private var searchRequestId = 0L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityDrawRouteBinding.inflate(layoutInflater)
@@ -85,14 +98,14 @@ class DrawRouteActivity : AppCompatActivity() {
         }
 
         mapView?.mapboxMap?.addOnMapClickListener { point ->
-            // Add point to route
-            tapPoints.add(point)
-            roadPathPoints.clear() 
-            updateMapUI()
-            searchMarkerManager?.deleteAll()
-            
-            // Try to get address for this point immediately
-            updateAddressFromPoint(point, isStart = tapPoints.size == 1)
+            if (sourcePoint == null) {
+                setSource(point, "Dropped Pin")
+            } else if (destinationPoint == null) {
+                setDestination(point, "Dropped Pin")
+            } else {
+                // Already have both, maybe move destination? Or toast?
+                Toast.makeText(this, "Drag markers to adjust locations", Toast.LENGTH_SHORT).show()
+            }
             true
         }
 
@@ -101,17 +114,58 @@ class DrawRouteActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener { finish() }
         binding.btnClearPath.setOnClickListener { clearPath() }
-        
+
         binding.btnDone.setOnClickListener {
-            if (tapPoints.size < 2) {
-                Toast.makeText(this, "Please select at least 2 points", Toast.LENGTH_SHORT).show()
+            if (sourcePoint == null || destinationPoint == null) {
+                Toast.makeText(this, "Please select both source and destination", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            fetchRoadMatchedPath(onComplete = {
-                // Final address check before finishing
-                fetchAddressesAndFinish()
-            })
+            finishWithResult()
         }
+    }
+
+    private fun setSource(point: Point, address: String? = null) {
+        sourcePoint = point
+        updateSourceMarker(point)
+        if (address != null) {
+            startAddress = address
+            binding.etSourceLocation.setText(address)
+        } else {
+            updateAddressFromPoint(point, isStart = true)
+        }
+        calculateRoute()
+    }
+
+    private fun setDestination(point: Point, address: String? = null) {
+        destinationPoint = point
+        updateDestinationMarker(point)
+        if (address != null) {
+            endAddress = address
+            binding.etDestinationLocation.setText(address)
+        } else {
+            updateAddressFromPoint(point, isStart = false)
+        }
+        calculateRoute()
+    }
+
+    private fun updateSourceMarker(point: Point) {
+        sourceMarker?.let { pointAnnotationManager?.delete(it) }
+        val options = PointAnnotationOptions()
+            .withPoint(point)
+            .withIconImage(ContextCompat.getDrawable(this, R.drawable.green_dot)!!.toBitmap())
+            .withIconSize(1.0)
+            .withDraggable(true)
+        sourceMarker = pointAnnotationManager?.create(options)
+    }
+
+    private fun updateDestinationMarker(point: Point) {
+        destinationMarker?.let { pointAnnotationManager?.delete(it) }
+        val options = PointAnnotationOptions()
+            .withPoint(point)
+            .withIconImage(ContextCompat.getDrawable(this, R.drawable.ic_marker_dest)!!.toBitmap())
+            .withIconSize(1.0)
+            .withDraggable(true)
+        destinationMarker = pointAnnotationManager?.create(options)
     }
 
     private fun setupRecyclerView() {
@@ -128,25 +182,58 @@ class DrawRouteActivity : AppCompatActivity() {
                     }
                 })
             } else if (item is LocationModel) {
-                handleSearchResult(Point.fromLngLat(item.longitude, item.latitude), item.name)
+                try {
+                    val lat = item.latitude
+                    val lng = item.longitude
+
+                    // Invalid/missing/garbage coordinates ko yahin pakdo - crash hone se pehle.
+                    val isValidCoordinate = lat.isFinite() && lng.isFinite() &&
+                            !(lat == 0.0 && lng == 0.0) &&
+                            lat in -90.0..90.0 && lng in -180.0..180.0
+
+                    if (!isValidCoordinate) {
+                        Log.e("DrawRoute", "Stored location '${item.name}' (id=${item.id}) has invalid coordinates: lat=$lat, lng=$lng")
+                        Toast.makeText(this@DrawRouteActivity, "DEBUG3: invalid coords lat=$lat lng=$lng for '${item.name}'", Toast.LENGTH_LONG).show()
+                    } else {
+                        // Lat/Lng Firestore mein already available hain - dobara geocode/search
+                        // karne ki zaroorat nahi, seedha use karo.
+                        handleSearchResult(Point.fromLngLat(lng, lat), item.name)
+                    }
+                } catch (e: Exception) {
+                    // Firestore ka toObject() Kotlin ki null-safety ko reflection se bypass kar
+                    // sakta hai (missing/mismatched field name -> boxed null -> unboxing par NPE).
+                    // Is se app crash na ho, is liye yahan catch karke gracefully handle karo.
+                    Log.e("DrawRoute", "Crash prevented while selecting stored location '${item.name}': ${e.message}", e)
+                    // TEMP DEBUG: exact exception seedha Toast mein dikha rahe hain taaki
+                    // Logcat access ke bagair bhi root cause pata chal sake. Baad mein hata dena.
+                    Toast.makeText(this@DrawRouteActivity, "DEBUG: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
         binding.rvSearchResults.layoutManager = LinearLayoutManager(this)
         binding.rvSearchResults.adapter = searchAdapter
     }
 
-    private fun enableUserLocation() {
-        mapView?.location?.run {
-            enabled = true
-            pulsingEnabled = true
-        }
-    }
-
     private fun initAnnotationManagers() {
         val annotationApi = mapView?.annotations ?: return
-        circleAnnotationManager = annotationApi.createCircleAnnotationManager()
         polylineAnnotationManager = annotationApi.createPolylineAnnotationManager()
-        searchMarkerManager = annotationApi.createPointAnnotationManager()
+        pointAnnotationManager = annotationApi.createPointAnnotationManager()
+
+        pointAnnotationManager?.addDragListener(object : OnPointAnnotationDragListener {
+            override fun onAnnotationDragStarted(annotation: Annotation<*>) {}
+            override fun onAnnotationDrag(annotation: Annotation<*>) {}
+            override fun onAnnotationDragFinished(annotation: Annotation<*>) {
+                val point = (annotation as PointAnnotation).point
+                if (annotation.id == sourceMarker?.id) {
+                    sourcePoint = point
+                    updateAddressFromPoint(point, true)
+                } else if (annotation.id == destinationMarker?.id) {
+                    destinationPoint = point
+                    updateAddressFromPoint(point, false)
+                }
+                calculateRoute()
+            }
+        })
     }
 
     private fun setupInitialCamera() {
@@ -158,40 +245,92 @@ class DrawRouteActivity : AppCompatActivity() {
         )
     }
 
+    private fun enableUserLocation() {
+        mapView?.location?.run {
+            enabled = true
+            pulsingEnabled = true
+        }
+    }
+
     private fun setupSearch() {
-        binding.etSearchLocation.addTextChangedListener(object : TextWatcher {
+        binding.etSourceLocation.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s.toString().trim()
-                binding.btnClearSearch.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
-                
+                binding.btnClearSource.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                if (query == startAddress) return // Don't search if it's what we just set
+
+                isSearchingSource = true
                 searchJob?.cancel()
-                if (query.length >= 2) { 
+                if (query.length >= 2) {
+                    val requestId = ++searchRequestId
                     searchJob = lifecycleScope.launch {
-                        delay(600) 
-                        performSearch(query)
+                        delay(600)
+                        performSearch(query, requestId)
                     }
                 } else {
+                    searchRequestId++ // Invalidate any in-flight search's late callback
                     binding.rvSearchResults.visibility = View.GONE
                 }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        binding.btnClearSearch.setOnClickListener {
-            binding.etSearchLocation.text.clear()
+        binding.etDestinationLocation.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = s.toString().trim()
+                binding.btnClearDestination.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                if (query == endAddress) return
+
+                isSearchingSource = false
+                searchJob?.cancel()
+                if (query.length >= 2) {
+                    val requestId = ++searchRequestId
+                    searchJob = lifecycleScope.launch {
+                        delay(600)
+                        performSearch(query, requestId)
+                    }
+                } else {
+                    searchRequestId++ // Invalidate any in-flight search's late callback
+                    binding.rvSearchResults.visibility = View.GONE
+                }
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        binding.btnClearSource.setOnClickListener {
+            searchRequestId++ // Invalidate any in-flight search
+            searchJob?.cancel()
+            binding.etSourceLocation.text.clear()
+            startAddress = ""
+            sourcePoint = null
+            sourceMarker?.let { pointAnnotationManager?.delete(it) }
+            sourceMarker = null
             binding.rvSearchResults.visibility = View.GONE
-            searchMarkerManager?.deleteAll()
+            calculateRoute()
+        }
+
+        binding.btnClearDestination.setOnClickListener {
+            searchRequestId++ // Invalidate any in-flight search
+            searchJob?.cancel()
+            binding.etDestinationLocation.text.clear()
+            endAddress = ""
+            destinationPoint = null
+            destinationMarker?.let { pointAnnotationManager?.delete(it) }
+            destinationMarker = null
+            binding.rvSearchResults.visibility = View.GONE
+            calculateRoute()
         }
     }
 
-    private fun performSearch(query: String) {
+    private fun performSearch(query: String, requestId: Long) {
         val cleanQuery = query.trim()
         lifecycleScope.launch {
             try {
                 val firestoreResults = mutableListOf<LocationModel>()
                 val variants = listOf(
-                    cleanQuery, 
+                    cleanQuery,
                     cleanQuery.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
                     cleanQuery.uppercase()
                 ).distinct()
@@ -200,6 +339,10 @@ class DrawRouteActivity : AppCompatActivity() {
                     firestoreResults.addAll(LocationRepository.searchLocations(v))
                 }
                 val finalCustomResults = firestoreResults.distinctBy { it.id }
+
+                // Stale check: is dauraan user aage type kar chuka ho sakta hai ya select/clear
+                // kar chuka ho sakta hai - agar ye ab "latest" request nahi raha, to yahi ruk jao.
+                if (requestId != searchRequestId) return@launch
 
                 val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
                 val searchOptions = SearchOptions(
@@ -211,11 +354,16 @@ class DrawRouteActivity : AppCompatActivity() {
 
                 searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
                     override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                        // Stale check (dobara) - Mapbox call khud bhi async hai, is beech mein
+                        // ek aur naya search shuru ho chuka ho sakta hai.
+                        if (requestId != searchRequestId) return
+
                         val combinedResults = mutableListOf<Any>()
                         combinedResults.addAll(finalCustomResults)
                         combinedResults.addAll(suggestions)
-                        
+
                         runOnUiThread {
+                            if (requestId != searchRequestId) return@runOnUiThread
                             if (combinedResults.isNotEmpty()) {
                                 searchAdapter.updateResults(combinedResults)
                                 binding.rvSearchResults.visibility = View.VISIBLE
@@ -226,7 +374,9 @@ class DrawRouteActivity : AppCompatActivity() {
                     }
 
                     override fun onError(e: Exception) {
+                        if (requestId != searchRequestId) return
                         runOnUiThread {
+                            if (requestId != searchRequestId) return@runOnUiThread
                             if (finalCustomResults.isNotEmpty()) {
                                 searchAdapter.updateResults(finalCustomResults)
                                 binding.rvSearchResults.visibility = View.VISIBLE
@@ -244,35 +394,77 @@ class DrawRouteActivity : AppCompatActivity() {
 
     private fun handleSearchResult(point: Point, name: String) {
         runOnUiThread {
-            // Smooth Fly-to Animation
-            val cameraOptions = CameraOptions.Builder()
-                .center(point)
-                .zoom(15.0)
-                .build()
+            try {
+                // Selection ho chuki hai - koi bhi abhi bhi background mein chal raha purana
+                // search result ab stale hai aur usse UI update nahi karni.
+                searchRequestId++
+                searchJob?.cancel()
 
-            mapView?.mapboxMap?.flyTo(
-                cameraOptions,
-                MapAnimationOptions.mapAnimationOptions { duration(1500) }
-            )
+                // Smooth Fly-to Animation
+                val cameraOptions = CameraOptions.Builder()
+                    .center(point)
+                    .zoom(15.0)
+                    .build()
 
-            // Add point to route
-            tapPoints.add(point)
-            updateMapUI()
-            
-            // Set addresses based on position
-            if (tapPoints.size == 1) {
-                startAddress = name
-            } else {
-                endAddress = name
+                mapView?.mapboxMap?.flyTo(
+                    cameraOptions,
+                    MapAnimationOptions.mapAnimationOptions { duration(1500) }
+                )
+
+                if (isSearchingSource) {
+                    setSource(point, name)
+                } else {
+                    setDestination(point, name)
+                }
+
+                binding.rvSearchResults.visibility = View.GONE
+
+                Toast.makeText(this@DrawRouteActivity, "Set: $name", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("DrawRoute", "Failed to apply selected location '$name' to map/route: ${e.message}", e)
+                // TEMP DEBUG
+                Toast.makeText(this@DrawRouteActivity, "DEBUG2: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
             }
-
-            searchMarkerManager?.deleteAll()
-            binding.rvSearchResults.visibility = View.GONE
-            binding.etSearchLocation.setText(name)
-            binding.etSearchLocation.clearFocus()
-            
-            Toast.makeText(this@DrawRouteActivity, "Added: $name", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun calculateRoute() {
+        val start = sourcePoint
+        val end = destinationPoint
+
+        if (start == null || end == null) {
+            roadPathPoints.clear()
+            polylineAnnotationManager?.deleteAll()
+            return
+        }
+
+        val client = MapboxDirections.builder()
+            .accessToken(getString(R.string.mapbox_access_token))
+            .routeOptions(RouteOptions.builder()
+                .coordinatesList(listOf(start, end))
+                .profile(DirectionsCriteria.PROFILE_DRIVING)
+                .overview(DirectionsCriteria.OVERVIEW_FULL)
+                .geometries(DirectionsCriteria.GEOMETRY_POLYLINE6)
+                .build())
+            .build()
+
+        client.enqueueCall(object : Callback<DirectionsResponse> {
+            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+                val route = response.body()?.routes()?.firstOrNull()
+                if (route != null) {
+                    val geometry = route.geometry()
+                    if (geometry != null) {
+                        val lineString = LineString.fromPolyline(geometry, 6)
+                        roadPathPoints.clear()
+                        roadPathPoints.addAll(lineString.coordinates())
+                        runOnUiThread { updateMapUI() }
+                    }
+                }
+            }
+            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
+                Log.e("DrawRoute", "Route calculation failed: ${t.message}")
+            }
+        })
     }
 
     private fun updateAddressFromPoint(point: Point, isStart: Boolean) {
@@ -283,8 +475,10 @@ class DrawRouteActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (isStart) {
                         startAddress = name
+                        binding.etSourceLocation.setText(name)
                     } else {
                         endAddress = name
+                        binding.etDestinationLocation.setText(name)
                     }
                     Log.d("DrawRoute", "Updated ${if (isStart) "Start" else "End"} Address: $name")
                 }
@@ -296,20 +490,18 @@ class DrawRouteActivity : AppCompatActivity() {
     private fun handleIncomingManualPoints() {
         val manualStart = intent.getStringExtra("MANUAL_START")
         val manualEnd = intent.getStringExtra("MANUAL_END")
-        
+
         lifecycleScope.launch {
             if (!manualStart.isNullOrEmpty()) {
-                geocodeAndAddPoint(manualStart)
-                startAddress = manualStart
+                geocodeAndSetPoint(manualStart, true)
             }
             if (!manualEnd.isNullOrEmpty()) {
-                geocodeAndAddPoint(manualEnd)
-                endAddress = manualEnd
+                geocodeAndSetPoint(manualEnd, false)
             }
         }
     }
 
-    private fun geocodeAndAddPoint(locationName: String) {
+    private fun geocodeAndSetPoint(locationName: String, isStart: Boolean) {
         val searchOptions = SearchOptions(
             proximity = Point.fromLngLat(73.0679, 33.6007),
             countries = listOf(IsoCountryCode.PAKISTAN),
@@ -322,8 +514,8 @@ class DrawRouteActivity : AppCompatActivity() {
                     searchEngine.select(suggestion, object : SearchSelectionCallback {
                         override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
                             runOnUiThread {
-                                tapPoints.add(result.coordinate)
-                                updateMapUI()
+                                if (isStart) setSource(result.coordinate, locationName)
+                                else setDestination(result.coordinate, locationName)
                             }
                         }
                         override fun onResults(suggestion: SearchSuggestion, results: List<SearchResult>, responseInfo: ResponseInfo) {}
@@ -337,57 +529,33 @@ class DrawRouteActivity : AppCompatActivity() {
     }
 
     private fun clearPath() {
-        tapPoints.clear()
+        sourcePoint = null
+        destinationPoint = null
         roadPathPoints.clear()
         startAddress = ""
         endAddress = ""
+
+        pointAnnotationManager?.deleteAll()
+        sourceMarker = null
+        destinationMarker = null
+
+        binding.etSourceLocation.text.clear()
+        binding.etDestinationLocation.text.clear()
+
         updateMapUI()
-        searchMarkerManager?.deleteAll()
-    }
-
-    private fun fetchAddressesAndFinish() {
-        if (tapPoints.isEmpty()) return
-        
-        // Final sanity check for addresses
-        if (startAddress.isNotEmpty() && endAddress.isNotEmpty() && startAddress != "Mapped Point") {
-            finishWithResult()
-            return
-        }
-
-        val startPoint = tapPoints.first()
-        val endPoint = tapPoints.last()
-
-        val options = ReverseGeoOptions(center = startPoint, limit = 1)
-        searchEngine.search(options, object : SearchCallback {
-            override fun onResults(results: List<SearchResult>, responseInfo: ResponseInfo) {
-                if (startAddress.isEmpty() || startAddress == "Mapped Point") {
-                    startAddress = results.firstOrNull()?.name ?: results.firstOrNull()?.address?.formattedAddress() ?: "Start Point"
-                }
-                fetchEndAddressAndFinish(endPoint)
-            }
-            override fun onError(e: Exception) { fetchEndAddressAndFinish(endPoint) }
-        })
-    }
-
-    private fun fetchEndAddressAndFinish(endPoint: Point) {
-        val options = ReverseGeoOptions(center = endPoint, limit = 1)
-        searchEngine.search(options, object : SearchCallback {
-            override fun onResults(results: List<SearchResult>, responseInfo: ResponseInfo) {
-                if (endAddress.isEmpty() || endAddress == "Mapped Point") {
-                    endAddress = results.firstOrNull()?.name ?: results.firstOrNull()?.address?.formattedAddress() ?: "End Point"
-                }
-                finishWithResult()
-            }
-            override fun onError(e: Exception) { finishWithResult() }
-        })
     }
 
     private fun finishWithResult() {
         val resultIntent = Intent()
         val latLngList = ArrayList<LatLngModel>()
-        val finalPoints = roadPathPoints.ifEmpty { tapPoints }
+
+        // Return the road-matched path if available, otherwise just start and end points
+        val finalPoints = roadPathPoints.ifEmpty {
+            listOfNotNull(sourcePoint, destinationPoint)
+        }
+
         finalPoints.forEach { latLngList.add(LatLngModel(it.latitude(), it.longitude())) }
-        
+
         resultIntent.putExtra("PATH_POINTS", latLngList)
         resultIntent.putExtra("START_ADDRESS", startAddress)
         resultIntent.putExtra("END_ADDRESS", endAddress)
@@ -395,57 +563,10 @@ class DrawRouteActivity : AppCompatActivity() {
         finish()
     }
 
-    private fun fetchRoadMatchedPath(onComplete: () -> Unit) {
-        val cacheKey = tapPoints.toString()
-        if (routeCache.containsKey(cacheKey)) {
-            val cachedGeometry = routeCache[cacheKey]!!
-            val lineString = LineString.fromPolyline(cachedGeometry, 6)
-            roadPathPoints.clear()
-            roadPathPoints.addAll(lineString.coordinates())
-            onComplete()
-            return
-        }
-
-        Toast.makeText(this, "Finalizing road path...", Toast.LENGTH_SHORT).show()
-        val client = MapboxDirections.builder()
-            .accessToken(getString(R.string.mapbox_access_token))
-            .routeOptions(RouteOptions.builder()
-                .coordinatesList(tapPoints)
-                .profile(DirectionsCriteria.PROFILE_DRIVING)
-                .overview(DirectionsCriteria.OVERVIEW_FULL)
-                .build())
-            .build()
-
-        client.enqueueCall(object : Callback<DirectionsResponse> {
-            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-                response.body()?.routes()?.firstOrNull()?.geometry()?.let {
-                    routeCache[cacheKey] = it 
-                    val lineString = LineString.fromPolyline(it, 6)
-                    roadPathPoints.clear()
-                    roadPathPoints.addAll(lineString.coordinates())
-                    updateMapUI()
-                    onComplete()
-                } ?: onComplete()
-            }
-            override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) { onComplete() }
-        })
-    }
-
     private fun updateMapUI() {
-        circleAnnotationManager?.deleteAll()
         polylineAnnotationManager?.deleteAll()
 
-        tapPoints.forEach { point ->
-            val circleOptions = CircleAnnotationOptions()
-                .withPoint(point)
-                .withCircleRadius(6.0)
-                .withCircleColor("#1565C0")
-                .withCircleStrokeWidth(2.0)
-                .withCircleStrokeColor("#ffffff")
-            circleAnnotationManager?.create(circleOptions)
-        }
-
-        val pathToDraw = roadPathPoints.ifEmpty { tapPoints }
+        val pathToDraw = roadPathPoints
         if (pathToDraw.size > 1) {
             val polylineOptions = PolylineAnnotationOptions()
                 .withPoints(pathToDraw)
@@ -494,4 +615,4 @@ class SearchAdapter(
     }
 
     override fun getItemCount() = results.size
-}
+} 

@@ -120,13 +120,16 @@ object FirebaseRepository {
 
     // --- ATTENDANCE ---
     fun saveAttendance(record: AttendanceRecordModel, onComplete: (Boolean) -> Unit) {
-        val docId = "${record.studentId}_${record.date.replace("/", "-")}"
-        db.collection("attendance").document(docId).set(record, com.google.firebase.firestore.SetOptions.merge())
+        val normalizedDate = record.date.replace("/", "-")
+        val normalizedRecord = record.copy(date = normalizedDate)
+        val docId = "${record.studentId}_$normalizedDate"
+        db.collection("attendance").document(docId).set(normalizedRecord, com.google.firebase.firestore.SetOptions.merge())
             .addOnCompleteListener { onComplete(it.isSuccessful) }
     }
 
     fun updateAttendanceField(studentId: String, date: String, field: String, value: String) {
-        val docId = "${studentId}_${date.replace("/", "-")}"
+        val normalizedDate = date.replace("/", "-")
+        val docId = "${studentId}_$normalizedDate"
         db.collection("attendance").document(docId).update(field, value)
     }
 

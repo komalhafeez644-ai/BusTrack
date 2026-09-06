@@ -213,7 +213,8 @@ class EveningAttendanceActivity : AppCompatActivity() {
 
             holder.btnPresent.setOnClickListener {
                 ViewUtils.applyClickEffect(it)
-                updateAttendance(item, "Present")
+                val currentTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+                updateAttendance(item, currentTime)
             }
 
             holder.btnAbsent.setOnClickListener {
@@ -233,10 +234,12 @@ class EveningAttendanceActivity : AppCompatActivity() {
         }
 
         private fun updateAttendance(item: AttendanceRecordModel, newStatus: String) {
+            val currentTime = if (newStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date()) else newStatus
+            
             val updatedItem = if (isMorning) {
-                item.copy(morningPickup = newStatus, morningDrop = if(newStatus == "Absent") "Absent" else item.morningDrop)
+                item.copy(morningPickup = currentTime, morningDrop = if(newStatus == "Absent") "Absent" else item.morningDrop)
             } else {
-                item.copy(eveningPickup = newStatus, eveningDrop = if(newStatus == "Absent") "Absent" else item.eveningDrop)
+                item.copy(eveningPickup = currentTime, eveningDrop = if(newStatus == "Absent") "Absent" else currentTime)
             }
             
             com.example.bustrack_app.data.FirebaseRepository.saveAttendance(updatedItem) { success ->
@@ -258,20 +261,28 @@ class EveningAttendanceActivity : AppCompatActivity() {
         }
 
         private fun updateStatusUI(holder: ViewHolder, status: String) {
-            holder.tvStatusBadge.text = status.uppercase()
-            if (status.equals("Present", true)) {
+            val displayStatus = when {
+                status.equals("Pending", true) -> "Pending"
+                status.equals("Absent", true) -> "Absent"
+                status.equals("Leave", true) -> "Leave"
+                else -> "Present"
+            }
+            
+            holder.tvStatusBadge.text = if (displayStatus == "Present" && !status.equals("Present", true)) status.uppercase() else displayStatus.uppercase()
+            
+            if (displayStatus == "Present") {
                 holder.tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#DCFCE7"))
                 holder.tvStatusBadge.setTextColor(Color.parseColor("#10B981"))
                 holder.card.setCardBackgroundColor(Color.parseColor("#F0FDF4")) // Very light green
                 holder.card.strokeWidth = 2
                 holder.card.strokeColor = Color.parseColor("#BBF7D0")
-            } else if (status.equals("Absent", true)) {
+            } else if (displayStatus == "Absent") {
                 holder.tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FEE2E2"))
                 holder.tvStatusBadge.setTextColor(Color.parseColor("#EF4444"))
                 holder.card.setCardBackgroundColor(Color.parseColor("#FEF2F2")) // Very light red
                 holder.card.strokeWidth = 2
                 holder.card.strokeColor = Color.parseColor("#FECACA")
-            } else if (status.equals("Leave", true)) {
+            } else if (displayStatus == "Leave") {
                 holder.tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#FEF3C7"))
                 holder.tvStatusBadge.setTextColor(Color.parseColor("#D97706"))
                 holder.card.setCardBackgroundColor(Color.parseColor("#FFFBEB")) // Very light amber

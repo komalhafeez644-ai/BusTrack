@@ -76,37 +76,86 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:orientation="vertical"
                 android:paddingHorizontal="12dp"
-                android:paddingVertical="4dp">
+                android:paddingVertical="8dp">
 
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_search"
-                    app:tint="@color/primaryDark" />
-
-                <EditText
-                    android:id="@+id/etSearchLocation"
-                    android:layout_width="0dp"
+                <!-- Source Selection -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="@android:color/transparent"
-                    android:hint="Search locations..."
-                    android:padding="12dp"
-                    android:inputType="text"
-                    android:textColor="@color/black"
-                    android:textSize="14sp"
-                    android:maxLines="1" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <ImageView
-                    android:id="@+id/btnClearSearch"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@android:drawable/ic_menu_close_clear_cancel"
-                    android:visibility="gone"
-                    app:tint="@color/lightGray" />
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/green_dot"
+                        app:tint="#22C55E" />
+
+                    <EditText
+                        android:id="@+id/etSourceLocation"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:hint="Choose source..."
+                        android:padding="10dp"
+                        android:inputType="text"
+                        android:textColor="@color/black"
+                        android:textSize="14sp"
+                        android:maxLines="1" />
+
+                    <ImageView
+                        android:id="@+id/btnClearSource"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        android:visibility="gone"
+                        app:tint="@color/lightGray" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#F1F5F9"
+                    android:layout_marginVertical="4dp"
+                    android:layout_marginStart="24dp" />
+
+                <!-- Destination Selection -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_marker_dest"
+                        app:tint="#EF4444" />
+
+                    <EditText
+                        android:id="@+id/etDestinationLocation"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@android:color/transparent"
+                        android:hint="Choose destination..."
+                        android:padding="10dp"
+                        android:inputType="text"
+                        android:textColor="@color/black"
+                        android:textSize="14sp"
+                        android:maxLines="1" />
+
+                    <ImageView
+                        android:id="@+id/btnClearDestination"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_menu_close_clear_cancel"
+                        android:visibility="gone"
+                        app:tint="@color/lightGray" />
+                </LinearLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

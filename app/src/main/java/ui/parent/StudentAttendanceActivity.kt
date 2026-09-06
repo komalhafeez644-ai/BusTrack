@@ -1,5 +1,6 @@
 package ui.parent
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -12,7 +13,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
-import com.example.bustrack_app.models.StudentAttendanceModel
 import com.example.bustrack_app.models.StudentModel
 import com.google.android.material.imageview.ShapeableImageView
 
@@ -25,14 +25,26 @@ import com.google.firebase.ktx.Firebase
 class StudentAttendanceActivity : AppCompatActivity() {
 
     private lateinit var tvStudentName: TextView
+    private lateinit var tvGrade: TextView
     private lateinit var tvStudentId: TextView
+    private lateinit var tvStatusBadge: TextView
     private lateinit var ivStudentProfile: ShapeableImageView
+    private lateinit var tvAvatar: TextView
+    private lateinit var layoutLocation: View
+    private lateinit var tvLocationInfo: TextView
+    private lateinit var layoutBus: View
+    private lateinit var tvBusInfo: TextView
+    private lateinit var btnViewDetails: View
+    
     private lateinit var rvAttendance: RecyclerView
     private lateinit var rvStudentSelector: RecyclerView
+    private lateinit var tvSelectedMonth: TextView
+    private lateinit var btnMonthFilter: View
+    private lateinit var tvEmptyState: TextView
     
     private val parentRepository = ParentRepository()
-    private val allAttendance = mutableListOf<AttendanceRecordModel>()
     private var selectedStudent: StudentModel? = null
+    private var currentCalendar = java.util.Calendar.getInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,18 +52,69 @@ class StudentAttendanceActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
-        tvStudentName = findViewById(R.id.tvStudentName)
-        tvStudentId = findViewById(R.id.tvStudentId)
-        ivStudentProfile = findViewById(R.id.ivStudentProfile)
+        val cardInclude = findViewById<View>(R.id.studentCardInclude)
+        tvStudentName = cardInclude.findViewById(R.id.txtStudentName)
+        tvGrade = cardInclude.findViewById(R.id.txtGrade)
+        tvStudentId = cardInclude.findViewById(R.id.txtStudentId)
+        tvStatusBadge = cardInclude.findViewById(R.id.statusBadge)
+        ivStudentProfile = cardInclude.findViewById(R.id.imgStudent)
+        tvAvatar = cardInclude.findViewById(R.id.txtAvatar)
+        layoutLocation = cardInclude.findViewById(R.id.layoutLocation)
+        tvLocationInfo = cardInclude.findViewById(R.id.txtLocationInfo)
+        layoutBus = cardInclude.findViewById(R.id.layoutBus)
+        tvBusInfo = cardInclude.findViewById(R.id.txtBusInfo)
+        btnViewDetails = cardInclude.findViewById(R.id.btnAction)
+
         rvAttendance = findViewById(R.id.rvAttendance)
         rvStudentSelector = findViewById(R.id.rvStudentSelector)
+        tvSelectedMonth = findViewById(R.id.tvSelectedMonth)
+        btnMonthFilter = findViewById(R.id.btnMonthFilter)
+        tvEmptyState = findViewById(R.id.tvEmptyState)
 
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             finish()
         }
 
+        updateMonthDisplay()
+        
+        btnMonthFilter.setOnClickListener {
+            showMonthPicker()
+        }
+
         setupChildSelector()
+    }
+
+    private fun updateMonthDisplay() {
+        val sdf = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault())
+        tvSelectedMonth.text = sdf.format(currentCalendar.time)
+    }
+
+    private fun showMonthPicker() {
+        val monthYearList = mutableListOf<String>()
+        val calList = mutableListOf<java.util.Calendar>()
+        
+        val tempCal = java.util.Calendar.getInstance()
+        tempCal.add(java.util.Calendar.MONTH, 1) // Start from next month
+        
+        val sdf = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault())
+        
+        for (i in 0 until 12) {
+            monthYearList.add(sdf.format(tempCal.time))
+            calList.add(tempCal.clone() as java.util.Calendar)
+            tempCal.add(java.util.Calendar.MONTH, -1)
+        }
+        
+        val dialog = android.app.AlertDialog.Builder(this)
+        dialog.setTitle("Select Month")
+        dialog.setItems(monthYearList.toTypedArray()) { _, which ->
+            val selectedCal = calList[which]
+            currentCalendar.set(java.util.Calendar.MONTH, selectedCal.get(java.util.Calendar.MONTH))
+            currentCalendar.set(java.util.Calendar.YEAR, selectedCal.get(java.util.Calendar.YEAR))
+            updateMonthDisplay()
+            selectedStudent?.let { loadStudentAttendance(it) }
+        }
+        dialog.show()
     }
 
     private fun setupChildSelector() {
@@ -74,13 +137,17 @@ class StudentAttendanceActivity : AppCompatActivity() {
                 runOnUiThread {
                     rvStudentSelector.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
                     rvStudentSelector.adapter = StudentSelectorAdapter(myChildren) { selectedChild ->
-                        selectedStudent = selectedChild
-                        loadStudentAttendance(selectedChild)
+                        if (selectedStudent?.id != selectedChild.id) {
+                            selectedStudent = selectedChild
+                            loadStudentAttendance(selectedChild)
+                        }
                     }
                     
-                    // Default selection
-                    selectedStudent = myChildren[0]
-                    loadStudentAttendance(myChildren[0])
+                    // Default selection if not already set
+                    if (selectedStudent == null) {
+                        selectedStudent = myChildren[0]
+                        loadStudentAttendance(myChildren[0])
+                    }
                 }
             }
         }
@@ -90,25 +157,77 @@ class StudentAttendanceActivity : AppCompatActivity() {
         tvStudentName.text = "No Approved Children"
         tvStudentId.text = "Please wait for Admin approval"
         rvAttendance.adapter = AttendanceAdapter(emptyList())
+        tvEmptyState.visibility = View.VISIBLE
     }
 
     private fun loadStudentAttendance(student: StudentModel) {
+        // Update Card UI (Matching StudentAdapter logic for consistency)
         tvStudentName.text = student.name
-        tvStudentId.text = "ID: ${student.id} | ${student.grade}"
-        
-        if (student.profileImageUrl.isNotEmpty()) {
-            Glide.with(this).load(student.profileImageUrl).placeholder(R.drawable.ic_person).into(ivStudentProfile)
+        tvGrade.text = student.grade
+        tvStudentId.text = "ID: ${student.id}"
+
+        val route = student.route ?: ""
+        btnViewDetails.visibility = View.GONE // Hide action button in attendance screen
+
+        if (route.isEmpty()) {
+            tvStatusBadge.text = "● UNASSIGNED"
+            tvStatusBadge.setBackgroundResource(R.drawable.bg_status_badge_red)
+            tvStatusBadge.backgroundTintList = null
+            tvStatusBadge.setTextColor(Color.parseColor("#EF4444"))
+
+            layoutLocation.visibility = View.VISIBLE
+            tvLocationInfo.text = student.location.ifEmpty { "Location not set" }
+            layoutBus.visibility = View.GONE
         } else {
-            ivStudentProfile.setImageResource(R.drawable.ic_person)
+            val statusText = if (student.isActive) "ACTIVE" else "INACTIVE"
+            val statusColor = if (student.isActive) "#22C55E" else "#64748B"
+
+            tvStatusBadge.text = "● $statusText"
+            tvStatusBadge.setBackgroundResource(R.drawable.bg_chip_selected)
+            tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#F1F5F9"))
+            tvStatusBadge.setTextColor(Color.parseColor(statusColor))
+
+            layoutLocation.visibility = View.GONE
+            layoutBus.visibility = View.VISIBLE
+            tvBusInfo.text = "${route}: ${student.busNo ?: "No Bus"}"
         }
 
+        // Image Loading Logic
+        if (student.profileImageUrl.isNotEmpty()) {
+            ivStudentProfile.visibility = View.VISIBLE
+            tvAvatar.visibility = View.GONE
+            Glide.with(this).load(student.profileImageUrl).placeholder(R.drawable.ic_person).into(ivStudentProfile)
+        } else {
+            ivStudentProfile.visibility = View.GONE
+            tvAvatar.visibility = View.VISIBLE
+            val initials = student.name.split(" ").filter { it.isNotEmpty() }.map { it[0] }.take(2).joinToString("")
+            tvAvatar.text = initials.uppercase()
+        }
+
+        val targetMonth = currentCalendar.get(java.util.Calendar.MONTH) + 1
+        val targetYear = currentCalendar.get(java.util.Calendar.YEAR)
+
         FirebaseRepository.fetchAttendance { list ->
-            val studentAttendance = list.filter { it.studentId == student.id }
-                .sortedByDescending { it.date } // Recent first
+            val studentAttendance = list.filter { record ->
+                if (record.studentId != student.id) return@filter false
+                
+                val parts = record.date.replace("/", "-").split("-") // Handle both formats
+                if (parts.size == 3) {
+                    val m = parts[1].toIntOrNull() ?: 0
+                    val y = parts[2].toIntOrNull() ?: 0
+                    m == targetMonth && y == targetYear
+                } else {
+                    false
+                }
+            }.sortedBy { record -> // Sort by date ascending (01 to 31)
+                val parts = record.date.replace("/", "-").split("-")
+                parts[0].toIntOrNull() ?: 0
+            }
             
             runOnUiThread {
                 rvAttendance.layoutManager = LinearLayoutManager(this)
                 rvAttendance.adapter = AttendanceAdapter(studentAttendance)
+                tvEmptyState.visibility = if (studentAttendance.isEmpty()) View.VISIBLE else View.GONE
             }
         }
     }
@@ -134,7 +253,7 @@ class StudentAttendanceActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val student = students[position]
-            holder.tvName.text = student.name.split(" ")[0] // Show first name only for brevity
+            holder.tvName.text = student.name.split(" ")[0]
             
             if (student.profileImageUrl.isNotEmpty()) {
                 Glide.with(holder.itemView.context)
@@ -145,11 +264,10 @@ class StudentAttendanceActivity : AppCompatActivity() {
                 holder.ivAvatar.setImageResource(R.drawable.ic_person)
             }
 
-            // Highlight selected child
             if (position == selectedPosition) {
                 holder.ivAvatar.alpha = 1.0f
-                holder.ivAvatar.strokeWidth = 4f
-                holder.tvName.setTextColor(Color.parseColor("#1E3A8A")) // Primary Blue
+                holder.ivAvatar.strokeWidth = 6f
+                holder.tvName.setTextColor(Color.parseColor("#1E3A8A"))
                 holder.itemView.scaleX = 1.1f
                 holder.itemView.scaleY = 1.1f
             } else {
@@ -179,10 +297,9 @@ class StudentAttendanceActivity : AppCompatActivity() {
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val tvDay: TextView = view.findViewById(R.id.tvDay)
             val tvDate: TextView = view.findViewById(R.id.tvDate)
-            val tvPickupStatus: TextView = view.findViewById(R.id.tvPickupStatus)
-            val tvPickupTime: TextView = view.findViewById(R.id.tvPickupTime)
-            val tvDropStatus: TextView = view.findViewById(R.id.tvDropStatus)
-            val tvDropTime: TextView = view.findViewById(R.id.tvDropTime)
+            val tvStatus: TextView = view.findViewById(R.id.tvStatus)
+            val tvMorningTime: TextView = view.findViewById(R.id.tvMorningTime)
+            val tvEveningTime: TextView = view.findViewById(R.id.tvEveningTime)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -194,27 +311,58 @@ class StudentAttendanceActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
             
-            // Derive day from date if possible, or just show Date
-            holder.tvDay.text = "Attendance" 
-            holder.tvDate.text = item.date
-            
-            holder.tvPickupStatus.text = item.morningPickup
-            holder.tvPickupTime.text = if (item.morningPickup.contains(":")) item.morningPickup else "--:--"
-            
-            holder.tvDropStatus.text = item.eveningPickup
-            holder.tvDropTime.text = if (item.eveningPickup.contains(":")) item.eveningPickup else "--:--"
-
-            // Dynamic colors for status
-            setStatusColor(holder.tvPickupStatus, item.morningPickup)
-            setStatusColor(holder.tvDropStatus, item.eveningPickup)
-        }
-
-        private fun setStatusColor(textView: TextView, status: String) {
-            when {
-                status.equals("Present", true) || status.contains(":") -> textView.setTextColor(0xFF4CAF50.toInt())
-                status.equals("Absent", true) || status.equals("Missed", true) -> textView.setTextColor(0xFFF44336.toInt())
-                else -> textView.setTextColor(0xFFFF9800.toInt())
+            // Format: dd-MM-yyyy -> dd MMM, yyyy
+            try {
+                val normalizedDate = item.date.replace("/", "-")
+                val inputFormat = java.text.SimpleDateFormat("dd-MM-yyyy", java.util.Locale.getDefault())
+                val outputFormat = java.text.SimpleDateFormat("dd MMM, yyyy", java.util.Locale.getDefault())
+                val dayFormat = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault())
+                val dateObj = inputFormat.parse(normalizedDate)
+                if (dateObj != null) {
+                    holder.tvDate.text = outputFormat.format(dateObj)
+                    holder.tvDay.text = dayFormat.format(dateObj)
+                } else {
+                    holder.tvDate.text = item.date
+                    holder.tvDay.text = "Attendance"
+                }
+            } catch (e: Exception) {
+                holder.tvDate.text = item.date
+                holder.tvDay.text = "Attendance"
             }
+            
+            val isPresent = item.morningPickup.equals("Present", true) || 
+                            item.morningPickup.contains(":") || 
+                            item.eveningPickup.equals("Present", true) || 
+                            item.eveningPickup.contains(":")
+            
+            if (isPresent) {
+                holder.tvStatus.text = "Present"
+                holder.tvStatus.setTextColor(Color.parseColor("#15803D"))
+                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_active)
+            } else if (item.morningPickup.equals("Leave", true) || item.eveningPickup.equals("Leave", true)) {
+                holder.tvStatus.text = "Leave"
+                holder.tvStatus.setTextColor(Color.parseColor("#D97706"))
+                holder.tvStatus.setBackgroundResource(R.drawable.bg_badge_yellow)
+            } else {
+                holder.tvStatus.text = "Absent"
+                holder.tvStatus.setTextColor(Color.parseColor("#991B1B"))
+                holder.tvStatus.setBackgroundResource(R.drawable.bg_status_badge_red)
+            }
+
+            // Morning Timing
+            val mTime = when {
+                item.morningPickup.contains(":") -> item.morningPickup
+                else -> "--:--"
+            }
+            holder.tvMorningTime.text = "M: $mTime"
+
+            // Evening Timing
+            val eTime = when {
+                item.eveningDrop.contains(":") -> item.eveningDrop
+                item.eveningPickup.contains(":") -> item.eveningPickup // Check both fields
+                else -> "--:--"
+            }
+            holder.tvEveningTime.text = "E: $eTime"
         }
 
         override fun getItemCount() = items.size

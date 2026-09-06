@@ -36,6 +36,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.animation.flyTo
@@ -76,6 +77,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
     private val studentListeners = mutableMapOf<String, ListenerRegistration>()
+    private val approvedStudents = mutableMapOf<String, StudentModel>()
     private val driverMarkers = mutableMapOf<String, com.mapbox.maps.plugin.annotation.generated.PointAnnotation>()
     // Reused across every live-location update instead of being recreated each time
     // (see updateMapMarkers fix below) - creating a brand new annotation manager /
@@ -148,7 +150,9 @@ class ParentDashboardActivity : AppCompatActivity() {
                     if (!studentListeners.containsKey(request.studentId)) {
                         val listener = FirebaseRepository.listenToStudent(request.studentId) { student ->
                             if (student != null) {
-                                liveTrackingViewModel.setAllowedRoute(student.route)
+                                approvedStudents[student.id] = student
+                                val routes = approvedStudents.values.mapNotNull { it.route }.toSet()
+                                liveTrackingViewModel.setAllowedRoutes(routes)
                             }
                         }
                         studentListeners[request.studentId] = listener
@@ -179,6 +183,12 @@ class ParentDashboardActivity : AppCompatActivity() {
     private fun observeLiveTracking() {
         liveTrackingViewModel.activeDrivers.observe(this) { drivers ->
             updateMapMarkers(drivers)
+        }
+
+        liveTrackingViewModel.selectedDriver.observe(this) { driver ->
+            if (driver != null && findViewById<View>(R.id.driverCard)?.visibility == View.VISIBLE) {
+                updateDriverCard(driver)
+            }
         }
 
         liveTrackingViewModel.trackingStatus.observe(this) { status ->
@@ -247,7 +257,10 @@ class ParentDashboardActivity : AppCompatActivity() {
                 val clickedDriver = currentDrivers?.find {
                     it.assignedBus == annotation.textField || it.name == annotation.textField
                 }
-                clickedDriver?.let { updateDriverCard(it) }
+                clickedDriver?.let { 
+                    liveTrackingViewModel.selectDriver(it)
+                    updateDriverCard(it) 
+                }
                 true
             }
             manager
@@ -293,19 +306,29 @@ class ParentDashboardActivity : AppCompatActivity() {
             }
         }
 
-        // Smooth Camera flyTo (Only if card is not already visible)
+        // Smooth Camera (Only if card is not already visible)
         if (drivers.isNotEmpty() && findViewById<View>(R.id.driverCard)?.visibility == View.GONE) {
-            val point = Point.fromLngLat(drivers[0].longitude, drivers[0].latitude)
-            // Same fix as the other tracking screens: easeTo() instead of flyTo() so a
-            // newer update interrupting the animation doesn't look like a blink.
-            mapView?.mapboxMap?.easeTo(
-                CameraOptions.Builder()
-                    .center(point)
-                    .zoom(14.0)
-                    .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(800) }
-
-            )
+            if (drivers.size == 1) {
+                val point = Point.fromLngLat(drivers[0].longitude, drivers[0].latitude)
+                mapView?.mapboxMap?.easeTo(
+                    CameraOptions.Builder()
+                        .center(point)
+                        .zoom(14.0)
+                        .build(),
+                    MapAnimationOptions.mapAnimationOptions { duration(800) }
+                )
+            } else {
+                val points = drivers.map { Point.fromLngLat(it.longitude, it.latitude) }
+                val camera = mapView?.mapboxMap?.cameraForCoordinates(
+                    points,
+                    EdgeInsets(250.0, 100.0, 150.0, 100.0),
+                    null,
+                    null
+                )
+                camera?.let {
+                    mapView?.mapboxMap?.easeTo(it, MapAnimationOptions.mapAnimationOptions { duration(1000) })
+                }
+            }
         }
     }
 
@@ -344,9 +367,20 @@ class ParentDashboardActivity : AppCompatActivity() {
             card.animate().alpha(1f).translationY(0f).setDuration(500).start()
         }
 
+        // Find student(s) for this bus/route
+        val passengerNames = approvedStudents.values
+            .filter { it.route == driver.route }
+            .joinToString(", ") { it.name }
+
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "Route"}"
-        findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status}"
+        
+        val statusText = if (passengerNames.isNotEmpty()) {
+            "Passenger: $passengerNames"
+        } else {
+            "Active Status: ${driver.status}"
+        }
+        findViewById<TextView>(R.id.tvRouteDetail)?.text = statusText
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
@@ -374,14 +408,14 @@ class ParentDashboardActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialButton>(R.id.btnTrackDriver)?.setOnClickListener {
-            val drivers = liveTrackingViewModel.activeDrivers.value
-            if (!drivers.isNullOrEmpty()) {
+            val selected = liveTrackingViewModel.selectedDriver.value
+            if (selected != null) {
                 val intent = Intent(this, TrackDriverActivity::class.java)
-                intent.putExtra("DRIVER_ID", drivers[0].driverId)
+                intent.putExtra("DRIVER_ID", selected.driverId)
                 intent.putExtra("IS_PARENT", true)
                 startActivity(intent)
             } else {
-                Toast.makeText(this, "Bus is currently offline", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Please select a bus to track", Toast.LENGTH_SHORT).show()
             }
         }
 

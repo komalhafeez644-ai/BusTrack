@@ -9,6 +9,7 @@ data class AdminModel(
     val campusName: String = "",
     val phone: String = "",
     val address: String = "",
+    val city: String = "",
     val profileImageUrl: String = "",
     var isBusDelayNotifyEnabled: Boolean = true,
     var isEmergencyNotifyEnabled: Boolean = true,

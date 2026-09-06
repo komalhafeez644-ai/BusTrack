@@ -161,6 +161,8 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
         val recordsToSave = students.filter { marked.containsKey(it.id) }.map { student ->
             val status = marked.getValue(student.id)
+            val currentTime = if (status == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date()) else status
+            
             // saveAttendance() writes the WHOLE record object (merge only protects fields
             // that are absent, and every field here is always present), so we must carry
             // forward whatever was already saved for the other period ourselves - otherwise
@@ -171,10 +173,10 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 studentName = student.name,
                 route = routeName,
                 stop = stopName,
-                morningPickup = if (isMorning) status else (existing?.morningPickup ?: "--"),
+                morningPickup = if (isMorning) currentTime else (existing?.morningPickup ?: "--"),
                 morningDrop = existing?.morningDrop ?: "--",
-                eveningPickup = if (!isMorning) status else (existing?.eveningPickup ?: "--"),
-                eveningDrop = existing?.eveningDrop ?: "--",
+                eveningPickup = if (!isMorning) currentTime else (existing?.eveningPickup ?: "--"),
+                eveningDrop = if (!isMorning) currentTime else (existing?.eveningDrop ?: "--"),
                 date = date
             )
         }

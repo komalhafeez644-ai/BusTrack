@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".MyApp"
@@ -147,7 +149,7 @@
             android:name="ui_authentication.SignupActivity"
             android:exported="false" />
         <activity
-            android:name=".login.ForgotPasswordActivity"
+            android:name="ui_authentication.ForgotPasswordActivity"
             android:exported="false" />
         <activity
             android:name="ui.admin.RouteAnalysisActivity"
@@ -203,6 +205,16 @@
         <activity
             android:name="ui.admin.LocationPickerActivity"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Driver Module Activities -->
         <activity android:name="ui.driver.DriverDashboardActivity" android:exported="false" />

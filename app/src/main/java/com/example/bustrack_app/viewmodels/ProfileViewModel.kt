@@ -49,6 +49,7 @@ class ProfileViewModel : ViewModel() {
                     employeeId = snapshot.getString("employeeId") ?: "",
                     phone = snapshot.getString("phone") ?: "",
                     address = snapshot.getString("address") ?: "",
+                    city = snapshot.getString("city") ?: "",
                     profileImageUrl = snapshot.getString("profileImageUrl") ?: "",
                     campusName = "Punjab College",
                     isBusDelayNotifyEnabled = snapshot.getBoolean("busDelay") ?: true,

@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
-import com.example.bustrack_app.login.ForgotPasswordActivity
 import com.example.bustrack_app.utils.Resource
 import com.example.bustrack_app.viewmodels.LoginViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
