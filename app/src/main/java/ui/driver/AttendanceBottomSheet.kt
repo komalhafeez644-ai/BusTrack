@@ -22,18 +22,6 @@ import utils.ViewUtils
 /**
  * Attendance Bottom Sheet shown to the driver when the geofence/arrival logic in
  * DriverDashboardActivity detects the bus has reached a stop.
- *
- * Fixed/completed here (Task 1):
- *  - Now shows EVERY student assigned to the stop (previously hard-capped at 2, via a
- *    reused static layout with only cardS1/cardS2). Uses a RecyclerView + the existing
- *    (previously unused/orphaned) AttendanceStudentAdapter instead.
- *  - Adds a Leave option alongside Present/Absent, as required.
- *  - Knows whether this is a Morning or Evening trip (passed in from
- *    DriverDashboardActivity) and saves to the correct field (morningPickup vs
- *    eveningPickup) instead of always writing to morningPickup.
- *  - Pre-loads any attendance already saved today for these students/this period, so
- *    previously marked attendance is visible and editable rather than being silently
- *    overwritten or lost.
  */
 class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
@@ -43,9 +31,6 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
     private var students: List<StudentModel> = emptyList()
     private lateinit var adapter: AttendanceStudentAdapter
-    // Keyed by studentId. Kept around so Save can preserve the OTHER trip period's fields
-    // (e.g. keep eveningPickup untouched when saving a morning record) instead of blanking
-    // them out - see the merge-safety note in saveAllAttendance().
     private var existingRecordsByStudent: Map<String, AttendanceRecordModel> = emptyMap()
 
     companion object {
@@ -129,17 +114,16 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
                 existingRecordsByStudent = existingRecords
 
-                // Pull only the field relevant to this trip (morning vs evening) so we
-                // pre-fill with what was actually marked for THIS period, not the other one.
                 val initialStatuses = existingRecords.mapValues { (_, record) ->
-                    val value = if (isMorning) record.morningPickup else record.eveningPickup
-                    if (value.isBlank() || value == "--") "Pending" else value
+                    val value = if (isMorning) {
+                        record.morningPickup
+                    } else {
+                        record.eveningPickup
+                    }
+                    if (value.isBlank() || value == "--" || value.equals("Pending", true) || value.equals("Pending Drop", true)) "Pending" else value
                 }
 
-                adapter = AttendanceStudentAdapter(students, initialStatuses) { _, _ ->
-                    // Live UI updates only; actual persistence happens on Save so the
-                    // driver can freely correct mistakes before committing.
-                }
+                adapter = AttendanceStudentAdapter(students, initialStatuses) { _, _ -> }
                 recyclerView.adapter = adapter
             }
         }
@@ -161,12 +145,8 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
         val recordsToSave = students.filter { marked.containsKey(it.id) }.map { student ->
             val status = marked.getValue(student.id)
-            val currentTime = if (status == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date()) else status
-            
-            // saveAttendance() writes the WHOLE record object (merge only protects fields
-            // that are absent, and every field here is always present), so we must carry
-            // forward whatever was already saved for the other period ourselves - otherwise
-            // saving evening attendance would blank out the morning record, and vice versa.
+            val currentTime = if (status == "Present") SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()) else status
+
             val existing = existingRecordsByStudent[student.id]
             AttendanceRecordModel(
                 studentId = student.id,
@@ -174,9 +154,9 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 route = routeName,
                 stop = stopName,
                 morningPickup = if (isMorning) currentTime else (existing?.morningPickup ?: "--"),
-                morningDrop = existing?.morningDrop ?: "--",
+                morningDrop = if (isMorning) (if (status == "Absent" || status == "Leave") status else "Pending Drop") else (existing?.morningDrop ?: "--"),
                 eveningPickup = if (!isMorning) currentTime else (existing?.eveningPickup ?: "--"),
-                eveningDrop = if (!isMorning) currentTime else (existing?.eveningDrop ?: "--"),
+                eveningDrop = if (!isMorning) (if (status == "Absent" || status == "Leave") status else "Pending Drop") else (existing?.eveningDrop ?: "--"),
                 date = date
             )
         }

@@ -23,6 +23,9 @@ class AttendanceViewModel : ViewModel() {
     private var selectedRoute = "All Route"
     private var selectedDate = ""
 
+    private var studentsListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private var attendanceListener: com.google.firebase.firestore.ListenerRegistration? = null
+
     init {
         selectedDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
         _selectedDateText.value = selectedDate
@@ -31,19 +34,38 @@ class AttendanceViewModel : ViewModel() {
 
     private fun loadInitialData() {
         loadRoutes()
-        com.example.bustrack_app.data.FirebaseRepository.fetchStudents { students ->
+        
+        // Listen to students separately
+        studentsListener?.remove()
+        studentsListener = com.example.bustrack_app.data.FirebaseRepository.fetchStudents { students ->
             allStudents.clear()
             allStudents.addAll(students)
-            loadAttendanceData()
+            applyFilter()
+        }
+
+        // Listen to attendance separately (Real-time synchronization)
+        attendanceListener?.remove()
+        attendanceListener = com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { list ->
+            allRecords.clear()
+            allRecords.addAll(list)
+            applyFilter()
         }
     }
 
     private fun loadAttendanceData() {
+        // This method is now legacy as the listener handles it in loadInitialData,
+        // but we'll keep it for any manual refresh needs.
         com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { list ->
             allRecords.clear()
             allRecords.addAll(list)
             applyFilter()
         }
+    }
+
+    override fun onCleared() {
+        studentsListener?.remove()
+        attendanceListener?.remove()
+        super.onCleared()
     }
 
     private fun loadRoutes() {
@@ -76,6 +98,9 @@ class AttendanceViewModel : ViewModel() {
             return
         }
 
+        // Normalize date for comparison with Firestore data (which uses hyphens)
+        val normalizedSelectedDate = selectedDate.replace("/", "-")
+
         // 1. Filter students by route
         val studentsForRoute = if (selectedRoute == "All Route") {
             allStudents
@@ -85,7 +110,9 @@ class AttendanceViewModel : ViewModel() {
 
         // 2. Map students to attendance records (using real data if exists, otherwise placeholder)
         val finalRecords = studentsForRoute.map { student ->
-            val existing = allRecords.find { it.studentId == student.id && it.date == selectedDate }
+            val existing = allRecords.find { 
+                it.studentId == student.id && (it.date == selectedDate || it.date == normalizedSelectedDate) 
+            }
             existing ?: AttendanceRecordModel(
                 studentId = student.id,
                 studentName = student.name,

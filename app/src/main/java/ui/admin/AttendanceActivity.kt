@@ -31,7 +31,7 @@ class AttendanceActivity : AppCompatActivity() {
     private lateinit var tvPresentCount: TextView
     private lateinit var tvAbsentCount: TextView
     
-    private var selectedDate: String = "Select Date"
+    private var selectedDate: String = ""
     private lateinit var adapter: AttendanceAdapter
     // Task 3: Principal reuses this exact screen but must not be able to edit records -
     // AttendanceActivity is launched with VIEW_ONLY=true from PrincipalDashboardActivity.
@@ -44,6 +44,9 @@ class AttendanceActivity : AppCompatActivity() {
         supportActionBar?.hide()
 
         isViewOnly = intent.getBooleanExtra("VIEW_ONLY", false)
+        
+        // Initialize date to today's date
+        selectedDate = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
 
         initViews()
         setupViewModel()
@@ -64,6 +67,8 @@ class AttendanceActivity : AppCompatActivity() {
         tvTotalCount = findViewById(R.id.tvTotalCount)
         tvPresentCount = findViewById(R.id.tvPresentCount)
         tvAbsentCount = findViewById(R.id.tvAbsentCount)
+        
+        txtReportDate.text = selectedDate
 
         rvAttendance.layoutManager = LinearLayoutManager(this)
         adapter = AttendanceAdapter(emptyList()) { record ->
@@ -172,8 +177,10 @@ class AttendanceActivity : AppCompatActivity() {
         val present = records.count { 
             it.morningPickup.equals("Present", ignoreCase = true) || 
             it.eveningPickup.equals("Present", ignoreCase = true) ||
-            it.morningPickup.contains(":", ignoreCase = true) || // Time format
-            it.eveningPickup.contains(":", ignoreCase = true)
+            it.morningPickup.contains(":", ignoreCase = true) || 
+            it.eveningPickup.contains(":", ignoreCase = true) ||
+            it.morningPickup.equals("En Route", ignoreCase = true) ||
+            it.eveningPickup.equals("School", ignoreCase = true)
         }
         val absent = total - present
 

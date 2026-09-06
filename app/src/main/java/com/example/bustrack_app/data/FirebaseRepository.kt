@@ -16,8 +16,8 @@ object FirebaseRepository {
     private val db = Firebase.firestore
 
     // --- STUDENTS ---
-    fun fetchStudents(onResult: (List<StudentModel>) -> Unit) {
-        db.collection("students").addSnapshotListener { snapshot, _ ->
+    fun fetchStudents(onResult: (List<StudentModel>) -> Unit): ListenerRegistration {
+        return db.collection("students").addSnapshotListener { snapshot, _ ->
             val list = snapshot?.documents?.mapNotNull { it.toObject<StudentModel>() } ?: emptyList()
             onResult(list)
         }
@@ -133,11 +133,50 @@ object FirebaseRepository {
         db.collection("attendance").document(docId).update(field, value)
     }
 
-    fun fetchAttendance(onResult: (List<AttendanceRecordModel>) -> Unit) {
-        db.collection("attendance").addSnapshotListener { snapshot, _ ->
+    fun fetchAttendance(onResult: (List<AttendanceRecordModel>) -> Unit): ListenerRegistration {
+        return db.collection("attendance").addSnapshotListener { snapshot, _ ->
             val list = snapshot?.documents?.mapNotNull { it.toObject<AttendanceRecordModel>() } ?: emptyList()
             onResult(list)
         }
+    }
+
+    /**
+     * Automatically records the arrival time at a drop-off stop for all students
+     * who were present on the bus.
+     */
+    fun updateDropTimesForRoute(routeName: String, stopName: String, isMorning: Boolean, date: String, time: String) {
+        val field = if (isMorning) "morningDrop" else "eveningDrop"
+        val normalizedDate = date.replace("/", "-")
+        
+        db.collection("attendance")
+            .whereEqualTo("route", routeName)
+            .whereEqualTo("date", normalizedDate)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                snapshot.documents.forEach { doc ->
+                    val record = doc.toObject<AttendanceRecordModel>()
+                    if (record != null) {
+                        val pickupStatus = if (isMorning) record.morningPickup else record.eveningPickup
+                        // Check if student was present during pickup
+                        val isPresent = pickupStatus.contains(":") || pickupStatus.equals("Present", true) || pickupStatus.equals("School", true) || pickupStatus.equals("En Route", true)
+                        
+                        val shouldUpdate = if (isMorning) {
+                            // In morning, all present students drop at the end (usually School)
+                            // We assume the caller only triggers this for the final stop.
+                            isPresent && (record.morningDrop == "--" || record.morningDrop == "Pending" || record.morningDrop == "En Route")
+                        } else {
+                            // In evening, only students assigned to this specific stop drop here
+                            isPresent && record.stop == stopName && (record.eveningDrop == "--" || record.eveningDrop == "Pending")
+                        }
+                        
+                        if (shouldUpdate) {
+                            batch.update(doc.reference, field, time)
+                        }
+                    }
+                }
+                batch.commit()
+            }
     }
 
     /**

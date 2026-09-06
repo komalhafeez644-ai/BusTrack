@@ -115,10 +115,13 @@ class EveningAttendanceActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@fetchAttendance
 
                 attendanceList.clear()
+                val normalizedToday = todayDate.replace("/", "-")
                 
                 students.forEach { student ->
-                    // Find if student has record for today
-                    val existing = allAttendance.find { it.studentId == student.id && it.date == todayDate }
+                    // Find if student has record for today (check both slash and hyphen formats)
+                    val existing = allAttendance.find { 
+                        it.studentId == student.id && (it.date == todayDate || it.date == normalizedToday) 
+                    }
                     
                     if (existing != null) {
                         attendanceList.add(existing)
@@ -189,11 +192,20 @@ class EveningAttendanceActivity : AppCompatActivity() {
             holder.tvName.text = item.studentName
             holder.tvId.text = "ID: ${item.studentId} • ${item.stop}"
             
-            val rawStatus = if (isMorning) item.morningPickup else item.eveningPickup
+            val rawStatus = if (isMorning) {
+                item.morningPickup
+            } else {
+                // For evening, if drop is marked but pickup is still pending/school, show the drop status
+                if (item.eveningDrop.contains(":") || item.eveningDrop == "Absent" || item.eveningDrop == "Leave") {
+                    item.eveningDrop
+                } else {
+                    item.eveningPickup
+                }
+            }
             
             // Normalize status for UI
             val displayStatus = when {
-                rawStatus.equals("Pending", true) -> "Pending"
+                rawStatus.equals("Pending", true) || rawStatus.equals("--", true) || rawStatus.equals("Pending Drop", true) || rawStatus.isBlank() -> "Pending"
                 rawStatus.equals("Absent", true) -> "Absent"
                 rawStatus.equals("Leave", true) -> "Leave"
                 else -> "Present" // Any other value (like a time) is treated as Present
@@ -237,9 +249,17 @@ class EveningAttendanceActivity : AppCompatActivity() {
             val currentTime = if (newStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date()) else newStatus
             
             val updatedItem = if (isMorning) {
-                item.copy(morningPickup = currentTime, morningDrop = if(newStatus == "Absent") "Absent" else item.morningDrop)
+                // Morning: Pickup is marked now, Drop is pending until bus reaches school.
+                item.copy(
+                    morningPickup = currentTime, 
+                    morningDrop = if(newStatus == "Absent" || newStatus == "Leave") newStatus else (if(newStatus == "Pending") "--" else "Pending Drop")
+                )
             } else {
-                item.copy(eveningPickup = currentTime, eveningDrop = if(newStatus == "Absent") "Absent" else currentTime)
+                // Evening: Pickup is marked now (at school), Drop is pending until bus reaches home stop.
+                item.copy(
+                    eveningPickup = currentTime,
+                    eveningDrop = if(newStatus == "Absent" || newStatus == "Leave") newStatus else (if(newStatus == "Pending") "--" else "Pending Drop")
+                )
             }
             
             com.example.bustrack_app.data.FirebaseRepository.saveAttendance(updatedItem) { success ->
@@ -253,9 +273,8 @@ class EveningAttendanceActivity : AppCompatActivity() {
                     com.example.bustrack_app.data.FirebaseRepository.notifyParentsOfAttendance(
                         item.studentId, item.studentName, newStatus, isMorning
                     )
-                    Toast.makeText(this@EveningAttendanceActivity, "Attendance updated", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@EveningAttendanceActivity, "Failed to sync", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EveningAttendanceActivity, "Failed to sync with server", Toast.LENGTH_SHORT).show()
                 }
             }
         }

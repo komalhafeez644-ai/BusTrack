@@ -128,6 +128,14 @@ import kotlin.collections.firstOrNull
 import com.mapbox.maps.plugin.ModelScaleMode
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 
+/**
+ * Unidirectional lifecycle for a single stop: UPCOMING -> ARRIVED -> COMPLETED.
+ * SKIPPED is a terminal branch taken directly from UPCOMING when navigation detects the
+ * bus moved past a stop without an arrival being recorded. No transition ever moves a
+ * stop backwards (e.g. ARRIVED can never revert to UPCOMING).
+ */
+enum class StopState { UPCOMING, ARRIVED, COMPLETED, SKIPPED }
+
 class DriverDashboardActivity : AppCompatActivity() {
 
     private lateinit var binding: DriverdashboardBinding
@@ -153,6 +161,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var currentNavPoints: List<Point> = emptyList()
     private var latestRouteProgress: com.mapbox.navigation.base.trip.model.RouteProgress? = null
     private val stopArrivalTimes = mutableMapOf<Int, String>()
+    // Authoritative per-stop state. stopArrivalTimes stays purely for display text
+    // ("Arrived: 8:02 AM" / "Skipped"); stopStates is what drives all state transitions.
+    private val stopStates = mutableMapOf<Int, StopState>()
     private val traveledHistoryPoints = mutableListOf<Point>()
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
@@ -160,7 +171,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastArrivedStopIndex = -1
     private var isCurrentlyAtStop = false
     private val ARRIVAL_RADIUS = 80.0 // meters
-    private val DEPARTURE_RADIUS = 70.0 // 70 meters to prevent flickering
+    private val DEPARTURE_RADIUS = 70.0 // meters
     private var currentRawLocation: Location? = null
 
     private var departureCandidateIndex = -1
@@ -192,22 +203,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
 
-    // X/Y here correct a lean baked into the mesh's own coordinate space, separate from the
-    // 90 degree Z value below which only sets facing direction. IMPORTANT: any non-zero X/Y
-    // here interacts badly with turns. puckBearingEnabled rotates the model around the
-    // world-vertical (Z) axis to match heading - that's correct and is the ONLY rotation
-    // that should visibly change as the bus turns. But rotations don't commute: composing a
-    // fixed roll/pitch (X/Y) with a heading-dependent yaw (Z) means the offset's visible
-    // lean axis itself rotates as heading changes, so the model looks upright only near the
-    // heading it was tuned at and increasingly tilted/sideways approaching 90 degrees away
-    // from it - which is exactly the "tilts on left/right turns" symptom. Direct inspection
-    // of bus.glb's own transform chain (see the flattened bus.glb from earlier) showed it is
-    // already correctly upright with no real lean to correct, so both are reset to 0 - do
-    // not re-introduce a non-zero X/Y here to fix a perceived tilt; that tilt was likely
-    // this same offset, not something to compensate for.
     private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0f
     private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0f
-    private val DUTY_AUTO_OFF_GRACE_PERIOD_MS = 10 * 60 * 1000L // 10 minutes
+    private val DUTY_AUTO_OFF_GRACE_PERIOD_MS = 10 * 60 * 1000L
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var currentLocation: Location? = null
@@ -230,7 +228,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val navigationLocationProvider = NavigationLocationProvider()
     private val attendancePromptedStops = mutableSetOf<Int>()
     private var lastValidBearing: Double = 0.0
-    private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8 // m/s (~3 km/h)
+    private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8
     private var lastRawPositionForSnap: Point? = null
     private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 3.0
 
@@ -257,7 +255,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         MapboxOptions.accessToken = getString(R.string.mapbox_access_token)
-
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         drawerLayout = binding.drawerLayout
@@ -293,14 +290,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         setupDrawerListeners()
         initNavigation()
 
-        // mapboxNavigation is attached via MapboxNavigationApp, which is process/app-scoped -
-        // its trip session and active route survive this Activity being destroyed and
-        // recreated (backgrounding, a config change, or the OS reclaiming memory), as long as
-        // the process itself isn't killed. So if a route is already active here, navigation
-        // never actually stopped - only this Activity's own UI would go back to showing the
-        // plain dashboard if we unconditionally reset to non-navigating mode below, which is
-        // what made an in-progress navigation session look like it had disappeared when
-        // returning to this screen. Restore navigation mode instead when that's the case.
         val alreadyNavigating = mapboxNavigation?.getNavigationRoutes()?.isNotEmpty() == true
         if (alreadyNavigating) {
             setNavigationMode(true, reloadStyle = true)
@@ -388,11 +377,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         val loc = currentLocation ?: return
 
         val currentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
-
         val navPoints = mutableListOf<Point>()
         navPoints.add(currentPoint)
-
-        val progress = latestRouteProgress
 
         val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
         val targetStopIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
@@ -495,6 +481,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 if (isNavigating) {
                     updateNavigationRouteProgress(Point.fromLngLat(androidLocation.longitude, androidLocation.latitude))
+                    checkGeofenceAndStopStatus(androidLocation)
 
                     val speedKph = (androidLocation.speed * 3.6).toInt()
                     binding.bottomSummaryCard.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "$speedKph km/h"
@@ -516,12 +503,147 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------------------------------
+    // Stop state machine: UPCOMING -> ARRIVED -> COMPLETED (SKIPPED branches off UPCOMING).
+    // Every transition is guarded by the stop's current state, so a stop can only ever
+    // move forward. In particular, leaving a stop's geofence can only push it from
+    // ARRIVED to COMPLETED — it can never fall back to UPCOMING.
+    // ---------------------------------------------------------------------------------
+
+    private fun stateOf(index: Int): StopState = stopStates[index] ?: StopState.UPCOMING
+
+    /** UPCOMING -> ARRIVED. Records the arrival timestamp. No-op (returns false) if not currently UPCOMING. */
+    private fun transitionToArrived(index: Int): Boolean {
+        if (stateOf(index) != StopState.UPCOMING) return false
+        stopStates[index] = StopState.ARRIVED
+        stopArrivalTimes[index] = timeFormat.format(Calendar.getInstance().time)
+        lastArrivedStopIndex = index
+        isCurrentlyAtStop = true
+        activeStopStatus = "ARRIVED"
+        return true
+    }
+
+    /**
+     * ARRIVED -> COMPLETED. Advances nextGlobalStopIndex past this stop, which is what
+     * shifts the ETA/distance calculation strictly onto the next stop. No-op if the stop
+     * isn't currently ARRIVED (e.g. already COMPLETED), so it is never re-triggered.
+     */
+    private fun transitionToCompleted(index: Int): Boolean {
+        if (stateOf(index) != StopState.ARRIVED) return false
+        stopStates[index] = StopState.COMPLETED
+        isCurrentlyAtStop = false
+        activeStopStatus = "PASSED"
+        lastArrivedStopIndex = -1
+        nextGlobalStopIndex = index + 1
+        return true
+    }
+
+    /** UPCOMING -> SKIPPED. No-op if the stop already advanced (e.g. it was already ARRIVED). */
+    private fun transitionToSkipped(index: Int): Boolean {
+        if (stateOf(index) != StopState.UPCOMING) return false
+        stopStates[index] = StopState.SKIPPED
+        stopArrivalTimes[index] = "Skipped"
+        return true
+    }
+
+    private fun checkGeofenceAndStopStatus(location: Location) {
+        val stops = assignedRoute?.stopsList ?: return
+        if (nextGlobalStopIndex >= stops.size) return
+
+        val targetStop = stops[nextGlobalStopIndex]
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            location.latitude, location.longitude,
+            targetStop.latitude, targetStop.longitude,
+            results
+        )
+        val distanceMeters = results[0].toDouble()
+
+        // 1. Entering Geofence: UPCOMING -> ARRIVED (guarded; no-op if already advanced)
+        if (distanceMeters <= ARRIVAL_RADIUS && transitionToArrived(nextGlobalStopIndex)) {
+
+            if (!attendancePromptedStops.contains(nextGlobalStopIndex)) {
+                attendancePromptedStops.add(nextGlobalStopIndex)
+
+                // Dismiss existing sheet to reset context (Section 2 Requirement)
+                (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismissAllowingStateLoss()
+                supportFragmentManager.executePendingTransactions()
+
+                val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+                val bottomSheet = AttendanceBottomSheet.newInstance(targetStop.stopName, assignedRoute?.routeName ?: "", isMorningTrip)
+                bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+            }
+
+            updateUpcomingStopsUI()
+        }
+
+        // 2. Exiting Geofence: ARRIVED -> COMPLETED (one-way; never returns to UPCOMING/ARRIVED)
+        if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
+            val arrivedIndex = lastArrivedStopIndex
+            val currentStop = stops.getOrNull(arrivedIndex)
+            if (currentStop != null) {
+                val departResults = FloatArray(1)
+                Location.distanceBetween(
+                    location.latitude, location.longitude,
+                    currentStop.latitude, currentStop.longitude,
+                    departResults
+                )
+                if (departResults[0] > DEPARTURE_RADIUS) {
+                    if (departureCandidateIndex == arrivedIndex) {
+                        departureConfirmCount++
+                    } else {
+                        departureCandidateIndex = arrivedIndex
+                        departureConfirmCount = 1
+                    }
+
+                    if (departureConfirmCount >= DEPARTURE_CONFIRM_THRESHOLD) {
+                        // Successfully exited geofence: finalize this stop as COMPLETED.
+                        // transitionToCompleted() both keeps the recorded arrival timestamp
+                        // and advances nextGlobalStopIndex, shifting the ETA strictly to
+                        // whatever stop comes next.
+                        if (transitionToCompleted(arrivedIndex)) {
+
+                            // Destroy active attendance context when leaving geofence (Section 2 Requirement)
+                            (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismissAllowingStateLoss()
+
+                            if (nextGlobalStopIndex < stops.size) {
+                                triggerReroute()
+                            }
+
+                            departureCandidateIndex = -1
+                            departureConfirmCount = 0
+
+                            updateUpcomingStopsUI()
+                        }
+                    }
+                } else {
+                    departureCandidateIndex = -1
+                    departureConfirmCount = 0
+                }
+            }
+        }
+    }
+
+    private fun updateUpcomingStopsUI() {
+        val stops = assignedRoute?.stopsList ?: emptyList()
+
+        // Requirement: once a stop moves to ARRIVED or COMPLETED (or SKIPPED), it must be
+        // removed from the "Upcoming Stops" list. Only stops still in UPCOMING remain,
+        // and since state only ever moves forward, a removed stop can never reappear here.
+        val upcomingStops = stops.filterIndexed { index, _ ->
+            stateOf(index) == StopState.UPCOMING
+        }
+
+        stopsAdapter.updateStops(upcomingStops, -1) // -1 because ARRIVED/COMPLETED stops are filtered out
+    }
+
     private val routeProgressObserver = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: com.mapbox.navigation.base.trip.model.RouteProgress) {
             latestRouteProgress = routeProgress
             runOnUiThread {
-                val distanceRemaining = routeProgress.distanceRemaining / 1000.0
-                val durationRemaining = routeProgress.durationRemaining / 60.0
+                // Section 1: Recalculate ETA and distance ONLY for the next valid UPCOMING stop (current leg)
+                val distanceRemaining = (routeProgress.currentLegProgress?.distanceRemaining?.toDouble() ?: 0.0) / 1000.0
+                val durationRemaining = (routeProgress.currentLegProgress?.durationRemaining?.toDouble() ?: 0.0) / 60.0
 
                 binding.tvEstDistance.text = String.format(Locale.getDefault(), "%.1f km", distanceRemaining)
                 binding.tvEstDuration.text = String.format(Locale.getDefault(), "%d min", durationRemaining.toInt())
@@ -536,123 +658,25 @@ class DriverDashboardActivity : AppCompatActivity() {
                 tvSpeed?.text = "$speedKph km/h"
                 binding.tvSpeedNav.text = "$speedKph"
 
-                currentLocation?.let { loc ->
-                    val geocoder = Geocoder(this@DriverDashboardActivity, Locale.getDefault())
-                    try {
-                        val addresses = geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            val addr = addresses[0]
-                            val displayAddr = addr.getAddressLine(0).replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
-                            binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = displayAddr
-                        } else {
-                            binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text =
-                                String.format(Locale.getDefault(), "Current: Lat %.4f, Lng %.4f", loc.latitude, loc.longitude)
-                        }
-                    } catch (e: Exception) {
-                        binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text =
-                            String.format(Locale.getDefault(), "Current: Lat %.4f, Lng %.4f", loc.latitude, loc.longitude)
-                    }
-                }
-
                 updateLoadStat(tvLoad)
 
                 val currentLegIndex = routeProgress.currentLegProgress?.legIndex ?: 0
                 val mapboxSuggestedIndex = navStartIndex + currentLegIndex
 
                 if (!isCurrentlyAtStop && mapboxSuggestedIndex > nextGlobalStopIndex) {
+                    // Mark skipped stops if Mapbox suggests we moved ahead. transitionToSkipped()
+                    // only touches stops still UPCOMING, so an already ARRIVED/COMPLETED stop
+                    // is never overwritten.
+                    for (i in nextGlobalStopIndex until mapboxSuggestedIndex) {
+                        transitionToSkipped(i)
+                    }
                     nextGlobalStopIndex = mapboxSuggestedIndex
                 }
 
                 val stops = assignedRoute?.stopsList ?: emptyList()
 
-                stops.forEachIndexed { index, stop ->
-                    if (index == nextGlobalStopIndex && !stopArrivalTimes.containsKey(index)) {
-                        val matchedResults = FloatArray(1)
-                        Location.distanceBetween(
-                            currentLocation?.latitude ?: 0.0,
-                            currentLocation?.longitude ?: 0.0,
-                            stop.latitude,
-                            stop.longitude,
-                            matchedResults
-                        )
-
-                        var distance = matchedResults[0].toDouble()
-
-                        currentRawLocation?.let { raw ->
-                            val rawResults = FloatArray(1)
-                            Location.distanceBetween(
-                                raw.latitude, raw.longitude,
-                                stop.latitude, stop.longitude,
-                                rawResults
-                            )
-                            if (rawResults[0] < distance) distance = rawResults[0].toDouble()
-                        }
-
-                        if (distance <= ARRIVAL_RADIUS) {
-                            val arrivalTime = timeFormat.format(Calendar.getInstance().time)
-                            stopArrivalTimes[index] = arrivalTime
-                            lastArrivedStopIndex = index
-                            isCurrentlyAtStop = true
-                            activeStopStatus = "ARRIVED"
-                        }
-                    }
-
-                    if (index < nextGlobalStopIndex && !stopArrivalTimes.containsKey(index)) {
-                        stopArrivalTimes[index] = "Skipped"
-                    }
-
-                    if (stopArrivalTimes.containsKey(index) && stopArrivalTimes[index] != "Skipped" && !attendancePromptedStops.contains(index)) {
-                        attendancePromptedStops.add(index)
-
-                        (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismiss()
-                        val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
-                        val bottomSheet = AttendanceBottomSheet.newInstance(stop.stopName, assignedRoute?.routeName ?: "", isMorningTrip)
-                        bottomSheet.show(supportFragmentManager, "AttendanceSheet")
-                    }
-                }
-
-                if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
-                    val currentStop = stops.getOrNull(lastArrivedStopIndex)
-                    if (currentStop != null) {
-                        val results = FloatArray(1)
-                        Location.distanceBetween(
-                            currentLocation?.latitude ?: 0.0,
-                            currentLocation?.longitude ?: 0.0,
-                            currentStop.latitude,
-                            currentStop.longitude,
-                            results
-                        )
-                        val distanceFromStop = results[0].toDouble()
-
-                        if (distanceFromStop > DEPARTURE_RADIUS) {
-                            if (departureCandidateIndex == lastArrivedStopIndex) {
-                                departureConfirmCount++
-                            } else {
-                                departureCandidateIndex = lastArrivedStopIndex
-                                departureConfirmCount = 1
-                            }
-
-                            if (departureConfirmCount >= DEPARTURE_CONFIRM_THRESHOLD) {
-                                val departedStopIndex = lastArrivedStopIndex
-
-                                isCurrentlyAtStop = false
-                                activeStopStatus = "PASSED"
-
-                                nextGlobalStopIndex = departedStopIndex + 1
-
-                                if (nextGlobalStopIndex < stops.size) {
-                                    triggerReroute()
-                                }
-
-                                lastArrivedStopIndex = -1
-                                departureCandidateIndex = -1
-                                departureConfirmCount = 0
-                            }
-                        } else {
-                            departureCandidateIndex = -1
-                            departureConfirmCount = 0
-                        }
-                    }
+                currentLocation?.let { loc ->
+                    checkGeofenceAndStopStatus(loc)
                 }
 
                 val liveArrivedIndex = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
@@ -662,13 +686,9 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
                 val displayStopIndex = if (liveArrivedIndex != -1) liveArrivedIndex else nextGlobalStopIndex
 
-                val isRouteProgressFreshForDisplay = mapboxSuggestedIndex == nextGlobalStopIndex
-
                 val etaString = if (liveArrivedIndex != -1 && stopArrivalTimes.containsKey(liveArrivedIndex)) {
                     val arrival = stopArrivalTimes[liveArrivedIndex]
                     "Arrived: $arrival"
-                } else if (!isRouteProgressFreshForDisplay) {
-                    tvEta?.text?.toString() ?: "On Way"
                 } else if (displayStopIndex < stops.size) {
                     "${durationRemaining.toInt()} min"
                 } else {
@@ -702,7 +722,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
 
-                stopsAdapter.updateStops(stops, liveArrivedIndex)
+                updateUpcomingStopsUI()
 
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
@@ -720,8 +740,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (tvLoad?.text == "--" || tvLoad?.text.isNullOrEmpty()) tvLoad?.text = "0/0"
 
-        com.example.bustrack_app.data.FirebaseRepository.fetchStudentsByRoute(routeName) { students ->
-            com.example.bustrack_app.data.FirebaseRepository.fetchAttendance { allAttendance ->
+        FirebaseRepository.fetchStudentsByRoute(routeName) { students ->
+            FirebaseRepository.fetchAttendance { allAttendance ->
                 val records = allAttendance.filter { it.route == routeName && it.date == today }
                 val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
 
@@ -853,6 +873,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                         if (isNavigating) {
                             runOnUiThread {
+                                checkGeofenceAndStopStatus(location)
                                 updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
                             }
                         } else if (!wasLive) {
@@ -875,7 +896,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (now - lastFirestoreUpdateTime >= FIRESTORE_UPDATE_INTERVAL || distanceMoved >= FIRESTORE_MIN_DISTANCE) {
 
-            com.example.bustrack_app.data.FirebaseRepository.updateDriverLocation(
+            FirebaseRepository.updateDriverLocation(
                 driverId,
                 location.latitude,
                 location.longitude
@@ -889,7 +910,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             val speedVal = (location.speed * 3.6)
             val loadVal = tvLoad?.text?.toString() ?: "0/0"
 
-            com.example.bustrack_app.data.FirebaseRepository.updateDriverStats(
+            FirebaseRepository.updateDriverStats(
                 driverId,
                 etaVal,
                 speedVal,
@@ -898,7 +919,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             if (isNavigating) {
                 val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
-                com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                FirebaseRepository.updateDriverRouteGeometry(
                     driverId,
                     currentRouteGeometry,
                     traveledRouteGeometry,
@@ -1054,7 +1075,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun updateHeaderUI(driver: DriverModel) {
         val greeting = getGreeting()
-        binding.tvGreeting.text = "${greeting.uppercase()}, \ud83d\udc4b"
+        binding.tvGreeting.text = "${greeting.uppercase()}, 👋"
         binding.tvDriverName.text = driver.name
 
         utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, binding.ivProfile)
@@ -1166,6 +1187,27 @@ class DriverDashboardActivity : AppCompatActivity() {
                     nextGlobalStopIndex = driver.nextStopIndex
                 }
 
+                // Rebuild stopStates from the restored arrival map (e.g. after process death /
+                // activity recreation): any recorded stop before the current pointer is
+                // COMPLETED, the recorded stop at the current pointer is still ARRIVED (being
+                // serviced), "Skipped" entries become SKIPPED, everything else is UPCOMING.
+                if (stopStates.isEmpty() && stopArrivalTimes.isNotEmpty()) {
+                    stopArrivalTimes.forEach { (index, value) ->
+                        stopStates[index] = when {
+                            value == "Skipped" -> StopState.SKIPPED
+                            index < nextGlobalStopIndex -> StopState.COMPLETED
+                            else -> StopState.ARRIVED
+                        }
+                    }
+                }
+
+                if (!isCurrentlyAtStop && lastArrivedStopIndex == -1 &&
+                    stateOf(nextGlobalStopIndex) == StopState.ARRIVED
+                ) {
+                    isCurrentlyAtStop = true
+                    lastArrivedStopIndex = nextGlobalStopIndex
+                }
+
                 if (currentLocation == null && driver.latitude != 0.0 && driver.longitude != 0.0) {
                     currentLocation = android.location.Location("firestore").apply {
                         latitude = driver.latitude
@@ -1204,18 +1246,14 @@ class DriverDashboardActivity : AppCompatActivity() {
                     isNearStart = false
                     shouldFitCameraToRoute = true
                     stopArrivalTimes.clear()
+                    stopStates.clear()
                     nextGlobalStopIndex = 0
                     attendancePromptedStops.clear()
                     traveledHistoryPoints.clear()
 
                     viewModel.currentDriver.value?.id?.let { driverId ->
-                        // Same self-write echo risk as the End Navigation fix above: this
-                        // write is read back via this same dashboardData listener, which
-                        // could misread it as a real Duty change and flip isDutyEnabled off -
-                        // this time triggered by an admin reassigning the driver's route
-                        // instead of ending navigation. Same guard, same reason.
                         lastDutyToggleTime = System.currentTimeMillis()
-                        com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                        FirebaseRepository.updateDriverRouteGeometry(
                             driverId, null, null, 0, emptyMap(), false
                         )
                     }
@@ -1238,7 +1276,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         pointAnnotationManager?.deleteAll()
         assignedRoute?.stopsList?.forEachIndexed { index, stop ->
-            val isCompleted = stopArrivalTimes.containsKey(index) || (isNavigating && index < nextGlobalStopIndex)
+            val isCompleted = stateOf(index) != StopState.UPCOMING || (isNavigating && index < nextGlobalStopIndex)
             val iconRes = if (isCompleted) R.drawable.ic_marker_dest_grey else R.drawable.ic_marker_dest
             addMarker(Point.fromLngLat(stop.longitude, stop.latitude), iconRes, stop.stopName)
         }
@@ -1252,9 +1290,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .withLineOpacity(0.8)
             polylineAnnotationManager?.create(polylineOptions)
 
-            // Smaller than the default marker size (0.8) so this fixed route-start point
-            // doesn't visually read as a live location indicator - that role belongs only to
-            // the 3D bus marker.
             addMarker(points.first(), R.drawable.green_dot, iconSize = 0.45)
         }
 
@@ -1317,14 +1352,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
             splitIndex = maxOf(splitIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
-
-            // NOTE: the bus marker itself is fed from the actual (already map-matched/
-            // jitter-gated) GPS position in locationObserver/feedRawLocationToPuck - not
-            // from snappedP here. snappedP is used ONLY for the drawn traveled/upcoming
-            // route-line split below and for off-route distance checks. Forcing the visual
-            // marker onto the assigned route geometry would hide genuine deviation (e.g. a
-            // wrong turn) behind a bus that always looks like it's on-route - the
-            // off-route detector below is what should catch and react to that instead.
 
             if (isNavigating && minDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
                 offRouteBackupCount++
@@ -1396,14 +1423,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
-    // Creates fresh point/polyline annotation managers, first properly removing any managers
-    // already held in polylineAnnotationManager/pointAnnotationManager. Each
-    // createXAnnotationManager() call adds its own new layer to the current style; calling it
-    // again without removing the previous manager leaves that old layer (and every marker/
-    // polyline on it, e.g. the route-start green dot) behind on the map, where it stacks up
-    // every time navigation is started again. removeAnnotationManager() is safe to call even
-    // if the underlying style was already swapped out (e.g. by loadStyle) and the old layer is
-    // already gone - it's a no-op in that case rather than throwing.
     private fun recreateAnnotationManagers() {
         pointAnnotationManager?.let { mapView?.annotations?.removeAnnotationManager(it) }
         polylineAnnotationManager?.let { mapView?.annotations?.removeAnnotationManager(it) }
@@ -1411,10 +1430,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
     }
 
-    // Wipes the active-navigation route/traveled GeoJson sources back to empty geometry. Used
-    // right when navigation (re)starts, before the first real update fills them in, so a
-    // previous session's route geometry can never linger and get drawn as a stray/jumping
-    // segment underneath (or crossing) the new route while the fresh geometry is still loading.
     private fun clearNavigationRouteGeometry(style: Style) {
         val empty = LineString.fromLngLats(emptyList())
         (style.getSource(NAV_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
@@ -1466,7 +1481,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             val route = assignedRoute
 
             if (!isDutyEnabled) {
-                drawerLayout.openDrawer(androidx.core.view.GravityCompat.END)
+                drawerLayout.openDrawer(GravityCompat.END)
                 Toast.makeText(this, "Please enable On Duty Mode before starting navigation.", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
@@ -1526,7 +1541,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (currentPoint != null && startPoint != null) {
             val results = FloatArray(1)
-            android.location.Location.distanceBetween(
+            Location.distanceBetween(
                 currentPoint.latitude(), currentPoint.longitude(),
                 startPoint.latitude(), startPoint.longitude(),
                 results
@@ -1588,19 +1603,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         updateLoadStat(tvLoad)
 
-        var startIndex = 0
-        currentLocation?.let { loc ->
-            val curPoint = Point.fromLngLat(loc.longitude, loc.latitude)
-            var minDistance = Double.MAX_VALUE
-            for (i in route.stopsList.indices) {
-                val stop = route.stopsList[i]
-                val dist = TurfMeasurement.distance(curPoint, Point.fromLngLat(stop.longitude, stop.latitude), TurfConstants.UNIT_METERS)
-                if (dist < minDistance) {
-                    minDistance = dist
-                    startIndex = i
-                }
-            }
-        }
         val stops = route.stopsList
         stops.forEachIndexed { index, stop ->
             val arrival = stopArrivalTimes[index]
@@ -1670,16 +1672,16 @@ class DriverDashboardActivity : AppCompatActivity() {
         dialog.setContentView(view)
 
         val alerts = listOf(
-            AlertOption("Road Block", "Road is closed, need alternative route", R.drawable.notification_active, "\ud83d\udea7"),
-            AlertOption("Heavy Traffic", "Stuck in traffic, bus might be late", R.drawable.notification_active, "\ud83d\udea6"),
-            AlertOption("Accident", "Accident on route or bus involved", R.drawable.notification_active, "\ud83d\ude97"),
-            AlertOption("Bus Breakdown", "Engine or tyre issue", R.drawable.notification_active, "\ud83d\ude8c"),
-            AlertOption("Fuel Issue", "Low fuel or tank empty", R.drawable.notification_active, "\u26fd"),
-            AlertOption("Bad Weather", "Heavy rain, fog or storm", R.drawable.notification_active, "\ud83c\udf27\ufe0f"),
-            AlertOption("Student Emergency", "Student needs medical help", R.drawable.notification_active, "\ud83d\udc68\u200d\ud83c\udf93"),
-            AlertOption("Police Check", "Security check causing delay", R.drawable.notification_active, "\ud83d\udc6e"),
-            AlertOption("Wrong Route", "Assigned route is closed", R.drawable.notification_active, "\ud83d\udccd"),
-            AlertOption("Other", "Custom report or other issue", R.drawable.notification_active, "\ud83d\udcdd")
+            AlertOption("Road Block", "Road is closed, need alternative route", R.drawable.notification_active, "🚧"),
+            AlertOption("Heavy Traffic", "Stuck in traffic, bus might be late", R.drawable.notification_active, "🚥"),
+            AlertOption("Accident", "Accident on route or bus involved", R.drawable.notification_active, "🚗"),
+            AlertOption("Bus Breakdown", "Engine or tyre issue", R.drawable.notification_active, "🚌"),
+            AlertOption("Fuel Issue", "Low fuel or tank empty", R.drawable.notification_active, "⛽"),
+            AlertOption("Bad Weather", "Heavy rain, fog or storm", R.drawable.notification_active, "🌧️"),
+            AlertOption("Student Emergency", "Student needs medical help", R.drawable.notification_active, "👨‍🎓"),
+            AlertOption("Police Check", "Security check causing delay", R.drawable.notification_active, "👮"),
+            AlertOption("Wrong Route", "Assigned route is closed", R.drawable.notification_active, "📍"),
+            AlertOption("Other", "Custom report or other issue", R.drawable.notification_active, "📝")
         )
 
         val rvAlerts = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvAlerts)
@@ -1753,17 +1755,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             var startIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
 
             if (startIndex >= allStops.size) {
-                // Every stop was already marked visited by the PREVIOUS navigation session on
-                // this same route (route fully completed) - without this reset, startIndex
-                // would stay at/past allStops.size forever, leaving zero stops to navigate to
-                // and silently failing with "insufficient valid stops" below every time Start
-                // Navigation is pressed again. Pressing Start Navigation is an explicit,
-                // intentional action, so treat it as starting a brand new session for this
-                // route: clear the previous run's completion state and start over from stop 0.
-                // (This only fires when the WHOLE route was finished - it does not affect the
-                // normal "resume mid-route after accidentally closing navigation" case, where
-                // startIndex is still less than allStops.size and is left untouched below.)
                 stopArrivalTimes.clear()
+                stopStates.clear()
                 attendancePromptedStops.clear()
                 lastSplitIndex = 0
                 startIndex = 0
@@ -1850,7 +1843,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
 
                     recreateAnnotationManagers()
-
                     setupLocationPuck()
                     mapView?.location?.pulsingEnabled = false
 
@@ -1875,7 +1867,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
                     val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
-                    com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                    FirebaseRepository.updateDriverRouteGeometry(
                         driverId, null, null, nextGlobalStopIndex, arrivalMap, true
                     )
                 }
@@ -1906,9 +1898,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 if (reloadStyle) {
                     mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
                         shouldFitCameraToRoute = true
-
                         recreateAnnotationManagers()
-
                         setupLocationPuck()
                         mapView?.location?.pulsingEnabled = true
                         updateMapDisplay()
@@ -1935,49 +1925,12 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
                     val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
-                    // This write is being read back via the dashboardData listener (data.isOnDuty
-                    // in observeViewModel()), which was interpreting it as an actual Duty change
-                    // and flipping isDutyEnabled/the drawer switch off - even though ending
-                    // navigation never touched Duty. lastDutyToggleTime is the exact guard already
-                    // used for manual Duty toggles (see isPendingSync there) to suppress this kind
-                    // of self-triggered echo; it just wasn't being set for this write.
                     lastDutyToggleTime = System.currentTimeMillis()
-                    com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                    FirebaseRepository.updateDriverRouteGeometry(
                         driverId, null, null, nextGlobalStopIndex, arrivalMap, false
                     )
                 }
             }
-        }
-    }
-
-    private fun showFullRouteOverview() {
-        val navRoutes = mapboxNavigation?.getNavigationRoutes()
-        if (navRoutes.isNullOrEmpty()) {
-            Toast.makeText(this, "No active route to show", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        mapView?.viewport?.idle()
-        binding.btnRecenter.visibility = View.VISIBLE
-
-        val route = navRoutes[0]
-        val points = LineString.fromPolyline(route.directionsRoute.geometry()!!, 6).coordinates()
-
-        val cameraOptions = mapView?.mapboxMap?.cameraForCoordinates(
-            points,
-            EdgeInsets(150.0, 80.0, 180.0, 80.0),
-            0.0,
-            0.0
-        )
-
-        cameraOptions?.let {
-            mapView?.camera?.flyTo(
-                it,
-                MapAnimationOptions.mapAnimationOptions {
-                    duration(1500)
-                }
-            )
-            shouldFitCameraToRoute = false
         }
     }
 
@@ -2040,8 +1993,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         val colorTextPrimary = if (isDark) Color.WHITE else Color.parseColor("#0F172A")
         val colorTextSecondary = if (isDark) Color.parseColor("#B0BEC5") else Color.parseColor("#64748B")
         val cardBg = if (isDark) Color.parseColor("#152039") else Color.WHITE
-        val iconColor = if (isDark) Color.WHITE else Color.parseColor("#1E293B")
-        val buttonBg = if (isDark) Color.parseColor("#1F2937") else Color.parseColor("#F1F5F9")
+        val outlineColor = if (isDark) Color.parseColor("#334155") else Color.parseColor("#CBD5E1")
 
         sheet.findViewById<View>(R.id.bottomSheetContainer)?.setBackgroundResource(
             if (isDark) R.drawable.bg_bottom_sheet_dark else R.drawable.bg_bottom_sheet_dialog
@@ -2049,7 +2001,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         val btnClose = sheet.findViewById<View>(R.id.btnCloseNav)
         val btnRoute = sheet.findViewById<View>(R.id.btnViewRoute)
-        val outlineColor = if (isDark) Color.parseColor("#334155") else Color.parseColor("#CBD5E1")
 
         btnClose?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
         btnRoute?.background = ContextCompat.getDrawable(this, R.drawable.bg_circle_outline)
@@ -2111,11 +2062,10 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
                     val routeName = assignedRoute?.routeName
-                    com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Active", routeName)
+                    FirebaseRepository.updateDriverStatus(driverId, "Active", routeName)
                 }
 
-                drawerLayout.closeDrawer(androidx.core.view.GravityCompat.END)
-
+                drawerLayout.closeDrawer(GravityCompat.END)
                 dialog.dismiss()
             }, 200)
         }
@@ -2134,7 +2084,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 updateDutyUI(false)
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
-                    com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                    FirebaseRepository.updateDriverStatus(driverId, "Inactive")
                 }
 
                 dialog.dismiss()
@@ -2149,7 +2099,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         val dutySwitch = findViewById<SwitchMaterial>(R.id.switchDuty)
 
         cancelDutyAutoOffTimer()
-
         this.isDutyEnabled = isOnDuty
 
         isUserTriggeredChange = false
@@ -2168,13 +2117,12 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
 
             viewModel.currentDriver.value?.driverId?.let { driverId ->
-                com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Active")
+                FirebaseRepository.updateDriverStatus(driverId, "Active")
             }
         } else {
             drawerDutyLabel?.text = "DUTY STATUS: OFF"
 
             locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
-
             mapView?.location?.enabled = false
 
             if (isNavigating) {
@@ -2184,13 +2132,14 @@ class DriverDashboardActivity : AppCompatActivity() {
             mapboxNavigation?.stopTripSession()
 
             stopArrivalTimes.clear()
+            stopStates.clear()
             nextGlobalStopIndex = 0
             attendancePromptedStops.clear()
             traveledHistoryPoints.clear()
 
             viewModel.currentDriver.value?.driverId?.let { driverId ->
-                com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Inactive")
-                com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                FirebaseRepository.updateDriverRouteGeometry(
                     driverId, null, null, 0, emptyMap(), false
                 )
             }
@@ -2216,13 +2165,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (currentPoint != null && startPoint != null) {
             val results = FloatArray(1)
-            android.location.Location.distanceBetween(
+            Location.distanceBetween(
                 currentPoint.latitude(), currentPoint.longitude(),
                 startPoint.latitude(), startPoint.longitude(),
                 results
             )
             val distanceKm = results[0] / 1000.0
-            Toast.makeText(this, String.format(java.util.Locale.getDefault(), "You are %.2f km away from the starting point.", distanceKm), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, String.format(Locale.getDefault(), "You are %.2f km away from the starting point.", distanceKm), Toast.LENGTH_LONG).show()
         }
 
         val startName = if (route.pathPoints.isNotEmpty()) route.startPoint.ifEmpty { "Start Point" }
@@ -2353,8 +2302,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 cancelDutyAutoOffTimer()
                 if (isDutyEnabled) {
                     viewModel.currentDriver.value?.driverId?.let { driverId ->
-                        com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverId, "Inactive")
-                        com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+                        FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                        FirebaseRepository.updateDriverRouteGeometry(
                             driverId, null, null, 0, emptyMap(), false
                         )
                     }
@@ -2382,13 +2331,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (!isDutyEnabled || isNavigating) return
 
         cancelDutyAutoOffTimer()
-
         val driverIdSnapshot = viewModel.currentDriver.value?.driverId ?: return
 
         val runnable = Runnable {
-            Log.d("DutyDebug", "Grace period khatam - driver wapas nahi aya, auto Off Duty")
-            com.example.bustrack_app.data.FirebaseRepository.updateDriverStatus(driverIdSnapshot, "Inactive")
-            com.example.bustrack_app.data.FirebaseRepository.updateDriverRouteGeometry(
+            FirebaseRepository.updateDriverStatus(driverIdSnapshot, "Inactive")
+            FirebaseRepository.updateDriverRouteGeometry(
                 driverIdSnapshot, null, null, 0, emptyMap(), false
             )
         }

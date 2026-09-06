@@ -9,9 +9,8 @@ class MyApp : Application() {
         super.onCreate()
 
         val config = HashMap<String, String>()
-        config["cloud_name"] = "zhi36daa"
-        // Credentials moved to zhi36daa per requirements. 
-        // We use unsigned upload with preset 'BusTrack'.
+        config["cloud_name"] = "vomxnqzr"
+        config["upload_preset"] = "bus_track_images"
 
         MediaManager.init(this, config)
     }

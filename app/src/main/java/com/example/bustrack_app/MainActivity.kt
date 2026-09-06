@@ -77,7 +77,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         MediaManager.get().upload(imageUri!!)
-            .unsigned("BusTrack")
             .callback(object : UploadCallback {
 
                 override fun onStart(requestId: String) {

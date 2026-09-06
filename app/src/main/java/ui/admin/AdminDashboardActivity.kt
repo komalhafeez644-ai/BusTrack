@@ -195,6 +195,12 @@ class AdminDashboardActivity : AppCompatActivity() {
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
+        findViewById<View>(R.id.drawerEveningAttendance)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, AttendanceActivity::class.java))
+            drawerLayout.closeDrawer(GravityCompat.END)
+        }
+
         findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, ChangePasswordActivity::class.java)

@@ -79,7 +79,7 @@ class AttendanceStudentAdapter(
 
         private fun updateUI(status: String) {
             val displayStatus = when {
-                status.equals("Pending", true) -> "Pending"
+                status.equals("Pending", true) || status == "--" || status.isBlank() -> "Pending"
                 status.equals("Absent", true) -> "Absent"
                 status.equals("Leave", true) -> "Leave"
                 else -> "Present"

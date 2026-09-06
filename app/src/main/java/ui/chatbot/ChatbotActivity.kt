@@ -1,6 +1,7 @@
 package ui.chatbot
 
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
@@ -79,6 +80,15 @@ class ChatbotActivity : AppCompatActivity() {
                 val reply = ChatbotRepository.sendMessage(history)
                 adapter.addMessage(ChatMessageModel("assistant", reply))
             } catch (e: Exception) {
+                // DIAGNOSTIC: the real failure reason (HTTP status code + OpenAI's error
+                // body if the request reached the server and got a non-2xx response, or
+                // the exact exception type/message if it never reached the server at all -
+                // e.g. UnknownHostException, SSLHandshakeException, SocketTimeoutException)
+                // was previously discarded here with no logging at all, so Logcat showed
+                // nothing useful. Check Logcat filtered on tag "ChatbotDebug" after
+                // reproducing the failure - that will contain the exact underlying cause.
+                Log.e("ChatbotDebug", "Chatbot request failed: ${e.javaClass.name}: ${e.message}", e)
+
                 val friendlyMessage = when {
                     e.message?.contains("API key", true) == true ->
                         "Chatbot isn't configured yet. Please contact the app administrator."

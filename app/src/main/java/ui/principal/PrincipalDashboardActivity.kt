@@ -481,6 +481,15 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                 drawerLayout.closeDrawer(GravityCompat.END)
             }
         }
+        findViewById<View>(R.id.drawerEveningAttendance)?.let { row ->
+            row.setOnClickListener {
+                utils.ViewUtils.applyClickEffect(it)
+                val intent = Intent(this, ui.admin.AttendanceActivity::class.java)
+                intent.putExtra("VIEW_ONLY", true)
+                startActivity(intent)
+                drawerLayout.closeDrawer(GravityCompat.END)
+            }
+        }
         findViewById<View>(R.id.drawerPrincipalNotifications)?.let { row ->
             row.visibility = View.VISIBLE
             row.setOnClickListener {
