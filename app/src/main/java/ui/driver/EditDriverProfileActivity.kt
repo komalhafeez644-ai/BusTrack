@@ -29,7 +29,7 @@ class EditDriverProfileActivity : AppCompatActivity() {
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            binding.imgProfile.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, binding.imgProfile)
         }
     }
 
@@ -79,13 +79,7 @@ class EditDriverProfileActivity : AppCompatActivity() {
         
         binding.etEmail.isEnabled = false
         
-        if (!imageUrl.isNullOrEmpty()) {
-            Glide.with(this)
-                .load(imageUrl)
-                .placeholder(R.drawable.ic_person)
-                .circleCrop()
-                .into(binding.imgProfile)
-        }
+        utils.ImageUtils.loadProfileImage(this, imageUrl, binding.imgProfile)
     }
 
     private fun setupClickListeners() {

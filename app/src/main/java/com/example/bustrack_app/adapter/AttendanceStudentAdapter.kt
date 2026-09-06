@@ -44,15 +44,7 @@ class AttendanceStudentAdapter(
             binding.tvStudentName.text = student.name
             binding.tvStudentDetails.text = "ID: ${student.id} • ${student.grade}"
 
-            if (!student.profileImageUrl.isNullOrEmpty()) {
-                Glide.with(itemView.context)
-                    .load(student.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .circleCrop()
-                    .into(binding.ivStudent)
-            } else {
-                binding.ivStudent.setImageResource(R.drawable.ic_person)
-            }
+            utils.ImageUtils.loadProfileImage(itemView.context, student.profileImageUrl, binding.ivStudent)
 
             val status = studentStatuses[student.id] ?: "Pending"
             updateUI(status)

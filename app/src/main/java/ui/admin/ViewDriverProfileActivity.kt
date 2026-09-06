@@ -61,17 +61,7 @@ class ViewDriverProfileActivity : AppCompatActivity() {
         txtRoute.text = driver.route ?: "Not Assigned"
         txtBus.text = driver.assignedBus ?: "Not Assigned"
 
-        if (driver.profileImageUrl.isNotEmpty()) {
-            Glide.with(this)
-                .load(driver.profileImageUrl)
-                .placeholder(R.drawable.ic_person)
-                .error(R.drawable.ic_person)
-                .into(imgAvatar)
-        } else if (driver.profileImage != 0) {
-            imgAvatar.setImageResource(driver.profileImage)
-        } else {
-            imgAvatar.setImageResource(R.drawable.ic_person)
-        }
+        utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, imgAvatar)
     }
 
     private fun setupClickListeners() {

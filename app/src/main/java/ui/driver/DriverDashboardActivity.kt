@@ -1057,20 +1057,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         binding.tvGreeting.text = "${greeting.uppercase()}, \ud83d\udc4b"
         binding.tvDriverName.text = driver.name
 
-        if (driver.profileImageUrl.isNotEmpty()) {
-            Glide.with(this).load(driver.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(binding.ivProfile)
-        } else {
-            binding.ivProfile.setImageResource(R.drawable.ic_person)
-        }
+        utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, binding.ivProfile)
 
         findViewById<TextView>(R.id.drawerName)?.text = driver.name
         findViewById<TextView>(R.id.drawerEmail)?.text = driver.email
         findViewById<ImageView>(R.id.drawerImgProfile)?.let { drawerImg ->
-            if (driver.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(driver.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImg)
-            } else {
-                drawerImg.setImageResource(R.drawable.ic_person)
-            }
+            utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, drawerImg)
         }
     }
 

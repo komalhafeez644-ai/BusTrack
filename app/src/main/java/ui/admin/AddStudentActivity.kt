@@ -41,7 +41,7 @@ class AddStudentActivity : AppCompatActivity() {
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            binding.imgStudentUpload.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, binding.imgStudentUpload)
             binding.imgStudentUpload.setPadding(0, 0, 0, 0)
         }
     }

@@ -23,7 +23,7 @@
             android:background="@color/white"
             android:padding="2dp"
             android:src="@drawable/ic_person"
-            app:shapeAppearance="?attr/shapeAppearanceMediumComponent" />
+            app:shapeAppearanceOverlay="@style/CircleImage" />
 
         <TextView
             android:id="@+id/drawerName"

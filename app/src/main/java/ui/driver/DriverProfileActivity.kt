@@ -39,15 +39,7 @@ class DriverProfileActivity : AppCompatActivity() {
                 binding.tvInfoBus.text = driver.assignedBus ?: "Not Assigned"
                 binding.tvInfoRoute.text = driver.route ?: "No Route"
 
-                if (driver.profileImageUrl.isNotEmpty()) {
-                    Glide.with(this)
-                        .load(driver.profileImageUrl)
-                        .placeholder(R.drawable.ic_person)
-                        .circleCrop()
-                        .into(binding.imgProfile)
-                } else {
-                    binding.imgProfile.setImageResource(R.drawable.ic_person)
-                }
+                utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, binding.imgProfile)
             }
         }
     }

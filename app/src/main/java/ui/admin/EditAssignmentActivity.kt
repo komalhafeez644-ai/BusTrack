@@ -93,11 +93,7 @@ class EditAssignmentActivity : AppCompatActivity() {
             tvStudentName.text = item.studentName
             tvStudentDetails.text = "ID #BT-${item.id} • ${item.studentClass}"
             
-            if (item.image != 0) {
-                ivStudent.setImageResource(item.image)
-            } else {
-                ivStudent.setImageResource(com.example.bustrack_app.R.drawable.ic_person) // General Icon
-            }
+            utils.ImageUtils.loadProfileImage(this@EditAssignmentActivity, item.profileImageUrl, ivStudent)
             
             tvBusNumber.text = item.bestRoute
             tvStopName.text = item.nearestStop

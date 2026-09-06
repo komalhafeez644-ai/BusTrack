@@ -9,27 +9,53 @@ object LocationRepository {
 
     private val db = FirebaseFirestore.getInstance()
     private const val COLLECTION_NAME = "locations"
+    private var cachedLocations: List<LocationModel>? = null
 
     suspend fun getLocations(): List<LocationModel> {
+        cachedLocations?.let { return it }
         return try {
             val snapshot = db.collection(COLLECTION_NAME).get().await()
-            snapshot.toObjects(LocationModel::class.java)
+            val list = snapshot.toObjects(LocationModel::class.java)
+            cachedLocations = list
+            list
         } catch (e: Exception) {
             emptyList()
         }
     }
 
     suspend fun searchLocations(query: String): List<LocationModel> {
-        return try {
-            // Basic prefix search
-            val snapshot = db.collection(COLLECTION_NAME)
-                .whereGreaterThanOrEqualTo("name", query)
-                .whereLessThanOrEqualTo("name", query + "\uf8ff")
-                .get().await()
-            snapshot.toObjects(LocationModel::class.java)
-        } catch (e: Exception) {
-            emptyList()
+        val all = getLocations()
+        if (query.isBlank()) return emptyList()
+
+        val normalizedQuery = normalize(query)
+        val queryTokens = normalizedQuery.split(" ").filter { it.isNotEmpty() }
+
+        val exactMatches = mutableListOf<LocationModel>()
+        val partialMatches = mutableListOf<LocationModel>()
+        val tokenMatches = mutableListOf<LocationModel>()
+
+        for (loc in all) {
+            val normalizedName = normalize(loc.name)
+
+            if (normalizedName == normalizedQuery) {
+                exactMatches.add(loc)
+            } else if (normalizedName.contains(normalizedQuery)) {
+                partialMatches.add(loc)
+            } else if (queryTokens.isNotEmpty()) {
+                val nameTokens = normalizedName.split(" ").filter { it.isNotEmpty() }
+                if (queryTokens.all { q -> nameTokens.any { n -> n.startsWith(q) } }) {
+                    tokenMatches.add(loc)
+                }
+            }
         }
+
+        return (exactMatches + partialMatches + tokenMatches).distinctBy { it.id }
+    }
+
+    private fun normalize(text: String): String {
+        return text.lowercase(java.util.Locale.ROOT)
+            .trim()
+            .replace("\\s+".toRegex(), " ")
     }
 
     fun seedInitialLocations() {
@@ -38,8 +64,8 @@ object LocationRepository {
             LocationModel("2", "Army Housing Morgah", 33.53862, 73.08212),
             LocationModel("3", "DHA Phase 1", 33.556, 73.075),
             LocationModel("4", "Sector B1", 33.559, 73.076),
-            LocationModel("5", "Askari 14", 33.548, 73.065),
-            LocationModel("6", "Gulrez Housing", 33.565, 73.075),
+            LocationModel("5", "Askari 14", 33.543417, 73.065610),
+            LocationModel("6", "Gulrez Housing", 33.564822, 73.108306),
             LocationModel("7", "Gulistan Colony", 33.57071, 73.09205),
             LocationModel("8", "Chaklala", 33.60821, 73.09068),
             LocationModel("9", "Chaklala Scheme 2", 33.56711, 73.10803),
@@ -99,7 +125,7 @@ object LocationRepository {
             LocationModel("63", "Dhok Rajgaan Bus Stop", 33.55639, 73.06039),
             LocationModel("64", "Zia-ul-Haq Park Bus Stop", 33.55639, 73.06039),
             LocationModel("65", "Mubarik Lane, Adiala Road", 33.5563874, 73.0603909),
-            LocationModel("66", "FG Post Graduate College for Women", 33.5977, 73.0478)
+            LocationModel("66", "FG Post Graduate College for Women", 33.597910, 73.056956)
         )
 
         for (area in famousAreas) {

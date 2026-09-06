@@ -57,13 +57,7 @@ class DriverFaqActivity : AppCompatActivity() {
         val email = FirebaseAuth.getInstance().currentUser?.email?.trim()?.lowercase()
         if (email != null) {
             DriverRepository.driverList.value?.find { it.email.trim().lowercase() == email }?.let { driver ->
-                if (driver.profileImageUrl.isNotEmpty()) {
-                    Glide.with(this)
-                        .load(driver.profileImageUrl)
-                        .placeholder(R.drawable.ic_person)
-                        .circleCrop()
-                        .into(ivDriver)
-                }
+                utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, ivDriver)
             }
         }
     }

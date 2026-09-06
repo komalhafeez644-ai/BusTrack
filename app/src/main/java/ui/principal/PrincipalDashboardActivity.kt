@@ -85,7 +85,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
         drawerLayout = findViewById(R.id.drawerLayout)
 
-        findViewById<View>(R.id.btnMenuDrawer).setOnClickListener {
+        findViewById<View>(R.id.btnMenuDrawer)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             drawerLayout.openDrawer(GravityCompat.END)
         }
@@ -142,7 +142,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
     private fun setupUI() {
         // Driver Card Logic
-        findViewById<MaterialButton>(R.id.btnTrackDriver).setOnClickListener {
+        findViewById<MaterialButton>(R.id.btnTrackDriver)?.setOnClickListener {
             val selected = liveTrackingViewModel.selectedDriver.value
             if (selected != null) {
                 utils.ViewUtils.applyClickEffect(it)
@@ -154,16 +154,16 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<ImageView>(R.id.btnCloseCard).setOnClickListener {
+        findViewById<ImageView>(R.id.btnCloseCard)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            findViewById<View>(R.id.driverCard).visibility = View.GONE
+            findViewById<View>(R.id.driverCard)?.visibility = View.GONE
         }
 
         // Setup Search Suggestions
         val rvSuggestions = findViewById<RecyclerView>(R.id.rvSearchSuggestions)
         val cardSuggestions = findViewById<View>(R.id.searchSuggestionsCard)
 
-        rvSuggestions.layoutManager = LinearLayoutManager(this)
+        rvSuggestions?.layoutManager = LinearLayoutManager(this)
         searchAdapter = BusSearchAdapter { driver ->
             isUserInteracting = false
             liveTrackingViewModel.selectDriver(driver)
@@ -172,17 +172,18 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             } else {
                 android.widget.Toast.makeText(this, "Bus is currently offline", android.widget.Toast.LENGTH_SHORT).show()
             }
-            cardSuggestions.visibility = View.GONE
-            findViewById<EditText>(R.id.etSearchBus).setText(driver.assignedBus ?: driver.name)
-            findViewById<EditText>(R.id.etSearchBus).clearFocus()
+            cardSuggestions?.visibility = View.GONE
+            val etSearch = findViewById<EditText>(R.id.etSearchBus)
+            etSearch?.setText(driver.assignedBus ?: driver.name)
+            etSearch?.clearFocus()
         }
-        rvSuggestions.adapter = searchAdapter
+        rvSuggestions?.adapter = searchAdapter
 
         findViewById<EditText>(R.id.etSearchBus)?.setOnClickListener {
-            if (cardSuggestions.visibility == View.GONE) {
+            if (cardSuggestions?.visibility == View.GONE) {
                 val drivers = liveTrackingViewModel.allDriversForSearch.value ?: emptyList()
                 searchAdapter.updateData(drivers)
-                if (drivers.isNotEmpty()) cardSuggestions.visibility = View.VISIBLE
+                if (drivers.isNotEmpty()) cardSuggestions?.visibility = View.VISIBLE
             }
         }
 
@@ -190,13 +191,14 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             if (hasFocus) {
                 val drivers = liveTrackingViewModel.allDriversForSearch.value ?: emptyList()
                 searchAdapter.updateData(drivers)
-                if (drivers.isNotEmpty()) cardSuggestions.visibility = View.VISIBLE
+                if (drivers.isNotEmpty()) cardSuggestions?.visibility = View.VISIBLE
             } else {
-                cardSuggestions.postDelayed({ cardSuggestions.visibility = View.GONE }, 200)
+                cardSuggestions?.postDelayed({ cardSuggestions.visibility = View.GONE }, 200)
             }
         }
 
-        findViewById<EditText>(R.id.etSearchBus)?.addTextChangedListener { text ->
+        val etSearchBus = findViewById<EditText>(R.id.etSearchBus)
+        etSearchBus?.addTextChangedListener { text ->
             val query = text.toString().lowercase()
             val drivers = liveTrackingViewModel.allDriversForSearch.value ?: emptyList()
 
@@ -205,10 +207,10 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     it.name.lowercase().contains(query) || it.assignedBus?.lowercase()?.contains(query) == true
                 }
                 searchAdapter.updateData(filtered)
-                cardSuggestions.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
-            } else if (findViewById<EditText>(R.id.etSearchBus).isFocused) {
+                cardSuggestions?.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
+            } else if (etSearchBus?.isFocused == true) {
                 searchAdapter.updateData(drivers)
-                cardSuggestions.visibility = if (drivers.isNotEmpty()) View.VISIBLE else View.GONE
+                cardSuggestions?.visibility = if (drivers.isNotEmpty()) View.VISIBLE else View.GONE
             }
         }
 
@@ -245,15 +247,15 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
     private fun observeLiveTracking() {
         liveTrackingViewModel.activeDrivers.observe(this) { drivers ->
-            if (drivers.isEmpty()) {
-                findViewById<View>(R.id.driverCard).visibility = View.GONE
+            if (drivers == null || drivers.isEmpty()) {
+                findViewById<View>(R.id.driverCard)?.visibility = View.GONE
                 showUnavailableDialog()
             } else {
                 unavailableDialog?.dismiss()
                 unavailableDialog = null
                 isUnavailablePopupDismissed = false
             }
-            updateMarkers(drivers)
+            drivers?.let { updateMarkers(it) }
         }
 
         liveTrackingViewModel.selectedDriver.observe(this) { driver ->
@@ -262,6 +264,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     }
 
     private fun showUnavailableDialog() {
+        if (isFinishing || isDestroyed) return
         if (unavailableDialog?.isShowing == true || isUnavailablePopupDismissed) return
 
         unavailableDialog = android.app.Dialog(this)
@@ -326,19 +329,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     modelId(BUS_MODEL_ID)
                     modelType(ModelType.COMMON_3D)
                     modelScale(listOf(15.0, 15.0, 15.0))
-                    modelRotation(array {
-                        literal(0.0)
-                        literal(0.0)
-                        get("bearing")
-                    })
+                    modelRotation(listOf(0.0, 0.0, 0.0))
                 })
             } else {
                 (style.getLayer(BUS_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer)
-                    ?.modelRotation(array {
-                        literal(0.0)
-                        literal(0.0)
-                        get("bearing")
-                    })
+                    ?.modelRotation(listOf(0.0, 0.0, 0.0))
             }
 
             if (!style.styleLayerExists(BUS_LABEL_LAYER_ID)) {
@@ -429,11 +424,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private fun updateDriverCard(driver: DriverModel?) {
         val card = findViewById<View>(R.id.driverCard)
         if (driver == null) {
-            card.visibility = View.GONE
+            card?.visibility = View.GONE
             return
         }
 
-        if (card.visibility == View.GONE) {
+        if (card?.visibility == View.GONE) {
             card.visibility = View.VISIBLE
             card.alpha = 0f
             card.translationY = 100f
@@ -451,8 +446,10 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
     private fun observeProfileData() {
         profileViewModel.adminData.observe(this) { user ->
+            if (user == null) return@observe
+            
             // Update Dashboard Header
-            findViewById<TextView>(R.id.tvPrincipalName).text = user.fullName
+            findViewById<TextView>(R.id.tvPrincipalName)?.text = user.fullName
 
             // Update Drawer Header
             findViewById<TextView>(R.id.drawerName)?.text = user.fullName
@@ -461,12 +458,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             val profileImageView = findViewById<ImageView>(R.id.ivProfile)
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
 
-            if (user.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(profileImageView)
-                Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
-            } else {
-                profileImageView.setImageResource(R.drawable.ic_person)
-                drawerImageView.setImageResource(R.drawable.ic_person)
+            if (profileImageView != null) {
+                utils.ImageUtils.loadProfileImage(this, user.profileImageUrl, profileImageView)
+            }
+            if (drawerImageView != null) {
+                utils.ImageUtils.loadProfileImage(this, user.profileImageUrl, drawerImageView)
             }
         }
     }

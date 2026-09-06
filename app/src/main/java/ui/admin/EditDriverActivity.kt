@@ -33,7 +33,7 @@ class EditDriverActivity : AppCompatActivity() {
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            binding.imgDriverAvatar.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, binding.imgDriverAvatar)
             binding.imgDriverAvatar.setPadding(0, 0, 0, 0)
         }
     }
@@ -63,20 +63,7 @@ class EditDriverActivity : AppCompatActivity() {
                 updateRouteDisplay(it.assignedBus!!)
             }
             
-            when {
-                it.profileImageUrl.isNotEmpty() -> {
-                    Glide.with(this).load(it.profileImageUrl)
-                        .placeholder(R.drawable.ic_person)
-                        .error(R.drawable.ic_person)
-                        .into(binding.imgDriverAvatar)
-                }
-                it.profileImage != 0 -> {
-                    binding.imgDriverAvatar.setImageResource(it.profileImage)
-                }
-                else -> {
-                    binding.imgDriverAvatar.setImageResource(R.drawable.ic_person)
-                }
-            }
+            utils.ImageUtils.loadProfileImage(this, it.profileImageUrl, binding.imgDriverAvatar)
         }
 
         setupBusDropdown()

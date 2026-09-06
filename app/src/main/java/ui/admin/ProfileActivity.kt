@@ -48,13 +48,7 @@ class ProfileActivity : AppCompatActivity() {
             binding.tvInfoEmpID.text = empId
 
             // Load Image from URL
-            if (admin.profileImageUrl.isNotEmpty()) {
-                Glide.with(this)
-                    .load(admin.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .circleCrop()
-                    .into(binding.imgProfile)
-            }
+            utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, binding.imgProfile)
         }
     }
 

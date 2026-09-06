@@ -36,7 +36,7 @@ class AddDriverActivity : AppCompatActivity() {
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            binding.imgUpload.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, binding.imgUpload)
             binding.imgUpload.setPadding(0, 0, 0, 0)
         }
     }

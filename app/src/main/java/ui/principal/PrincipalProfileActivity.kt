@@ -46,13 +46,7 @@ class PrincipalProfileActivity : AppCompatActivity() {
                 binding.tvInfoPhone.text = phone.ifEmpty { "Not provided" }
                 binding.tvInfoEmpID.text = empId
 
-                if (imageUrl.isNotEmpty()) {
-                    Glide.with(this)
-                        .load(imageUrl)
-                        .placeholder(R.drawable.ic_person)
-                        .circleCrop()
-                        .into(binding.imgProfile)
-                }
+                utils.ImageUtils.loadProfileImage(this, imageUrl, binding.imgProfile)
             }
         }
     }

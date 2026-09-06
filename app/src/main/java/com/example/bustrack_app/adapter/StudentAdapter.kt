@@ -76,10 +76,7 @@ class StudentAdapter(
             if (student.profileImageUrl.isNotEmpty()) {
                 itemBinding.imgStudent.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE
-                Glide.with(itemBinding.root.context)
-                    .load(student.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .into(itemBinding.imgStudent)
+                utils.ImageUtils.loadProfileImage(itemBinding.root.context, student.profileImageUrl, itemBinding.imgStudent)
             } else if (student.profileImage != 0) {
                 itemBinding.imgStudent.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE

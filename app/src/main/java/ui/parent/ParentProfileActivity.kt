@@ -77,9 +77,7 @@ class ParentProfileActivity : AppCompatActivity() {
             binding.tvEmail.text = admin.email
             binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
             
-            if (admin.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(binding.imgProfile)
-            }
+            utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, binding.imgProfile)
         }
 
         viewModel.trackingRequests.observe(this) {

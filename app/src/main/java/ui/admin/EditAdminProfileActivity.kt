@@ -26,7 +26,7 @@ class EditAdminProfileActivity : AppCompatActivity() {
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            binding.imgProfile.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, binding.imgProfile)
         }
     }
 
@@ -69,10 +69,7 @@ class EditAdminProfileActivity : AppCompatActivity() {
                 binding.etDept.isEnabled = false
                 binding.etEmpId.isEnabled = false
                 
-                val imageUrl = document.getString("profileImageUrl")
-                if (!imageUrl.isNullOrEmpty()) {
-                    Glide.with(this).load(imageUrl).placeholder(R.drawable.ic_person).circleCrop().into(binding.imgProfile)
-                }
+                utils.ImageUtils.loadProfileImage(this, document.getString("profileImageUrl"), binding.imgProfile)
             }
     }
 

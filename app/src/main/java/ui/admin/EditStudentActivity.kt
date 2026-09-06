@@ -58,7 +58,7 @@ class EditStudentActivity : AppCompatActivity() {
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
-            imgStudentEdit.setImageURI(it)
+            utils.ImageUtils.loadPreviewImage(this, it, imgStudentEdit)
             imgStudentEdit.setPadding(0, 0, 0, 0)
         }
     }
@@ -145,13 +145,7 @@ class EditStudentActivity : AppCompatActivity() {
                 updateStopsForRoute(it.route!!, it.stopName)
             }
 
-            if (it.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(it.profileImageUrl).placeholder(R.drawable.ic_person).into(imgStudentEdit)
-            } else if (it.profileImage != 0) {
-                imgStudentEdit.setImageResource(it.profileImage)
-            } else {
-                imgStudentEdit.setImageResource(R.drawable.ic_person)
-            }
+            utils.ImageUtils.loadProfileImage(this, it.profileImageUrl, imgStudentEdit)
         }
     }
 

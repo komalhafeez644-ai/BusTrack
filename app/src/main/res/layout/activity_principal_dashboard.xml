@@ -40,7 +40,6 @@
                 app:shapeAppearanceOverlay="@style/CircleImage"
                 app:strokeColor="@color/white"
                 app:strokeWidth="1dp"
-                app:tint="@color/white"
                 android:contentDescription="@string/profile" />
 
             <LinearLayout

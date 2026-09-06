@@ -72,13 +72,8 @@ class AdminDashboardActivity : AppCompatActivity() {
             val profileImageView = findViewById<ImageView>(R.id.ivProfile)
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
             
-            if (admin.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(profileImageView)
-                Glide.with(this).load(admin.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
-            } else {
-                profileImageView.setImageResource(R.drawable.ic_person)
-                drawerImageView.setImageResource(R.drawable.ic_person)
-            }
+            utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, profileImageView)
+            utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, drawerImageView)
         }
     }
 

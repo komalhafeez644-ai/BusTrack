@@ -48,15 +48,7 @@ class ApplicationDetailActivity : AppCompatActivity() {
             binding.tvDistance.text = applicationData.distance
             binding.tvNearestStop.text = applicationData.nearestStop
 
-            if (applicationData.profileImageUrl.isNotEmpty()) {
-                com.bumptech.glide.Glide.with(this)
-                    .load(applicationData.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .into(binding.ivStudentProfile)
-            } else if (applicationData.image != 0) {
-                binding.ivStudentProfile.setImageResource(applicationData.image)
-                binding.ivStudentProfile.setPadding(0, 0, 0, 0)
-            }
+            utils.ImageUtils.loadProfileImage(this, applicationData.profileImageUrl, binding.ivStudentProfile)
             
             // Status Color Logic for Detail Screen
             if (applicationData.status == "Approved") {

@@ -597,11 +597,9 @@ class ParentDashboardActivity : AppCompatActivity() {
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
             val headerImageView = findViewById<ImageView>(R.id.ivProfile)
             
-            if (user.profileImageUrl.isNotEmpty()) {
-                Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(drawerImageView)
-                if (headerImageView != null) {
-                    Glide.with(this).load(user.profileImageUrl).placeholder(R.drawable.ic_person).circleCrop().into(headerImageView)
-                }
+            utils.ImageUtils.loadProfileImage(this, user.profileImageUrl, drawerImageView)
+            if (headerImageView != null) {
+                utils.ImageUtils.loadProfileImage(this, user.profileImageUrl, headerImageView)
             }
         }
     }

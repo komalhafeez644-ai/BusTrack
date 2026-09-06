@@ -326,70 +326,67 @@ class DrawRouteActivity : AppCompatActivity() {
 
     private fun performSearch(query: String, requestId: Long) {
         val cleanQuery = query.trim()
+        if (cleanQuery.isEmpty()) return
+
         lifecycleScope.launch {
             try {
-                val firestoreResults = mutableListOf<LocationModel>()
-                val variants = listOf(
-                    cleanQuery,
-                    cleanQuery.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
-                    cleanQuery.uppercase()
-                ).distinct()
+                // 1. Check Firestore Locations first (Case-insensitive Improved Search)
+                val firestoreResults = LocationRepository.searchLocations(cleanQuery)
 
-                for (v in variants) {
-                    firestoreResults.addAll(LocationRepository.searchLocations(v))
-                }
-                val finalCustomResults = firestoreResults.distinctBy { it.id }
-
-                // Stale check: is dauraan user aage type kar chuka ho sakta hai ya select/clear
-                // kar chuka ho sakta hai - agar ye ab "latest" request nahi raha, to yahi ruk jao.
+                // Stale check
                 if (requestId != searchRequestId) return@launch
 
-                val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
-                val searchOptions = SearchOptions(
-                    proximity = mapCenter,
-                    countries = listOf(IsoCountryCode.PAKISTAN),
-                    limit = 10,
-                    types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.NEIGHBORHOOD, QueryType.PLACE, QueryType.LOCALITY)
-                )
+                if (firestoreResults.isNotEmpty()) {
+                    // Requirement: If Firestore match found, DO NOT call Mapbox
+                    runOnUiThread {
+                        if (requestId != searchRequestId) return@runOnUiThread
+                        searchAdapter.updateResults(firestoreResults)
+                        binding.rvSearchResults.visibility = View.VISIBLE
+                    }
+                } else {
+                    // 2. Fallback to Mapbox search API ONLY if no Firestore matches
+                    val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
+                    val searchOptions = SearchOptions(
+                        proximity = mapCenter,
+                        countries = listOf(IsoCountryCode.PAKISTAN),
+                        limit = 10,
+                        types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.NEIGHBORHOOD, QueryType.PLACE, QueryType.LOCALITY)
+                    )
 
-                searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
-                    override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
-                        // Stale check (dobara) - Mapbox call khud bhi async hai, is beech mein
-                        // ek aur naya search shuru ho chuka ho sakta hai.
-                        if (requestId != searchRequestId) return
+                    searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
+                        override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                            if (requestId != searchRequestId) return
 
-                        val combinedResults = mutableListOf<Any>()
-                        combinedResults.addAll(finalCustomResults)
-                        combinedResults.addAll(suggestions)
+                            runOnUiThread {
+                                if (requestId != searchRequestId) return@runOnUiThread
+                                if (suggestions.isNotEmpty()) {
+                                    searchAdapter.updateResults(suggestions)
+                                    binding.rvSearchResults.visibility = View.VISIBLE
+                                } else {
+                                    binding.rvSearchResults.visibility = View.GONE
+                                }
+                            }
+                        }
 
-                        runOnUiThread {
-                            if (requestId != searchRequestId) return@runOnUiThread
-                            if (combinedResults.isNotEmpty()) {
-                                searchAdapter.updateResults(combinedResults)
-                                binding.rvSearchResults.visibility = View.VISIBLE
-                            } else {
+                        override fun onError(e: Exception) {
+                            if (requestId != searchRequestId) return
+                            runOnUiThread {
+                                if (requestId != searchRequestId) return@runOnUiThread
                                 binding.rvSearchResults.visibility = View.GONE
                             }
                         }
-                    }
-
-                    override fun onError(e: Exception) {
-                        if (requestId != searchRequestId) return
-                        runOnUiThread {
-                            if (requestId != searchRequestId) return@runOnUiThread
-                            if (finalCustomResults.isNotEmpty()) {
-                                searchAdapter.updateResults(finalCustomResults)
-                                binding.rvSearchResults.visibility = View.VISIBLE
-                            } else {
-                                binding.rvSearchResults.visibility = View.GONE
-                            }
-                        }
-                    }
-                })
+                    })
+                }
             } catch (e: Exception) {
                 Log.e("SearchDebug", "Search error: ${e.message}")
             }
         }
+    }
+
+    private fun normalize(text: String): String {
+        return text.lowercase(java.util.Locale.ROOT)
+            .trim()
+            .replace("\\s+".toRegex(), " ")
     }
 
     private fun handleSearchResult(point: Point, name: String) {

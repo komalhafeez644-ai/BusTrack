@@ -2,40 +2,48 @@ package utils
 
 import android.net.Uri
 import android.util.Log
-import com.google.firebase.storage.ktx.storage
-import com.google.firebase.ktx.Firebase
-import java.util.UUID
+import com.cloudinary.android.MediaManager
+import com.cloudinary.android.callback.ErrorInfo
+import com.cloudinary.android.callback.UploadCallback
 
 /**
- * Utility to handle image uploads to Firebase Storage
+ * Utility to handle image uploads to Cloudinary (replacing Firebase Storage for better free-tier reliability)
  */
 object StorageUtils {
 
-    private val storage = Firebase.storage.reference
-
     /**
-     * Uploads an image to a specific folder and returns the download URL
+     * Uploads an image to Cloudinary using the 'BusTrack' unsigned preset and returns the secure HTTPS URL
      */
     fun uploadImage(folder: String, uri: Uri, onResult: (String?) -> Unit) {
-        val fileName = "${UUID.randomUUID()}.jpg"
-        val ref = storage.child("$folder/$fileName")
+        Log.d("Cloudinary", "Starting upload to folder: $folder")
 
-        Log.d("StorageUtils", "Starting upload to: $folder/$fileName")
+        MediaManager.get().upload(uri)
+            .option("folder", folder)
+            .unsigned("BusTrack")
+            .callback(object : UploadCallback {
+                override fun onStart(requestId: String) {
+                    Log.d("Cloudinary", "Upload started: $requestId")
+                }
 
-        ref.putFile(uri)
-            .addOnSuccessListener { taskSnapshot ->
-                Log.d("StorageUtils", "Upload successful, getting download URL...")
-                ref.downloadUrl.addOnSuccessListener { downloadUri ->
-                    Log.d("StorageUtils", "URL obtained: $downloadUri")
-                    onResult(downloadUri.toString())
-                }.addOnFailureListener { e ->
-                    Log.e("StorageUtils", "Failed to get download URL", e)
+                override fun onProgress(requestId: String, bytes: Long, totalBytes: Long) {
+                    // Optional: track progress
+                }
+
+                override fun onSuccess(requestId: String, resultData: Map<*, *>) {
+                    val url = resultData["secure_url"] as? String
+                    Log.d("Cloudinary", "Upload successful: $url")
+                    onResult(url)
+                }
+
+                override fun onError(requestId: String, error: ErrorInfo) {
+                    Log.e("Cloudinary", "Upload failed: ${error.description}")
                     onResult(null)
                 }
-            }
-            .addOnFailureListener { e ->
-                Log.e("StorageUtils", "Upload failed: ${e.message}", e)
-                onResult(null)
-            }
+
+                override fun onReschedule(requestId: String, error: ErrorInfo) {
+                    Log.d("Cloudinary", "Upload rescheduled")
+                }
+            })
+            .dispatch()
     }
 }

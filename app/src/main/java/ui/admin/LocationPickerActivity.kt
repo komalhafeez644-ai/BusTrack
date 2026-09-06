@@ -226,68 +226,54 @@ class LocationPickerActivity : AppCompatActivity() {
         lastSearchQuery = cleanQuery
         lifecycleScope.launch {
             try {
-                // 1. Repository Search (Firestore Global Locations)
-                val firestoreResults = mutableListOf<LocationModel>()
-                val variants = listOf(
-                    cleanQuery, 
-                    cleanQuery.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
-                    cleanQuery.uppercase()
-                ).distinct()
+                // 1. Repository Search (Improved Firestore Global Locations Search)
+                val firestoreResults = LocationRepository.searchLocations(cleanQuery)
 
-                for (v in variants) {
-                    firestoreResults.addAll(LocationRepository.searchLocations(v))
-                }
-                val finalCustomResults = firestoreResults.distinctBy { it.id }
+                if (cleanQuery != lastSearchQuery) return@launch
 
-                // 2. Mapbox Search
-                val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
-                val searchOptions = SearchOptions(
-                    proximity = mapCenter,
-                    countries = listOf(IsoCountryCode.PAKISTAN),
-                    limit = 10,
-                    types = listOf(
-                        QueryType.ADDRESS,
-                        QueryType.POI,
-                        QueryType.NEIGHBORHOOD,
-                        QueryType.PLACE,
-                        QueryType.LOCALITY,
-                        QueryType.DISTRICT
+                if (firestoreResults.isNotEmpty()) {
+                    // Requirement: If Firestore match found, show it and skip Mapbox
+                    runOnUiThread {
+                        binding.searchProgress.visibility = View.GONE
+                        binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
+                        searchAdapter.setResults(firestoreResults)
+                        binding.rvSearchResults.visibility = View.VISIBLE
+                    }
+                } else {
+                    // 2. Fallback to Mapbox Search API ONLY if no Firestore results found
+                    val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
+                    val searchOptions = SearchOptions(
+                        proximity = mapCenter,
+                        countries = listOf(IsoCountryCode.PAKISTAN),
+                        limit = 10,
+                        types = listOf(QueryType.ADDRESS, QueryType.POI, QueryType.NEIGHBORHOOD, QueryType.PLACE, QueryType.LOCALITY, QueryType.DISTRICT)
                     )
-                )
 
-                searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
-                    override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
-                        if (cleanQuery != lastSearchQuery) return
-                        
-                        val combined = mutableListOf<Any>()
-                        combined.addAll(finalCustomResults)
-                        combined.addAll(suggestions)
-                        runOnUiThread {
-                            binding.searchProgress.visibility = View.GONE
-                            binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
-                            if (combined.isNotEmpty()) {
-                                searchAdapter.setResults(combined)
-                                binding.rvSearchResults.visibility = View.VISIBLE
-                            } else {
+                    searchEngine.search(cleanQuery, searchOptions, object : SearchSuggestionsCallback {
+                        override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
+                            if (cleanQuery != lastSearchQuery) return
+                            
+                            runOnUiThread {
+                                binding.searchProgress.visibility = View.GONE
+                                binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
+                                if (suggestions.isNotEmpty()) {
+                                    searchAdapter.setResults(suggestions)
+                                    binding.rvSearchResults.visibility = View.VISIBLE
+                                } else {
+                                    binding.rvSearchResults.visibility = View.GONE
+                                }
+                            }
+                        }
+                        override fun onError(e: Exception) {
+                            if (cleanQuery != lastSearchQuery) return
+                            runOnUiThread {
+                                binding.searchProgress.visibility = View.GONE
+                                binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
                                 binding.rvSearchResults.visibility = View.GONE
                             }
                         }
-                    }
-                    override fun onError(e: Exception) {
-                        if (cleanQuery != lastSearchQuery) return
-
-                        runOnUiThread {
-                            binding.searchProgress.visibility = View.GONE
-                            binding.btnClearSearch.visibility = if (binding.etSearchLocation.text.isEmpty()) View.GONE else View.VISIBLE
-                            if (finalCustomResults.isNotEmpty()) {
-                                searchAdapter.setResults(finalCustomResults)
-                                binding.rvSearchResults.visibility = View.VISIBLE
-                            } else {
-                                binding.rvSearchResults.visibility = View.GONE
-                            }
-                        }
-                    }
-                })
+                    })
+                }
             } catch (e: Exception) {
                 Log.e("SearchDebug", "Search error: ${e.message}")
             }

@@ -110,16 +110,7 @@ class StudentDetailsActivity : AppCompatActivity() {
             binding.tvPhoneNumber.text = data.phoneNumber
             
             // Image Loading logic
-            if (data.profileImageUrl.isNotEmpty()) {
-                com.bumptech.glide.Glide.with(this)
-                    .load(data.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .into(binding.imgStudentProfile)
-            } else if (data.profileImage != 0) {
-                binding.imgStudentProfile.setImageResource(data.profileImage)
-            } else {
-                binding.imgStudentProfile.setImageResource(R.drawable.ic_person)
-            }
+            utils.ImageUtils.loadProfileImage(this, data.profileImageUrl, binding.imgStudentProfile)
         }
     }
 

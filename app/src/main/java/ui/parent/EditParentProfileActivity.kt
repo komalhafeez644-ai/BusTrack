@@ -70,11 +70,7 @@ class EditParentProfileActivity : AppCompatActivity() {
     }
 
     private fun displaySelectedImage(uri: Uri) {
-        Glide.with(this)
-            .load(uri)
-            .placeholder(R.drawable.ic_person)
-            .circleCrop()
-            .into(binding.imgProfile)
+        utils.ImageUtils.loadPreviewImage(this, uri, binding.imgProfile)
     }
 
     private fun setupObservers() {
@@ -97,12 +93,8 @@ class EditParentProfileActivity : AppCompatActivity() {
             binding.etCity.setText(data.city)
             
             // Only load from network if user hasn't selected a new local image
-            if (selectedImageUri == null && data.profileImageUrl.isNotEmpty()) {
-                Glide.with(this)
-                    .load(data.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .circleCrop()
-                    .into(binding.imgProfile)
+            if (selectedImageUri == null) {
+                utils.ImageUtils.loadProfileImage(this, data.profileImageUrl, binding.imgProfile)
             }
         }
     }
