@@ -52,7 +52,6 @@ import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
 import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
 import com.mapbox.maps.extension.style.layers.properties.generated.ModelType
 import com.mapbox.maps.extension.style.layers.properties.generated.ModelScaleMode
-import com.mapbox.maps.extension.style.layers.properties.generated.ModelElevationReference
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
@@ -474,8 +473,9 @@ class TrackDriverActivity : AppCompatActivity() {
                             modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG))
                             // Z-axis lift so the model draws above the route/casing line
                             // layers instead of underneath them; X/Y stay untouched.
+                            // (modelElevationReference isn't available in this SDK version —
+                            // modelTranslation's Z component alone provides the lift.)
                             modelTranslation(listOf(0.0, 0.0, BUS_MODEL_ELEVATION_METERS))
-                            modelElevationReference(ModelElevationReference.GROUND)
                         })
                     }
 
