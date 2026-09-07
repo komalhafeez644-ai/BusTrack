@@ -51,6 +51,9 @@ import com.mapbox.maps.extension.style.layers.getLayer
 import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
 import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
 import com.mapbox.maps.extension.style.layers.properties.generated.ModelType
+import com.mapbox.maps.extension.style.layers.properties.generated.ModelScaleMode
+import com.mapbox.maps.extension.style.layers.properties.generated.ModelElevationReference
+import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.sources.getSource
@@ -99,6 +102,56 @@ class TrackDriverActivity : AppCompatActivity() {
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
 
+    // 3D bus model orientation/scale — kept identical to DriverDashboardActivity so the
+    // bus renders the same way for Parent/Admin/Principal as it does for the Driver.
+    // Static base correction: X=0, Y=0 (no roll offset), Z=90 (asset-forward correction).
+    // Only the Z-axis bearing term is added dynamically as the bus moves/turns.
+    private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0.0
+    private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0.0
+    private val BUS_MODEL_BASE_Z_DEG = 90.0
+    // Vertical (Z-axis) lift only — the route/casing line layers were rendering on top of
+    // the bus model at Z=0. Ground-referenced elevation lift makes the model draw above
+    // the route surface without touching rotation, scale, or the route layers themselves.
+    private val BUS_MODEL_ELEVATION_METERS = 3.0
+    private var lastAppliedBusScale = -1f
+    private val MIN_BUS_MODEL_SCALE = 1.7f
+    private val MAX_BUS_MODEL_SCALE = 2.0f
+    private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
+    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
+    private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
+    private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
+
+    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly so the bus appears
+    // the same apparent size on Parent/Admin/Principal screens as on the Driver's own.
+    private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
+        val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
+            .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
+
+        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
+        val apparentTarget = (BUS_MODEL_SCALE_REFERENCE_VALUE * Math.pow(2.0, apparentExponent))
+            .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
+
+        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
+        return (apparentTarget * worldToScreenCompensation).toFloat()
+    }
+
+    private fun updateBusModelScaleForZoom() {
+        val cameraState = mapView?.mapboxMap?.cameraState ?: return
+        val newScale = computeBusModelScale(cameraState.zoom, cameraState.pitch)
+
+        if (kotlin.math.abs(newScale - lastAppliedBusScale) < 0.05f) return
+        lastAppliedBusScale = newScale
+
+        mapView?.mapboxMap?.getStyle { style ->
+            val modelLayer = style.getLayer(DRIVER_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer
+            modelLayer?.modelScale(listOf(newScale.toDouble(), newScale.toDouble(), newScale.toDouble()))
+        }
+    }
+
+    private val busModelCameraChangeListener = OnCameraChangeListener {
+        updateBusModelScaleForZoom()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -118,6 +171,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
                 // Register the 3D bus model from app/src/main/assets/bus.glb
                 style.addStyleModel(DRIVER_MODEL_ID, "asset://bus.glb")
+                mapView?.mapboxMap?.addOnCameraChangeListener(busModelCameraChangeListener)
 
                 // Use a realistic blue bus icon for a "3D" navigation look
                 bitmapFromDrawableRes(this, R.drawable.blue_bus)?.let { style.addImage("bus-icon", it) }
@@ -289,8 +343,15 @@ class TrackDriverActivity : AppCompatActivity() {
                 if (currentRouteId != it.id) {
                     currentRouteId = it.id
                     drawInitialRoute(it)
-                    // Populate stops list immediately even if driver hasn't moved
-                    stopsAdapter.updateStops(it.stopsList, 0, "NEXT")
+                    // Populate stops list immediately even if driver hasn't moved,
+                    // using the same Driver-authoritative reconstruction as
+                    // everywhere else. If driver data hasn't loaded yet, every
+                    // stop just shows "Upcoming" with nothing highlighted.
+                    viewModel.targetDriver.value?.let { driver -> applyDriverStopState(it, driver) }
+                        ?: run {
+                            it.stopsList.forEach { stop -> stop.time = "TBD" }
+                            stopsAdapter.updateStops(it.stopsList, -1)
+                        }
                     // Trigger immediate UI refresh to clip route to current bus location
                     viewModel.targetDriver.value?.let { driver -> updateUI(driver) }
                 }
@@ -397,11 +458,24 @@ class TrackDriverActivity : AppCompatActivity() {
                     }
 
                     if (!style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
+                        // Base orientation/scale matches DriverDashboardActivity's LocationPuck3D
+                        // setup exactly: modelRotation X=0, Y=0, Z=90 (asset-forward correction),
+                        // and the same zoom-compensated scale formula (ModelScaleMode.MAP).
+                        val initialZoom = mapView?.mapboxMap?.cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM
+                        val initialPitch = mapView?.mapboxMap?.cameraState?.pitch ?: 0.0
+                        val initialScale = computeBusModelScale(initialZoom, initialPitch)
+                        lastAppliedBusScale = initialScale
+
                         style.addLayer(modelLayer(DRIVER_MODEL_LAYER_ID, DRIVER_SOURCE_ID) {
                             modelId(DRIVER_MODEL_ID)
                             modelType(ModelType.COMMON_3D)
-                            modelScale(listOf(5.0, 5.0, 5.0)) // low-poly assets are usually smaller units — tune this after first run
-                            modelRotation(listOf(0.0, 0.0, 180.0))
+                            modelScale(listOf(initialScale.toDouble(), initialScale.toDouble(), initialScale.toDouble()))
+                            modelScaleMode(ModelScaleMode.MAP)
+                            modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG))
+                            // Z-axis lift so the model draws above the route/casing line
+                            // layers instead of underneath them; X/Y stay untouched.
+                            modelTranslation(listOf(0.0, 0.0, BUS_MODEL_ELEVATION_METERS))
+                            modelElevationReference(ModelElevationReference.GROUND)
                         })
                     }
 
@@ -436,7 +510,9 @@ class TrackDriverActivity : AppCompatActivity() {
                             if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
                                 val bearing = calculateBearing(start, targetPoint)
                                 val modelLayer = style.getLayer(DRIVER_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer
-                                modelLayer?.modelRotation(listOf(0.0, 0.0, bearing.toDouble() + 180.0))
+                                // Same base Z correction (90°) as Driver Dashboard's LocationPuck3D;
+                                // only the live compass bearing is added on top, dynamically.
+                                modelLayer?.modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG + bearing.toDouble()))
                                 animateDriver(start, targetPoint)
                             }
                         }
@@ -451,21 +527,15 @@ class TrackDriverActivity : AppCompatActivity() {
             viewModel.assignedRoute.value?.let { route ->
                 updateRouteSplitting(targetPoint, route, driver)
 
-                // Identify next stop status precisely from Driver's navigation state
-                val globalNextIdx = driver.nextStopIndex
-                if (globalNextIdx < route.stopsList.size) {
-                    val stopPoint = Point.fromLngLat(route.stopsList[globalNextIdx].longitude, route.stopsList[globalNextIdx].latitude)
-                    val distance = TurfMeasurement.distance(targetPoint, stopPoint, TurfConstants.UNIT_METERS)
-
-                    // Check if driver has reported arrival or is within radius
-                    val hasArrived = driver.stopArrivalTimes.containsKey(globalNextIdx.toString()) || distance < 150.0
-                    val status = if (hasArrived) "ARRIVED" else "NEXT"
-
-                    // The index should never decrease during a trip
-                    stopsAdapter.updateStops(route.stopsList, globalNextIdx, status)
-                } else {
-                    calculateProgress(driver, route) // Fallback to distance-based
-                }
+                // Stop status is derived ONLY from the Driver Module's authoritative,
+                // persisted state (driver.stopArrivalTimes + driver.nextStopIndex) -
+                // see applyDriverStopState() below. No independent distance/time based
+                // arrival detection is performed here anymore; the old code ran its
+                // own 150m-radius check that could disagree with the Driver's actual
+                // 80m arrival / 70m departure geofence (with a 3-fix confirm
+                // threshold), which was the root cause of stop statuses not matching
+                // the Driver Module in real time.
+                applyDriverStopState(route, driver)
             }
 
             // Apply a tilted 3D perspective
@@ -531,34 +601,81 @@ class TrackDriverActivity : AppCompatActivity() {
         return ((Math.toDegrees(brng) + 360) % 360).toFloat()
     }
 
-    private fun calculateProgress(driver: DriverModel, route: RouteModel) {
-        val driverPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-        var closestIdx = 0
-        var minDistance = Double.MAX_VALUE
+    /**
+     * Single source of truth for stop status in this Activity (used by Admin's
+     * LiveTracking -> Track Driver flow, Parent's Track Driver flow, and
+     * Principal's Track Driver flow - they all share this Activity).
+     *
+     * Mirrors DriverDashboardActivity.observeViewModel()'s own persisted-state
+     * reconstruction exactly:
+     *  - "Skipped"                -> stop.time = "Skipped"
+     *  - a recorded arrival time  -> stop.time = "Arrived: <time>" (kept forever,
+     *                                 whether the stop is the live one or already
+     *                                 passed - the adapter renders every index
+     *                                 other than liveArrivedIndex that already has
+     *                                 an "Arrived:" time as PASSED)
+     *  - the current next stop,
+     *    not yet arrived          -> stop.time reflects driver.eta (the same
+     *                                 value already shown to Parent/Principal/Admin
+     *                                 as the driver's live ETA), so this stop's
+     *                                 upcoming ETA always matches what everyone
+     *                                 else sees for the driver
+     *  - any other upcoming stop  -> "TBD" (no per-stop ETA is currently
+     *                                 synced to Firestore for stops beyond the
+     *                                 immediate next one - see audit note).
+     *                                 NOTE: this MUST be "TBD", not "Upcoming" -
+     *                                 NavigationStopsAdapter's display-format
+     *                                 branch does a raw `stop.time.contains("min")`
+     *                                 check to detect duration-style ETA strings,
+     *                                 and "Upcoming" contains the substring "min"
+     *                                 (co-MIN-g), which used to make it fall into
+     *                                 that branch and render as "ETA: Upcoming".
+     *                                 "TBD" is caught by the adapter's very first
+     *                                 branch instead and renders cleanly as
+     *                                 "ETA: --". Keep this in sync with
+     *                                 DriverDashboardActivity, which already uses
+     *                                 "TBD" for the same fallback.
+     *
+     * liveArrivedIndex is only set when the Driver has arrived at nextStopIndex
+     * but has not yet departed it (i.e. an arrival time is recorded for that
+     * exact index) - identical to isCurrentlyAtStop/lastArrivedStopIndex on the
+     * Driver side.
+     */
+    private fun applyDriverStopState(route: RouteModel, driver: DriverModel) {
+        val stops = route.stopsList
+        val nextIdx = driver.nextStopIndex
 
-        for (i in route.stopsList.indices) {
-            val stop = route.stopsList[i]
-            val stopPoint = Point.fromLngLat(stop.longitude, stop.latitude)
-            val distance = TurfMeasurement.distance(driverPoint, stopPoint, TurfConstants.UNIT_METERS)
-            if (distance < minDistance) {
-                minDistance = distance
-                closestIdx = i
+        stops.forEachIndexed { index, stop ->
+            val arrival = driver.stopArrivalTimes[index.toString()]
+            stop.time = when {
+                arrival == "Skipped" -> "Skipped"
+                arrival != null -> "Arrived: $arrival"
+                // driver.stopEtaTimes mirrors the Driver Module's own per-stop
+                // stopEtaTexts map (added alongside stopArrivalTimes in
+                // FirebaseRepository.updateDriverLiveState), so every upcoming
+                // stop gets the exact same "ETA: h:mm a" text the Driver itself
+                // shows - not just the immediate next one. "TBD" (not "Upcoming")
+                // is used as the fallback - see kdoc above.
+                else -> driver.stopEtaTimes[index.toString()] ?: "TBD"
             }
         }
 
-        val hasArrived = driver.stopArrivalTimes.containsKey(closestIdx.toString()) || minDistance < 150.0
-        val status = if (hasArrived) "ARRIVED" else "NEXT"
+        val liveArrivedIndex = if (nextIdx in stops.indices) {
+            val arrivalAtNext = driver.stopArrivalTimes[nextIdx.toString()]
+            if (arrivalAtNext != null && arrivalAtNext != "Skipped") nextIdx else -1
+        } else {
+            -1
+        }
 
-        // Use the driver's nextStopIndex to ensure we don't go backwards
-        val displayIdx = Math.max(closestIdx, driver.nextStopIndex)
-        stopsAdapter.updateStops(route.stopsList, displayIdx, status)
+        stopsAdapter.updateStops(stops, liveArrivedIndex)
     }
 
     private fun drawInitialRoute(route: RouteModel) {
         if (route.pathPoints.isEmpty()) return
 
-        // Update Stops List immediately
-        stopsAdapter.updateStops(route.stopsList, 0, "NEXT")
+        // Stop list state is populated by applyDriverStopState(), called right
+        // after this by the assignedRoute observer - not here, to avoid briefly
+        // flashing every stop as "NEXT" via the old status convention.
 
         mapView?.mapboxMap?.getStyle { style ->
             try {
@@ -810,6 +927,7 @@ class TrackDriverActivity : AppCompatActivity() {
     override fun onStop() { super.onStop(); mapView?.onStop() }
     override fun onDestroy() {
         super.onDestroy()
+        mapView?.mapboxMap?.removeOnCameraChangeListener(busModelCameraChangeListener)
         bitmapCache.clear()
         mapView?.onDestroy()
     }

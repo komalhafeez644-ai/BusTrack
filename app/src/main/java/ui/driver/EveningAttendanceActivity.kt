@@ -91,8 +91,17 @@ class EveningAttendanceActivity : AppCompatActivity() {
             ViewUtils.applyClickEffect(it)
             it.postDelayed({
                 Toast.makeText(this, "Daily attendance records synced successfully!", Toast.LENGTH_LONG).show()
-                // The individual records are already being saved on selection, 
-                // but this button serves as a final confirmation/sync trigger.
+                
+                // System Notification: Attendance Submitted
+                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid?.let { driverId ->
+                    com.example.bustrack_app.data.FirebaseRepository.sendSystemNotification(
+                        driverId = driverId,
+                        title = "Attendance Submitted",
+                        message = "Student attendance for your trip has been successfully submitted. The attendance record has been saved for the current trip and date.",
+                        type = com.example.bustrack_app.models.NotificationModel.TYPE_GENERAL
+                    )
+                }
+
                 finish()
             }, 200)
         }
@@ -271,7 +280,11 @@ class EveningAttendanceActivity : AppCompatActivity() {
                         adapter.updateData(attendanceList)
                     }
                     com.example.bustrack_app.data.FirebaseRepository.notifyParentsOfAttendance(
-                        item.studentId, item.studentName, newStatus, isMorning
+                        item.studentId, 
+                        item.studentName, 
+                        newStatus, 
+                        item.date,
+                        isMorning
                     )
                 } else {
                     Toast.makeText(this@EveningAttendanceActivity, "Failed to sync with server", Toast.LENGTH_SHORT).show()

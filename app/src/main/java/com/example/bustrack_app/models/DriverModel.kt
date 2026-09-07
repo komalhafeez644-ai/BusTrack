@@ -6,6 +6,7 @@ import java.io.Serializable
 data class DriverModel(
     @DocumentId
     val driverId: String = "",
+    val uid: String = "",
     val id: String = "",
     var name: String = "",
     var status: String = "",
@@ -26,5 +27,6 @@ data class DriverModel(
     var traveledPolyline: String? = null,
     var nextStopIndex: Int = 0,
     var stopArrivalTimes: Map<String, String> = emptyMap(),
+    var stopEtaTimes: Map<String, String> = emptyMap(),
     var isNavigating: Boolean = false
 ) : Serializable

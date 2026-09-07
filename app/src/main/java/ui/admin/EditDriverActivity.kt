@@ -14,6 +14,7 @@ import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.BusRepository
 import com.example.bustrack_app.data.DriverRepository
+import com.example.bustrack_app.data.FirebaseRepository
 import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.databinding.ActivityEditDriverBinding
 import com.example.bustrack_app.models.BusModel
@@ -204,6 +205,18 @@ class EditDriverActivity : AppCompatActivity() {
             
             // 1. Dependency Logic: Sync with Bus and Route Repositories
             syncDriverToBusAndRoute(finalBus, driver.assignedBus, updatedDriver.name)
+
+            // Send Notifications based on assignment changes
+            if (driver.assignedBus == null && finalBus != null) {
+                // New Assignment
+                FirebaseRepository.notifyNewTripAssigned(updatedDriver.uid, finalRouteValue ?: "Assigned Route", finalBus)
+            } else if (driver.assignedBus != null && finalBus == null) {
+                // Cancellation
+                FirebaseRepository.notifyTripCancelled(updatedDriver.uid, driver.route ?: "Previous Route")
+            } else if (driver.assignedBus != null && finalBus != null && (driver.assignedBus != finalBus || driver.route != finalRouteValue)) {
+                // Update
+                FirebaseRepository.notifyTripUpdated(updatedDriver.uid, finalRouteValue ?: "Assigned Route")
+            }
 
             // 2. Save to Firestore via FirebaseRepository
             com.example.bustrack_app.data.FirebaseRepository.saveDriver(updatedDriver) { success ->

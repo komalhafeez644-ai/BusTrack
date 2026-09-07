@@ -105,9 +105,29 @@ class AuthRepository {
                 else -> {
                     try {
                         val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
-                        if (!driverQuery.isEmpty) "driver" else "parent"
+                        if (!driverQuery.isEmpty) {
+                            // Sync UID to drivers collection if missing
+                            val driverDoc = driverQuery.documents.first()
+                            if (driverDoc.getString("uid").isNullOrBlank()) {
+                                db.collection("drivers").document(driverDoc.id).update("uid", uid)
+                            }
+                            "driver"
+                        } else "parent"
                     } catch (e: Exception) { "parent" }
                 }
+            }
+        } else if (role == "driver") {
+            // Even if role is known, ensure drivers collection has the UID
+            try {
+                val driverQuery = db.collection("drivers").whereEqualTo("email", cleanEmail).get().await()
+                if (!driverQuery.isEmpty) {
+                    val driverDoc = driverQuery.documents.first()
+                    if (driverDoc.getString("uid").isNullOrBlank()) {
+                        db.collection("drivers").document(driverDoc.id).update("uid", uid)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AuthRepo", "Failed to sync driver UID: ${e.message}")
             }
         }
 

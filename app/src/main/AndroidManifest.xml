@@ -231,6 +231,14 @@
         <activity android:name="ui.driver.EveningAttendanceActivity" android:exported="false" />
         <activity android:name="ui.driver.DriverFaqActivity" android:exported="false" />
         <activity android:name="ui.driver.DriverAlertDetailActivity" android:exported="false" />
+
+        <service
+            android:name="com.example.bustrack_app.data.MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

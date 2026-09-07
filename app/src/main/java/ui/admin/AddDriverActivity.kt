@@ -229,6 +229,7 @@ class AddDriverActivity : AppCompatActivity() {
         // 2. Save to 'drivers' collection (for Fleet Management)
         val driverData = DriverModel(
             id = empId,
+            uid = uid,
             name = name,
             status = "Idle",
             assignedBus = null,

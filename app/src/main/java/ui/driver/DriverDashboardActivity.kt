@@ -164,6 +164,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Authoritative per-stop state. stopArrivalTimes stays purely for display text
     // ("Arrived: 8:02 AM" / "Skipped"); stopStates is what drives all state transitions.
     private val stopStates = mutableMapOf<Int, StopState>()
+    // Last-computed "ETA: ..." text per stop index. Kept separately from StopItem.time
+    // because assignedRoute (and its StopItem instances) gets replaced wholesale whenever
+    // RouteRepository/dashboardData emits, which would otherwise wipe the ETA back to "".
+    private val stopEtaTexts = mutableMapOf<Int, String>()
     private val traveledHistoryPoints = mutableListOf<Point>()
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
@@ -450,6 +454,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
         override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
             val rawEnhancedLocation = locationMatcherResult.enhancedLocation
+            Log.d("ETA_DEBUG", "onNewLocationMatcherResult fired: lat=${rawEnhancedLocation.latitude}, lng=${rawEnhancedLocation.longitude}, speed=${rawEnhancedLocation.speed}")
 
             val currentSpeed = rawEnhancedLocation.speed ?: 0.0
             val newBearing = rawEnhancedLocation.bearing
@@ -562,6 +567,17 @@ class DriverDashboardActivity : AppCompatActivity() {
         // 1. Entering Geofence: UPCOMING -> ARRIVED (guarded; no-op if already advanced)
         if (distanceMeters <= ARRIVAL_RADIUS && transitionToArrived(nextGlobalStopIndex)) {
 
+            // Trigger stop arrival notification to parents
+            val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+            val period = if (isMorning) "MORNING" else "EVENING"
+            val tripId = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Calendar.getInstance().time) + "_$period"
+
+            FirebaseRepository.notifyParentsOfStopArrival(
+                assignedRoute?.routeName ?: "",
+                targetStop.stopName,
+                tripId
+            )
+
             if (!attendancePromptedStops.contains(nextGlobalStopIndex)) {
                 attendancePromptedStops.add(nextGlobalStopIndex)
 
@@ -627,19 +643,26 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun updateUpcomingStopsUI() {
         val stops = assignedRoute?.stopsList ?: emptyList()
 
-        // Requirement: once a stop moves to ARRIVED or COMPLETED (or SKIPPED), it must be
-        // removed from the "Upcoming Stops" list. Only stops still in UPCOMING remain,
-        // and since state only ever moves forward, a removed stop can never reappear here.
-        val upcomingStops = stops.filterIndexed { index, _ ->
-            stateOf(index) == StopState.UPCOMING
+        // Show the full route stop list for the entire active trip. Stops must never be
+        // removed once reached — only each stop's displayed status/time text changes
+        // (that's driven by stop.time, which routeProgressObserver already sets per-index
+        // every tick: "Arrived: ..."/"Skipped" for reached stops, "ETA: ..." for the rest).
+        // liveArrivedIndex tells the adapter which single stop is currently inside its
+        // geofence (-> ARRIVED badge); every other already-arrived stop still renders as
+        // PASSED with its preserved arrival time, exactly as updateBottomSheetInfo() does.
+        val liveArrivedIndex = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
+            lastArrivedStopIndex
+        } else {
+            -1
         }
 
-        stopsAdapter.updateStops(upcomingStops, -1) // -1 because ARRIVED/COMPLETED stops are filtered out
+        stopsAdapter.updateStops(stops, liveArrivedIndex)
     }
 
     private val routeProgressObserver = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: com.mapbox.navigation.base.trip.model.RouteProgress) {
             latestRouteProgress = routeProgress
+            Log.d("ETA_DEBUG", "onRouteProgressChanged fired: currentLegProgress=${routeProgress.currentLegProgress != null}, durationRemaining=${routeProgress.currentLegProgress?.durationRemaining}, legIndex=${routeProgress.currentLegProgress?.legIndex}, nextGlobalStopIndex=$nextGlobalStopIndex, navStartIndex=$navStartIndex")
             runOnUiThread {
                 // Section 1: Recalculate ETA and distance ONLY for the next valid UPCOMING stop (current leg)
                 val distanceRemaining = (routeProgress.currentLegProgress?.distanceRemaining?.toDouble() ?: 0.0) / 1000.0
@@ -695,6 +718,18 @@ class DriverDashboardActivity : AppCompatActivity() {
                     "Route completed"
                 }
                 tvEta?.text = etaString
+                // instructionCard's own ETA readout (tvEtaNav) — was never being written to
+                // anywhere, so it stayed stuck on the "ETA: --" placeholder baked into the
+                // layout XML, while tvEtaSheet (bottomSummaryCard, which can be scrolled out
+                // of view during nav via the collapsible BottomSheetBehavior) updated fine.
+                // Mirror the same value here; tvEtaSheet has no "ETA:" prefix (it sits next
+                // to its own tvEtaLabel), but tvEtaNav's text carries the "ETA:" label itself,
+                // so only prepend it for the plain-duration case.
+                binding.tvEtaNav.text = if (etaString.startsWith("Arrived:") || etaString == "Route completed") {
+                    etaString
+                } else {
+                    "ETA: $etaString"
+                }
 
                 val legs = routeProgress.route.legs()
                 var accumulatedSeconds = (routeProgress.currentLegProgress?.durationRemaining ?: 0.0).toInt()
@@ -707,7 +742,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                         stop.time = "Arrived: $arrivalTime"
                     } else if (index == displayStopIndex) {
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
-                        stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                        val etaText = "ETA: ${timeFormat.format(etaTime)}"
+                        stop.time = etaText
+                        stopEtaTexts[index] = etaText
+                        Log.d("ETA_DEBUG", "Stop=$index (current), remainingSeconds=$accumulatedSeconds, calculatedETA=$etaText")
                     } else if (index > displayStopIndex) {
                         if (legs != null && (index - navStartIndex) < legs.size) {
                             val legIdx = index - navStartIndex
@@ -716,9 +754,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                             }
                         }
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
-                        stop.time = "ETA: ${timeFormat.format(etaTime)}"
+                        val etaText = "ETA: ${timeFormat.format(etaTime)}"
+                        stop.time = etaText
+                        stopEtaTexts[index] = etaText
+                        Log.d("ETA_DEBUG", "Stop=$index (upcoming), accumulatedSeconds=$accumulatedSeconds, calculatedETA=$etaText")
                     } else {
                         stop.time = "ETA: --"
+                        Log.d("ETA_DEBUG", "Stop=$index fell into else branch (index < displayStopIndex=$displayStopIndex) -> ETA: --")
                     }
                 }
 
@@ -919,13 +961,19 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             if (isNavigating) {
                 val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
+                // stopEtaTexts (computed every tick in routeProgressObserver) was never being
+                // forwarded here, so Firestore's stopEtaTimes field stayed permanently empty
+                // and Parent/Admin/Principal (TrackDriverActivity.applyDriverStopState) always
+                // fell back to "TBD" -> "ETA: --" for every upcoming stop. Sync it now.
+                val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
                 FirebaseRepository.updateDriverRouteGeometry(
                     driverId,
                     currentRouteGeometry,
                     traveledRouteGeometry,
                     nextGlobalStopIndex,
                     arrivalMap,
-                    isNavigating
+                    isNavigating,
+                    etaMap
                 )
             }
 
@@ -1247,6 +1295,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     shouldFitCameraToRoute = true
                     stopArrivalTimes.clear()
                     stopStates.clear()
+                    stopEtaTexts.clear()
                     nextGlobalStopIndex = 0
                     attendancePromptedStops.clear()
                     traveledHistoryPoints.clear()
@@ -1259,6 +1308,17 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
                 assignedRoute = route
+                // route.stopsList is a fresh set of StopItem instances (time defaults to "").
+                // Restore last-known display text from persisted, index-keyed state before
+                // anything (map markers, bottom sheet, adapter) reads stop.time.
+                route.stopsList.forEachIndexed { index, stop ->
+                    val arrival = stopArrivalTimes[index]
+                    stop.time = when {
+                        arrival == "Skipped" -> "Skipped"
+                        arrival != null -> "Arrived: $arrival"
+                        else -> stopEtaTexts[index] ?: "TBD"
+                    }
+                }
                 binding.tvStartAddress.text = route.startPoint.ifEmpty { "Main Terminal" }
                 if (route.stopsList.isNotEmpty()) {
                     binding.tvEndAddress.text = route.stopsList[0].stopName
@@ -1597,6 +1657,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         val tvLoad = sheet.findViewById<TextView>(R.id.tvLoadSheet)
 
         tvEta?.text = "Calculating..."
+        binding.tvEtaNav.text = "ETA: Calculating..."
 
         val currentSpeed = (currentLocation?.speed?.times(3.6)) ?: 0.0
         tvSpeed?.text = "${currentSpeed.toInt()} km/h"
@@ -1611,7 +1672,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             } else if (arrival != null) {
                 stop.time = "Arrived: $arrival"
             } else {
-                stop.time = "TBD"
+                stop.time = stopEtaTexts[index] ?: "TBD"
             }
         }
 
@@ -1757,6 +1818,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             if (startIndex >= allStops.size) {
                 stopArrivalTimes.clear()
                 stopStates.clear()
+                stopEtaTexts.clear()
                 attendancePromptedStops.clear()
                 lastSplitIndex = 0
                 startIndex = 0
@@ -1795,8 +1857,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                     isNavigating = true
                     nav.setNavigationRoutes(routes)
 
-                    if (ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    val hasLocationPermission = ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    Log.d("ETA_DEBUG", "onRoutesReady: hasLocationPermission=$hasLocationPermission, startingTripSession=$hasLocationPermission")
+                    if (hasLocationPermission) {
                         nav.startTripSession()
+                    } else {
+                        Log.e("ETA_DEBUG", "startTripSession() SKIPPED - no ACCESS_FINE_LOCATION. RouteProgress/ETA will never update.")
+                        Toast.makeText(this@DriverDashboardActivity, "Location permission missing - navigation tracking will not update.", Toast.LENGTH_LONG).show()
                     }
 
                     startFollowingPuck()
@@ -1867,8 +1934,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 viewModel.currentDriver.value?.driverId?.let { driverId ->
                     val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
+                    val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
                     FirebaseRepository.updateDriverRouteGeometry(
-                        driverId, null, null, nextGlobalStopIndex, arrivalMap, true
+                        driverId, null, null, nextGlobalStopIndex, arrivalMap, true, etaMap
                     )
                 }
 
@@ -1915,6 +1983,10 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 cardRouteDetails.visibility = View.VISIBLE
                 btnStartNavigation.visibility = View.VISIBLE
+                // Ending navigation must not leave Start Navigation stuck disabled/grey.
+                // Its enabled/color state depends only on On Duty status, never on
+                // navigation state, so re-assert it explicitly here.
+                updateNavigationButtonState()
 
                 bottomSummaryCard.visibility = View.GONE
                 bottomSheetBehavior.isHideable = true
@@ -2133,6 +2205,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             stopArrivalTimes.clear()
             stopStates.clear()
+            stopEtaTexts.clear()
             nextGlobalStopIndex = 0
             attendancePromptedStops.clear()
             traveledHistoryPoints.clear()

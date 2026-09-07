@@ -77,10 +77,22 @@ class RouteMapActivity : AppCompatActivity() {
         }
 
         binding.btnSaveMap.setOnClickListener {
-            currentRoute?.let {
-                com.example.bustrack_app.data.RouteRepository.updateRoute(it)
-                Toast.makeText(this, "Route Mapping Updated", Toast.LENGTH_SHORT).show()
-                finish()
+            currentRoute?.let { route ->
+                com.example.bustrack_app.data.RouteRepository.updateRoute(route) { success ->
+                    if (success) {
+                        // Notify assigned driver about stop/route mapping update
+                        val allDrivers = com.example.bustrack_app.data.DriverRepository.driverList.value ?: emptyList()
+                        val assignedDriver = allDrivers.find { it.assignedBus == route.busNo }
+                        assignedDriver?.let { driver ->
+                            com.example.bustrack_app.data.FirebaseRepository.notifyStopUpdated(driver.uid, route.routeName)
+                        }
+                        
+                        Toast.makeText(this, "Route Mapping Updated", Toast.LENGTH_SHORT).show()
+                        finish()
+                    } else {
+                        Toast.makeText(this, "Failed to save updates", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }

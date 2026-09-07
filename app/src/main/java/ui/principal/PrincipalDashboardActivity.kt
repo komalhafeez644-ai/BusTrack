@@ -54,8 +54,12 @@ import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.extension.style.expressions.dsl.generated.*
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.gestures.gestures
+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
+import com.mapbox.maps.RenderedQueryGeometry
+import com.mapbox.maps.RenderedQueryOptions
 import ui.admin.*
 import ui_authentication.LoginActivity
+import com.google.gson.JsonArray
 
 class PrincipalDashboardActivity : AppCompatActivity() {
 
@@ -111,19 +115,32 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     .build()
             )
 
-            pointAnnotationManager?.addClickListener { annotation ->
-                val driversList = liveTrackingViewModel.activeDrivers.value
-                val driver = driversList?.find {
-                    val latDiff = Math.abs(it.latitude - annotation.point.latitude())
-                    val lngDiff = Math.abs(it.longitude - annotation.point.longitude())
-                    latDiff < 0.0001 && lngDiff < 0.0001
+            // ROOT-CAUSE FIX (Principal marker click / Bottom Card) - identical defect to
+            // Admin's LiveTrackingActivity: buses are drawn via modelLayer/symbolLayer on a
+            // GeoJSON source, not as PointAnnotations, so pointAnnotationManager's click
+            // listener never fired for a real tap on a bus. Hit-test the rendered layers and
+            // match on the "driverId" feature property set in updateMarkers() instead.
+            mapView?.gestures?.addOnMapClickListener { point ->
+                val screenCoordinate = mapView?.mapboxMap?.pixelForCoordinate(point)
+                if (screenCoordinate != null) {
+                    mapView?.mapboxMap?.queryRenderedFeatures(
+                        RenderedQueryGeometry(screenCoordinate),
+                        RenderedQueryOptions(listOf(BUS_MODEL_LAYER_ID, BUS_LABEL_LAYER_ID), null)
+                    ) { result ->
+                        val driverId = result.value
+                            ?.firstOrNull()
+                            ?.queriedFeature?.feature?.getStringProperty("driverId")
+                        val driver = driverId?.let { id ->
+                            liveTrackingViewModel.activeDrivers.value?.find { it.driverId == id }
+                        }
+                        driver?.let {
+                            isUserInteracting = false
+                            liveTrackingViewModel.selectDriver(it)
+                            focusOnDriver(it)
+                        }
+                    }
                 }
-                driver?.let {
-                    isUserInteracting = false
-                    liveTrackingViewModel.selectDriver(it)
-                    focusOnDriver(it)
-                }
-                true
+                false
             }
 
             // Sync Compass UI with map rotation
@@ -312,6 +329,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     addStringProperty("driverId", driver.driverId)
                     addStringProperty("name", driver.assignedBus ?: driver.name)
                     addNumberProperty("bearing", bearing + 180.0)
+                    val rotationArray = JsonArray()
+                    rotationArray.add(0.0)
+                    rotationArray.add(0.0)
+                    rotationArray.add(bearing + 180.0)
+                    addProperty("rotation", rotationArray)
                 }
             }
 
@@ -329,11 +351,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     modelId(BUS_MODEL_ID)
                     modelType(ModelType.COMMON_3D)
                     modelScale(listOf(15.0, 15.0, 15.0))
-                    modelRotation(listOf(0.0, 0.0, 0.0))
+                    modelRotation(get("rotation"))
                 })
             } else {
                 (style.getLayer(BUS_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer)
-                    ?.modelRotation(listOf(0.0, 0.0, 0.0))
+                    ?.modelRotation(get("rotation"))
             }
 
             if (!style.styleLayerExists(BUS_LABEL_LAYER_ID)) {
@@ -447,7 +469,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private fun observeProfileData() {
         profileViewModel.adminData.observe(this) { user ->
             if (user == null) return@observe
-            
+
             // Update Dashboard Header
             findViewById<TextView>(R.id.tvPrincipalName)?.text = user.fullName
 

@@ -9,6 +9,7 @@ import com.example.bustrack_app.adapter.StopAdapter
 import com.example.bustrack_app.databinding.ActivityRouteDetailBinding
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StopItem
+import com.example.bustrack_app.data.FirebaseRepository
 import ui.admin.RouteMapActivity
 import java.util.Locale
 
@@ -65,6 +66,13 @@ class RouteDetailActivity : AppCompatActivity() {
                 
                 com.example.bustrack_app.data.RouteRepository.updateRoute(route) { success ->
                     if (success) {
+                        // Notify the assigned driver about the route update
+                        val allDrivers = com.example.bustrack_app.data.DriverRepository.driverList.value ?: emptyList()
+                        val assignedDriver = allDrivers.find { it.assignedBus == route.busNo }
+                        assignedDriver?.let { driver ->
+                            FirebaseRepository.notifyRouteUpdated(driver.uid, route.routeName)
+                        }
+
                         Toast.makeText(this, "Changes saved to Cloud", Toast.LENGTH_SHORT).show()
                         finish()
                     } else {

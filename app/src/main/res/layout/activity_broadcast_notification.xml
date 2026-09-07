@@ -67,18 +67,22 @@
                 android:layout_marginTop="12dp"
                 app:singleSelection="true"
                 app:selectionRequired="true"
-                app:checkedButton="@id/btnTargetParents">
+                app:checkedButton="@id/btnTargetParents"
+                app:cornerRadius="14dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTargetParents"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="50dp"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
                     android:text="Parents"
                     android:textAllCaps="false"
+                    android:textSize="15sp"
                     android:textColor="@color/toggle_button_text_selector"
                     app:backgroundTint="@color/toggle_button_background_selector"
+                    app:icon="@drawable/family"
+                    app:iconGravity="textStart"
                     app:iconTint="@color/toggle_button_text_selector"
                     app:strokeColor="@color/primaryDark" />
 
@@ -86,12 +90,15 @@
                     android:id="@+id/btnTargetDrivers"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="50dp"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
                     android:text="Drivers"
                     android:textAllCaps="false"
+                    android:textSize="15sp"
                     android:textColor="@color/toggle_button_text_selector"
                     app:backgroundTint="@color/toggle_button_background_selector"
+                    app:icon="@drawable/bus"
+                    app:iconGravity="textStart"
                     app:iconTint="@color/toggle_button_text_selector"
                     app:strokeColor="@color/primaryDark" />
 
@@ -107,40 +114,31 @@
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
-            <RadioGroup
-                android:id="@+id/rgSelectionLevel"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilSelectionLevel"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
+                android:layout_marginTop="12dp"
+                app:boxBackgroundColor="#F8FAFC"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxStrokeColor="@color/primaryDark"
+                app:hintTextColor="@color/primaryDark"
+                android:textColorHint="@color/lightGray">
 
-                <RadioButton
-                    android:id="@+id/rbAll"
-                    android:layout_width="wrap_content"
+                <AutoCompleteTextView
+                    android:id="@+id/autoCompleteLevel"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:inputType="none"
                     android:text="All"
                     android:textColor="@color/black"
-                    app:buttonTint="@color/primaryDark"
-                    android:checked="true" />
-
-                <RadioButton
-                    android:id="@+id/rbIndividual"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="24dp"
-                    android:text="Individual"
-                    app:buttonTint="@color/primaryDark"
-                    android:textColor="@color/black" />
-
-                <RadioButton
-                    android:id="@+id/rbGroup"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="24dp"
-                    android:text="Group"
-                    app:buttonTint="@color/primaryDark"
-                    android:textColor="@color/black" />
-            </RadioGroup>
+                    android:background="@null" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Conditional Selector (Visible when Individual/Group selected) -->
             <com.google.android.material.textfield.TextInputLayout
@@ -150,11 +148,17 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:visibility="gone"
-                android:hint="Select Parent/Driver"
+                android:hint="Select Target"
+                app:boxBackgroundColor="#F8FAFC"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusTopStart="14dp"
                 app:boxStrokeColor="@color/primaryDark"
                 app:hintTextColor="@color/primaryDark"
                 android:textColorHint="@color/lightGray"
-                app:placeholderTextColor="@color/lightGray">
+                app:startIconDrawable="@drawable/ic_person"
+                app:startIconTint="@color/primaryDark">
 
                 <AutoCompleteTextView
                     android:id="@+id/autoCompleteSelect"
@@ -162,7 +166,8 @@
                     android:layout_height="wrap_content"
                     android:textColor="@color/black"
                     android:padding="16dp"
-                    android:inputType="none" />
+                    android:inputType="none"
+                    android:background="@null" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <View
@@ -180,26 +185,45 @@
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etMessage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="top"
-                android:inputType="textMultiLine"
-                android:lines="4"
-                android:textColor="@color/black"
-                android:textSize="14sp" />
-
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 app:boxBackgroundColor="#F8FAFC"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusTopStart="14dp"
+                app:boxStrokeWidth="1dp"
+                app:boxStrokeColor="@color/primaryDark"
+                app:hintTextColor="@color/primaryDark"
+                android:textColorHint="@color/lightGray"
+                android:hint="Type your message here...">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etMessage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine"
+                    android:minLines="4"
+                    android:textColor="@color/black"
+                    android:textSize="14sp"
+                    android:background="@null" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:boxBackgroundColor="#F8FAFC"
+                app:boxCornerRadiusBottomEnd="14dp"
+                app:boxCornerRadiusBottomStart="14dp"
+                app:boxCornerRadiusTopEnd="14dp"
+                app:boxCornerRadiusTopStart="14dp"
                 app:boxStrokeWidth="1dp"
                 app:boxStrokeColor="@color/primaryDark"
                 app:hintTextColor="@color/primaryDark"
@@ -212,26 +236,10 @@
                     android:layout_height="wrap_content"
                     android:textColor="@color/black"
                     android:textSize="14sp"
-                    android:inputType="textCapSentences" />
+                    android:inputType="textCapSentences"
+                    android:background="@null" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:boxBackgroundColor="#F8FAFC"
-                app:boxCornerRadiusBottomEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxStrokeWidth="1dp"
-                app:boxStrokeColor="@color/primaryDark"
-                app:hintTextColor="@color/primaryDark"
-                android:textColorHint="@color/lightGray"
-                android:hint="Type your message here...">
-
-            </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSendBroadcast"
@@ -244,7 +252,7 @@
                 android:textStyle="bold"
                 android:backgroundTint="@color/primaryDark"
                 android:textColor="@color/white"
-                app:cornerRadius="12dp"
+                app:cornerRadius="14dp"
                 app:icon="@drawable/notifications"
                 app:iconTint="@color/white"
                 app:iconGravity="textStart"

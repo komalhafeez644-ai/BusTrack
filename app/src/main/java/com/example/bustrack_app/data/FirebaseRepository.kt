@@ -108,13 +108,64 @@ object FirebaseRepository {
         db.collection("drivers").document(driverId).update(updates)
     }
 
-    fun updateDriverRouteGeometry(driverId: String, currentPolyline: String?, traveledPolyline: String?, nextStopIndex: Int, stopArrivalTimes: Map<String, String>, isNavigating: Boolean) {
+    fun updateDriverRouteGeometry(driverId: String, currentPolyline: String?, traveledPolyline: String?, nextStopIndex: Int, stopArrivalTimes: Map<String, String>, isNavigating: Boolean, stopEtaTimes: Map<String, String> = emptyMap()) {
         val updates = mutableMapOf<String, Any?>()
         updates["currentRoutePolyline"] = currentPolyline
         updates["traveledPolyline"] = traveledPolyline
         updates["nextStopIndex"] = nextStopIndex
         updates["stopArrivalTimes"] = stopArrivalTimes
+        updates["stopEtaTimes"] = stopEtaTimes
         updates["isNavigating"] = isNavigating
+        db.collection("drivers").document(driverId).update(updates)
+    }
+
+    /**
+     * Consolidated live-tracking write for the Driver Module's high-frequency
+     * location loop (DriverDashboardActivity.syncTrackingDataToFirestore).
+     * Replaces what used to be three separate .update() calls in that one
+     * function (updateDriverLocation + updateDriverStats +
+     * updateDriverRouteGeometry) with a single Firestore write.
+     *
+     * Firestore bills per document write regardless of how many fields change
+     * in it, so now that the Driver's write cadence has been tightened from
+     * 5s to ~1s (to fix Admin/Parent/Principal's laggy marker movement and
+     * the delayed grey traveled-route rendering), merging these three calls
+     * into one avoids roughly tripling the write cost on top of that ~5x
+     * frequency increase. Also carries stopEtaTimes (mirrors the Driver's own
+     * in-memory stopEtaTexts, keyed the same way as stopArrivalTimes) so
+     * Parent/Principal/Admin can show a real per-stop ETA for every upcoming
+     * stop, not just the immediate next one.
+     */
+    fun updateDriverLiveState(
+        driverId: String,
+        lat: Double,
+        lng: Double,
+        eta: String,
+        speed: Double,
+        load: String,
+        currentPolyline: String?,
+        traveledPolyline: String?,
+        nextStopIndex: Int,
+        stopArrivalTimes: Map<String, String>,
+        stopEtaTimes: Map<String, String>,
+        isNavigating: Boolean
+    ) {
+        val updates = mutableMapOf<String, Any?>(
+            "latitude" to lat,
+            "longitude" to lng,
+            "lastUpdated" to System.currentTimeMillis(),
+            "eta" to eta,
+            "speed" to speed,
+            "load" to load,
+            "isNavigating" to isNavigating
+        )
+        if (isNavigating) {
+            updates["currentRoutePolyline"] = currentPolyline
+            updates["traveledPolyline"] = traveledPolyline
+            updates["nextStopIndex"] = nextStopIndex
+            updates["stopArrivalTimes"] = stopArrivalTimes
+            updates["stopEtaTimes"] = stopEtaTimes
+        }
         db.collection("drivers").document(driverId).update(updates)
     }
 
@@ -147,7 +198,7 @@ object FirebaseRepository {
     fun updateDropTimesForRoute(routeName: String, stopName: String, isMorning: Boolean, date: String, time: String) {
         val field = if (isMorning) "morningDrop" else "eveningDrop"
         val normalizedDate = date.replace("/", "-")
-        
+
         db.collection("attendance")
             .whereEqualTo("route", routeName)
             .whereEqualTo("date", normalizedDate)
@@ -160,7 +211,7 @@ object FirebaseRepository {
                         val pickupStatus = if (isMorning) record.morningPickup else record.eveningPickup
                         // Check if student was present during pickup
                         val isPresent = pickupStatus.contains(":") || pickupStatus.equals("Present", true) || pickupStatus.equals("School", true) || pickupStatus.equals("En Route", true)
-                        
+
                         val shouldUpdate = if (isMorning) {
                             // In morning, all present students drop at the end (usually School)
                             // We assume the caller only triggers this for the final stop.
@@ -169,7 +220,7 @@ object FirebaseRepository {
                             // In evening, only students assigned to this specific stop drop here
                             isPresent && record.stop == stopName && (record.eveningDrop == "--" || record.eveningDrop == "Pending")
                         }
-                        
+
                         if (shouldUpdate) {
                             batch.update(doc.reference, field, time)
                         }
@@ -210,10 +261,111 @@ object FirebaseRepository {
     // --- NOTIFICATIONS ---
 
     /**
+     * System Notification helper for Drivers.
+     */
+    fun sendSystemNotification(
+        driverId: String,
+        title: String,
+        message: String,
+        type: String = NotificationModel.TYPE_GENERAL,
+        relatedId: String = ""
+    ) {
+        sendNotification(
+            recipientId = driverId,
+            title = title,
+            message = message,
+            type = type,
+            relatedId = relatedId
+        )
+    }
+
+    fun notifyNewTripAssigned(driverId: String, routeName: String, busNo: String) {
+        val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        sendNotification(
+            id = "NEW_TRIP_${driverId}_$today",
+            recipientId = driverId,
+            title = "New Trip Assigned",
+            message = "A new trip (Route: $routeName, Bus: $busNo) has been assigned to you. Please review your assigned route, stops, trip timing, and student details before starting the trip.",
+            type = NotificationModel.TYPE_NEW_TRIP,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyTripUpdated(driverId: String, routeName: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Trip Updated",
+            message = "Your assigned trip details for $routeName have been updated. Please check the latest route, scheduled time, stops, and other trip information before starting navigation.",
+            type = NotificationModel.TYPE_TRIP_UPDATE,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyTripCancelled(driverId: String, routeName: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Trip Cancelled",
+            message = "Your assigned trip ($routeName) has been cancelled by the administration. Please do not start navigation for this trip and check the latest trip schedule for further updates.",
+            type = NotificationModel.TYPE_TRIP_CANCELLED,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyRouteUpdated(driverId: String, routeName: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Route Updated",
+            message = "Your assigned route $routeName has been updated. One or more route details, stops, or student assignments may have changed. Please review the latest route information before starting your trip.",
+            type = NotificationModel.TYPE_ROUTE_UPDATE,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyStopUpdated(driverId: String, routeName: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Stop Updated",
+            message = "A stop on your assigned route ($routeName) has been added, removed, or updated. Please check the latest stop sequence and student assignments before continuing with your trip.",
+            type = NotificationModel.TYPE_STOP_UPDATE,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyAttendanceUpdateRequired(driverId: String, routeName: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Attendance Update Required",
+            message = "An issue was found with the attendance record for your current trip ($routeName). Please open the attendance section, review the student records, and update the attendance if required.",
+            type = NotificationModel.TYPE_ATTENDANCE_REQUIRED,
+            relatedId = routeName
+        )
+    }
+
+    fun notifyImportantAdminAlert(driverId: String, message: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Important Admin Alert",
+            message = message,
+            type = NotificationModel.TYPE_IMPORTANT
+        )
+    }
+
+    fun notifyEmergencyAlert(driverId: String, message: String) {
+        sendSystemNotification(
+            driverId = driverId,
+            title = "Emergency Alert",
+            message = message,
+            type = NotificationModel.TYPE_EMERGENCY
+        )
+    }
+
+    /**
      * Sends a notification to either a specific user (recipientId) or an entire role
      * (recipientRole, e.g. "admin"/"driver"/"parent"/"principal") - pass exactly one.
+     * If an [id] is provided, it uses it for deduplication.
      */
     fun sendNotification(
+        id: String? = null,
         recipientId: String? = null,
         recipientRole: String? = null,
         title: String,
@@ -226,7 +378,9 @@ object FirebaseRepository {
             onComplete(false)
             return
         }
-        val docRef = db.collection("notifications").document()
+        val docRef = if (id != null) db.collection("notifications").document(id)
+        else db.collection("notifications").document()
+
         val data = hashMapOf(
             "recipientId" to (recipientId ?: ""),
             "recipientRole" to (recipientRole ?: ""),
@@ -237,7 +391,7 @@ object FirebaseRepository {
             "isRead" to false,
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
-        docRef.set(data)
+        docRef.set(data, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { onComplete(false) }
     }
@@ -302,7 +456,7 @@ object FirebaseRepository {
 
     fun startUnreadCountListener(uid: String, role: String) {
         if (unreadListeners.isNotEmpty()) return // Already listening
-        
+
         val query = db.collection("notifications")
             .whereEqualTo("isRead", false)
             .where(com.google.firebase.firestore.Filter.or(
@@ -313,7 +467,7 @@ object FirebaseRepository {
         val reg = query.addSnapshotListener { snapshot, _ ->
             _unreadCount.postValue(snapshot?.size() ?: 0)
         }
-        
+
         unreadListeners.add(reg)
     }
 
@@ -323,28 +477,117 @@ object FirebaseRepository {
     }
 
     /**
-     * Attendance-related notification (Task 5): tells a student's approved parent(s)
-     * when their child is marked Absent or Leave (Present is the expected default, so
-     * we don't spam parents for it - "do not add unnecessary notification types").
+     * Attendance-related notification: tells a student's approved parent(s)
+     * when their child is marked Absent. Includes deduplication by studentId + date.
      */
-    fun notifyParentsOfAttendance(studentId: String, studentName: String, status: String, isMorning: Boolean) {
-        if (!status.equals("Absent", true) && !status.equals("Leave", true)) return
+    fun notifyParentsOfAttendance(studentId: String, studentName: String, status: String, date: String, isMorning: Boolean) {
+        if (!status.equals("Absent", true)) return
 
-        db.collection("trackingRequests")
-            .whereEqualTo("studentId", studentId)
-            .whereEqualTo("status", "APPROVED")
-            .get()
-            .addOnSuccessListener { snapshot ->
-                val period = if (isMorning) "Morning" else "Evening"
-                snapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }.forEach { req ->
-                    sendNotification(
-                        recipientId = req.parentId,
-                        title = "$period Attendance: $status",
-                        message = "$studentName was marked $status for $period pickup today.",
-                        type = "ATTENDANCE",
-                        relatedId = studentId
-                    )
+        val period = if (isMorning) "Morning" else "Evening"
+        val notificationId = "ABSENT_${studentId}_${date.replace("/", "-")}_${period.uppercase()}"
+
+        // Check for duplicate notification before sending
+        db.collection("notifications").document(notificationId).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    android.util.Log.d("NotifDebug", "Skipping duplicate absent notification for $studentId on $date")
+                    return@addOnSuccessListener
                 }
+
+                db.collection("trackingRequests")
+                    .whereEqualTo("studentId", studentId)
+                    .whereEqualTo("status", "APPROVED")
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        val requests = snapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
+                        if (requests.isEmpty()) {
+                            android.util.Log.d("NotifDebug", "No approved tracking request found for student $studentId")
+                        }
+                        requests.forEach { req ->
+                            sendNotification(
+                                id = notificationId,
+                                recipientId = req.parentId,
+                                title = "Attendance Update: Absent",
+                                message = "Your child, $studentName, was marked absent for $period pickup on $date.",
+                                type = "ATTENDANCE",
+                                relatedId = studentId
+                            ) { success ->
+                                android.util.Log.d("NotifDebug", "Absent notification for $studentName sent: $success")
+                            }
+                        }
+                    }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotifDebug", "Error checking for duplicate absent notif: ${e.message}")
+            }
+    }
+
+    /**
+     * Stop arrival notification: notifies parents of students assigned to a specific stop
+     * that the bus has arrived. Includes deduplication for the current trip.
+     */
+    fun notifyParentsOfStopArrival(routeName: String, stopName: String, tripId: String) {
+        val notificationIdPrefix = "ARRIVAL_${routeName.replace(" ", "_")}_${stopName.replace(" ", "_")}_${tripId}"
+
+        android.util.Log.d("NotifDebug", "Checking stop arrival for $stopName on route $routeName (trip: $tripId)")
+
+        // Find students assigned to this stop
+        db.collection("students")
+            .whereEqualTo("route", routeName)
+            .whereEqualTo("stopName", stopName)
+            .get()
+            .addOnSuccessListener { studentSnapshot ->
+                val students = studentSnapshot.documents.mapNotNull { it.toObject<StudentModel>() }
+                if (students.isEmpty()) {
+                    android.util.Log.d("NotifDebug", "No students assigned to stop $stopName")
+                    return@addOnSuccessListener
+                }
+
+                val studentIds = students.map { it.id }
+
+                // Find approved tracking requests for these students where tracking is enabled
+                db.collection("trackingRequests")
+                    .whereIn("studentId", studentIds)
+                    .whereEqualTo("status", "APPROVED")
+                    .whereEqualTo("trackingEnabled", true)
+                    .get()
+                    .addOnSuccessListener { reqSnapshot ->
+                        val requests = reqSnapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
+                        if (requests.isEmpty()) {
+                            android.util.Log.d("NotifDebug", "No parents found with tracking enabled for stop $stopName")
+                            return@addOnSuccessListener
+                        }
+
+                        // Group by parent to avoid duplicate notifications to same parent for multiple kids at same stop
+                        val parentIds = requests.map { it.parentId }.distinct()
+
+                        parentIds.forEach { parentId ->
+                            val finalNotifId = "${notificationIdPrefix}_${parentId}"
+
+                            // Deduplication check
+                            db.collection("notifications").document(finalNotifId).get()
+                                .addOnSuccessListener { doc ->
+                                    if (doc.exists()) {
+                                        android.util.Log.d("NotifDebug", "Arrival notif already sent to parent $parentId for stop $stopName")
+                                        return@addOnSuccessListener
+                                    }
+
+                                    sendNotification(
+                                        id = finalNotifId,
+                                        recipientId = parentId,
+                                        title = "Bus Arrived at Your Stop",
+                                        message = "The bus on route $routeName has arrived at $stopName. Please be ready to pick up your child.",
+                                        type = "ARRIVAL",
+                                        relatedId = routeName
+                                    ) { success ->
+                                        android.util.Log.d("NotifDebug", "Arrival notif for $stopName sent to parent $parentId: $success")
+                                    }
+                                }
+                        }
+                    }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotifDebug", "Error fetching students for stop arrival: ${e.message}")
             }
     }
 
@@ -394,11 +637,11 @@ object FirebaseRepository {
             "reviewedBy" to reviewedBy,
             "isSeenByAdmin" to true
         )
-        
+
         if (status == "REWORK") {
             updates["reworkAt"] = com.google.firebase.Timestamp.now()
         }
-        
+
         trackingRoute?.let { updates["assignedTrackingRoute"] = it }
 
         db.collection("trackingRequests").document(requestId).update(updates)

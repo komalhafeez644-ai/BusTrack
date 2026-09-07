@@ -32,16 +32,19 @@ class BroadcastNotificationActivity : AppCompatActivity() {
 
     private lateinit var tilSelect: TextInputLayout
     private lateinit var autoSelect: AutoCompleteTextView
+    private lateinit var tilLevel: TextInputLayout
+    private lateinit var autoLevel: AutoCompleteTextView
     private lateinit var etTitle: TextInputEditText
     private lateinit var etMessage: TextInputEditText
     private lateinit var toggleAudience: MaterialButtonToggleGroup
-    private lateinit var rgLevel: RadioGroup
 
     // display name -> uid (individual) or route name (group)
     private var selectionMap: Map<String, String> = emptyMap()
     private var approvedParentRequests: List<TrackingRequestModel> = emptyList()
     private var driverListCache: List<DriverModel> = emptyList()
     private var routeListCache: List<RouteModel> = emptyList()
+
+    private val selectionLevels = arrayOf("All", "Individual", "Group")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,13 +54,22 @@ class BroadcastNotificationActivity : AppCompatActivity() {
 
         tilSelect = findViewById(R.id.tilSelectTarget)
         autoSelect = findViewById(R.id.autoCompleteSelect)
+        tilLevel = findViewById(R.id.tilSelectionLevel)
+        autoLevel = findViewById(R.id.autoCompleteLevel)
         etTitle = findViewById(R.id.etTitle)
         etMessage = findViewById(R.id.etMessage)
 
         val btnBack = findViewById<ImageView>(R.id.btnBack)
         toggleAudience = findViewById(R.id.toggleGroupAudience)
-        rgLevel = findViewById(R.id.rgSelectionLevel)
         val btnSend = findViewById<MaterialButton>(R.id.btnSendBroadcast)
+
+        // Setup Selection Level Dropdown
+        val levelAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, selectionLevels)
+        autoLevel.setAdapter(levelAdapter)
+        autoLevel.setOnItemClickListener { _, _, position, _ ->
+            val selectedLevel = selectionLevels[position]
+            handleLevelSelection(selectedLevel)
+        }
 
         // Real data sources, loaded once so dropdowns reflect actual parents/drivers/routes.
         DriverRepository.driverList.observe(this) { driverListCache = it }
@@ -73,34 +85,38 @@ class BroadcastNotificationActivity : AppCompatActivity() {
             finish()
         }
 
-        rgLevel.setOnCheckedChangeListener { _, checkedId ->
-            when (checkedId) {
-                R.id.rbAll -> {
-                    tilSelect.visibility = View.GONE
-                }
-                R.id.rbIndividual -> {
-                    tilSelect.visibility = View.VISIBLE
-                    tilSelect.hint = "Select Individual"
-                    setupSelectionData(toggleAudience.checkedButtonId == R.id.btnTargetParents)
-                }
-                R.id.rbGroup -> {
-                    tilSelect.visibility = View.VISIBLE
-                    tilSelect.hint = "Select Group/Route"
-                    setupSelectionData(toggleAudience.checkedButtonId == R.id.btnTargetParents, true)
-                }
-            }
-        }
-
         toggleAudience.addOnButtonCheckedListener { _, checkedId, isChecked ->
             autoSelect.setText("", false)
-            if (isChecked && rgLevel.checkedRadioButtonId != R.id.rbAll) {
-                setupSelectionData(checkedId == R.id.btnTargetParents, rgLevel.checkedRadioButtonId == R.id.rbGroup)
+            if (isChecked) {
+                val currentLevel = autoLevel.text.toString()
+                if (currentLevel != "All") {
+                    setupSelectionData(checkedId == R.id.btnTargetParents, currentLevel == "Group")
+                }
             }
         }
 
         btnSend.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             sendBroadcast()
+        }
+    }
+
+    private fun handleLevelSelection(level: String) {
+        autoSelect.setText("", false)
+        when (level) {
+            "All" -> {
+                tilSelect.visibility = View.GONE
+            }
+            "Individual" -> {
+                tilSelect.visibility = View.VISIBLE
+                tilSelect.hint = "Select Individual"
+                setupSelectionData(toggleAudience.checkedButtonId == R.id.btnTargetParents)
+            }
+            "Group" -> {
+                tilSelect.visibility = View.VISIBLE
+                tilSelect.hint = "Select Group/Route"
+                setupSelectionData(toggleAudience.checkedButtonId == R.id.btnTargetParents, true)
+            }
         }
     }
 
@@ -111,7 +127,7 @@ class BroadcastNotificationActivity : AppCompatActivity() {
             // One entry per approved tracking request - display parent name, value is their uid.
             approvedParentRequests.associate { "${it.parentName} (Student ${it.studentId})" to it.parentId }
         } else {
-            driverListCache.associate { "${it.name} (${it.assignedBus ?: it.route ?: "Unassigned"})" to it.driverId }
+            driverListCache.associate { "${it.name} (${it.assignedBus ?: it.route ?: "Unassigned"})" to it.uid }
         }
         selectionMap = data
 
@@ -124,50 +140,56 @@ class BroadcastNotificationActivity : AppCompatActivity() {
         val message = etMessage.text.toString().trim()
         val isParents = toggleAudience.checkedButtonId == R.id.btnTargetParents
         val role = if (isParents) "parent" else "driver"
+        val selectedLevel = autoLevel.text.toString()
 
         if (title.isEmpty() || message.isEmpty()) {
             Toast.makeText(this, "Please fill in title and message", Toast.LENGTH_SHORT).show()
             return
         }
 
-        when (rgLevel.checkedRadioButtonId) {
-            R.id.rbAll -> {
+        when (selectedLevel) {
+            "All" -> {
                 FirebaseRepository.sendNotification(
-                    recipientRole = role, title = title, message = message, type = "BROADCAST"
+                    recipientRole = role, title = title, message = message, type = "ADMIN_BROADCAST"
                 ) { onSendComplete(it) }
             }
 
-            R.id.rbIndividual -> {
-                val uid = selectionMap[autoSelect.text.toString()]
+            "Individual" -> {
+                val selectedText = autoSelect.text.toString()
+                val uid = selectionMap[selectedText]
                 if (uid.isNullOrBlank()) {
-                    Toast.makeText(this, "Please select a recipient", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Recipient identifier not found. The ${if (isParents) "parent" else "driver"} may need to login again.", Toast.LENGTH_LONG).show()
                     return
                 }
                 FirebaseRepository.sendNotification(
-                    recipientId = uid, title = title, message = message, type = "BROADCAST"
+                    recipientId = uid, title = title, message = message, type = "ADMIN_BROADCAST"
                 ) { onSendComplete(it) }
             }
 
-            R.id.rbGroup -> {
-                val route = selectionMap[autoSelect.text.toString()]
+            "Group" -> {
+                val selectedText = autoSelect.text.toString()
+                val route = selectionMap[selectedText]
                 if (route.isNullOrBlank()) {
-                    Toast.makeText(this, "Please select a route", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Please select a valid group/route", Toast.LENGTH_SHORT).show()
                     return
                 }
+                
                 val recipientUids: List<String> = if (isParents) {
                     approvedParentRequests.filter { it.assignedTrackingRoute == route }.map { it.parentId }
                 } else {
-                    driverListCache.filter { it.route == route }.map { it.driverId }
-                }
+                    driverListCache.filter { it.route == route }.mapNotNull { it.uid.ifBlank { null } }
+                }.distinct() // Deduplicate recipient IDs
+
                 if (recipientUids.isEmpty()) {
-                    Toast.makeText(this, "No ${if (isParents) "parents" else "drivers"} found for this route", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "No recipients with valid IDs found for route: $route", Toast.LENGTH_SHORT).show()
                     return
                 }
+
                 var remaining = recipientUids.size
                 var anySuccess = false
                 recipientUids.forEach { uid ->
                     FirebaseRepository.sendNotification(
-                        recipientId = uid, title = title, message = message, type = "BROADCAST"
+                        recipientId = uid, title = title, message = message, type = "ADMIN_BROADCAST"
                     ) { success ->
                         remaining--
                         if (success) anySuccess = true

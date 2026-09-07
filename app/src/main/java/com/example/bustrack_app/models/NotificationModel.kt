@@ -25,4 +25,21 @@ data class NotificationModel(
     val timestamp: Date? = null,
     val isRead: Boolean = false,
     val relatedId: String = ""      // optional: requestId / studentId / route, for future deep-linking
-)
+) {
+    companion object {
+        const val TYPE_GENERAL = "GENERAL"
+        const val TYPE_IMPORTANT = "IMPORTANT"
+        const val TYPE_EMERGENCY = "EMERGENCY"
+        const val TYPE_ADMIN_BROADCAST = "ADMIN_BROADCAST"
+        const val TYPE_ATTENDANCE = "ATTENDANCE"
+        const val TYPE_ATTENDANCE_REQUIRED = "ATTENDANCE_REQUIRED"
+        const val TYPE_TRIP_UPDATE = "TRIP_UPDATE"
+        const val TYPE_TRIP_CANCELLED = "TRIP_CANCELLED"
+        const val TYPE_NEW_TRIP = "NEW_TRIP"
+        const val TYPE_ROUTE_UPDATE = "ROUTE_UPDATE"
+        const val TYPE_STOP_UPDATE = "STOP_UPDATE"
+        const val TYPE_NAV_READY = "NAV_READY"
+        const val TYPE_TRIP_REMINDER = "TRIP_REMINDER"
+        const val TYPE_TRIP_STARTED = "TRIP_STARTED"
+    }
+}

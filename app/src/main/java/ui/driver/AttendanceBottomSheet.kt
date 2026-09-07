@@ -169,10 +169,27 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 if (success) {
                     savedCount++
                     val status = marked.getValue(record.studentId)
-                    FirebaseRepository.notifyParentsOfAttendance(record.studentId, record.studentName, status, isMorning)
+                    FirebaseRepository.notifyParentsOfAttendance(
+                        record.studentId, 
+                        record.studentName, 
+                        status, 
+                        record.date,
+                        isMorning
+                    )
                     if (savedCount == recordsToSave.size) {
                         val period = if (isMorning) "Morning" else "Evening"
                         Toast.makeText(context, "$period attendance saved for $savedCount student(s)", Toast.LENGTH_LONG).show()
+                        
+                        // System Notification: Attendance Submitted
+                        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid?.let { driverId ->
+                            FirebaseRepository.sendSystemNotification(
+                                driverId = driverId,
+                                title = "Attendance Submitted",
+                                message = "Student attendance for your trip has been successfully submitted. The attendance record has been saved for the current trip and date.",
+                                type = com.example.bustrack_app.models.NotificationModel.TYPE_GENERAL
+                            )
+                        }
+
                         dismiss()
                     }
                 } else if (!failed) {

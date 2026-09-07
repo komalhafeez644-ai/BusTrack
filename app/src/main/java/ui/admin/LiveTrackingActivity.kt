@@ -45,10 +45,14 @@ import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.extension.style.expressions.dsl.generated.*
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.gestures.gestures
+import com.mapbox.maps.plugin.gestures.addOnMapClickListener
+import com.mapbox.maps.RenderedQueryGeometry
+import com.mapbox.maps.RenderedQueryOptions
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import com.google.gson.JsonArray
 
 class LiveTrackingActivity : AppCompatActivity() {
 
@@ -101,19 +105,38 @@ class LiveTrackingActivity : AppCompatActivity() {
                     .build()
             )
 
-            pointAnnotationManager?.addClickListener { annotation ->
-                val driversList = viewModel.activeDrivers.value
-                val driver = driversList?.find {
-                    val latDiff = Math.abs(it.latitude - annotation.point.latitude())
-                    val lngDiff = Math.abs(it.longitude - annotation.point.longitude())
-                    latDiff < 0.0001 && lngDiff < 0.0001
+            // ROOT-CAUSE FIX (Admin marker click / Bottom Card):
+            // The bus vehicles are rendered as a modelLayer + symbolLayer bound to a
+            // GeoJSON source (see updateMarkers() below) - they are NOT PointAnnotation
+            // objects. pointAnnotationManager.addClickListener() only fires for taps on
+            // annotations created via that manager, and no such annotation is ever created
+            // for a bus (driverMarkers map is declared but never populated). So the old
+            // listener below could never fire for a real tap on a visible bus, which is why
+            // the online vehicle appeared but tapping it did nothing (no Bottom Card, no
+            // Track Driver). We hit-test the actual rendered layers instead and match the
+            // "driverId" feature property that updateMarkers() already attaches to each
+            // feature, which is also more robust than the old lat/lng epsilon comparison.
+            mapView?.gestures?.addOnMapClickListener { point ->
+                val screenCoordinate = mapView?.mapboxMap?.pixelForCoordinate(point)
+                if (screenCoordinate != null) {
+                    mapView?.mapboxMap?.queryRenderedFeatures(
+                        RenderedQueryGeometry(screenCoordinate),
+                        RenderedQueryOptions(listOf(BUS_MODEL_LAYER_ID, BUS_LABEL_LAYER_ID), null)
+                    ) { result ->
+                        val driverId = result.value
+                            ?.firstOrNull()
+                            ?.queriedFeature?.feature?.getStringProperty("driverId")
+                        val driver = driverId?.let { id ->
+                            viewModel.activeDrivers.value?.find { it.driverId == id }
+                        }
+                        driver?.let {
+                            isUserInteracting = false
+                            viewModel.selectDriver(it)
+                            focusOnDriver(it)
+                        }
+                    }
                 }
-                driver?.let {
-                    isUserInteracting = false
-                    viewModel.selectDriver(it)
-                    focusOnDriver(it)
-                }
-                true
+                false
             }
 
             // Sync Compass UI with map rotation
@@ -313,6 +336,11 @@ class LiveTrackingActivity : AppCompatActivity() {
                     addStringProperty("driverId", driver.driverId)
                     addStringProperty("name", driver.assignedBus ?: driver.name)
                     addNumberProperty("bearing", bearing + 180.0)
+                    val rotationArray = JsonArray()
+                    rotationArray.add(0.0)
+                    rotationArray.add(0.0)
+                    rotationArray.add(bearing + 180.0)
+                    addProperty("rotation", rotationArray)
                 }
             }
 
@@ -330,19 +358,11 @@ class LiveTrackingActivity : AppCompatActivity() {
                     modelId(BUS_MODEL_ID)
                     modelType(ModelType.COMMON_3D)
                     modelScale(listOf(15.0, 15.0, 15.0))
-                    modelRotation(array {
-                        literal(0.0)
-                        literal(0.0)
-                        get("bearing")
-                    })
+                    modelRotation(get("rotation"))
                 })
             } else {
                 (style.getLayer(BUS_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer)
-                    ?.modelRotation(array {
-                        literal(0.0)
-                        literal(0.0)
-                        get("bearing")
-                    })
+                    ?.modelRotation(get("rotation"))
             }
 
             if (!style.styleLayerExists(BUS_LABEL_LAYER_ID)) {
