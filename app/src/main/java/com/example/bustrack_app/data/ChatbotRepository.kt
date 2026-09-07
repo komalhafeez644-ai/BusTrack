@@ -31,8 +31,8 @@ import java.nio.charset.StandardCharsets
  */
 object ChatbotRepository {
 
-    private const val CHATBOT_API_URL = "https://api.openai.com/v1/chat/completions"
-    private const val MODEL = "gpt-4o-mini"
+    private const val CHATBOT_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+    private const val MODEL = "openai/gpt-4o-mini"
 
     // Keeps the bot scoped to this app's actual features instead of answering anything -
     // matches Task 6's required topic list.
