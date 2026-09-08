@@ -186,10 +186,35 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val SPLIT_SEARCH_WINDOW = 120
 
     private var offRouteBackupCount = 0
-    private val OFF_ROUTE_BACKUP_THRESHOLD_METERS = 80.0
-    private val OFF_ROUTE_BACKUP_CONFIRM_COUNT = 3
+    // Was 80.0 / 3 confirmations: that meant the bus had to already be ~80m off the
+    // route AND stay that way for 3 consecutive location-matcher ticks before this
+    // backup path would even consider rerouting - on top of that, the distance was
+    // being measured against the map-matched/"enhanced" position (see rawCheckPoint
+    // below), which the SDK keeps snapping onto the still-active route for a grace
+    // period after the physical bus has actually turned onto a different road. Both
+    // of those combined were the direct cause of the multi-second delay before the
+    // polyline recalculated. 30m is roughly a road-width-plus-GPS-error margin, and
+    // 2 confirmations (~2 location ticks) is enough to reject a single noisy fix
+    // without meaningfully slowing detection down.
+    private val OFF_ROUTE_BACKUP_THRESHOLD_METERS = 30.0
+    private val OFF_ROUTE_BACKUP_CONFIRM_COUNT = 2
     private var lastBackupRerouteTimeMs = 0L
     private val MIN_REROUTE_GAP_MS = 5000L
+
+    // Guards shared by BOTH reroute trigger paths (offRouteObserver below, and the
+    // backup distance-based check in updateNavigationRouteProgress()). Without these,
+    // Mapbox's OffRouteObserver keeps firing isOffRoute=true on ~every GPS tick while
+    // the bus stays off-route, so triggerReroute() used to be called repeatedly in
+    // quick succession; each new requestRoutes() call cancels the previous still-
+    // in-flight one, so onRoutesReady() (and therefore nav.setNavigationRoutes())
+    // almost never actually completes - this was why the old blue line stayed stuck
+    // on screen after a real road deviation. isRerouteInFlight blocks a second
+    // request while one is already pending; lastOffRouteRerouteTimeMs adds the same
+    // kind of cooldown the backup path already had, so the two paths can't fight
+    // each other either.
+    private var isRerouteInFlight = false
+    private var lastOffRouteRerouteTimeMs = 0L
+    private val MIN_OFFROUTE_REROUTE_GAP_MS = 5000L
 
     private var isNorthUp = false
     private var isUserTriggeredChange = true
@@ -220,8 +245,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastFirestoreUpdateTime = 0L
 
     companion object {
-        private const val FIRESTORE_UPDATE_INTERVAL = 5000L
-        private const val FIRESTORE_MIN_DISTANCE = 10f
+        // Was 5000L / 10f: throttling writes to once per 5s (or 10m of movement)
+        // is the root cause of Admin/Parent/Principal appearing to move much
+        // slower than the Driver Module - the Driver's own puck updates every
+        // ~1s from raw GPS (see locationRequest below), but everyone else only
+        // ever saw a new coordinate every 5s, animated over a fast 400ms tween,
+        // then frozen for the remaining ~4.6s. The same throttle also gated the
+        // traveled/upcoming route geometry write (see syncTrackingDataToFirestore
+        // below), which is why the grey traveled route visibly lagged behind the
+        // bus. Matching this to the GPS request interval makes Firestore receive
+        // (near) every fix, at the cost of more writes - an intentional trade-off
+        // per the "as close to real-time as reasonably possible" requirement.
+        private const val FIRESTORE_UPDATE_INTERVAL = 1000L
+        private const val FIRESTORE_MIN_DISTANCE = 2f
     }
     private var locationCallback: LocationCallback? = null
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
@@ -232,6 +268,12 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val navigationLocationProvider = NavigationLocationProvider()
     private val attendancePromptedStops = mutableSetOf<Int>()
     private var lastValidBearing: Double = 0.0
+    // Last position actually applied to the puck (as opposed to every raw fix received).
+    // Used to hold the puck still - no animation, no move - when consecutive fixes are
+    // within GPS-noise range of each other, instead of re-triggering a 1s puck animation
+    // for every tiny back-and-forth wobble while the bus is stopped/at the final stop.
+    private var lastAppliedPuckPoint: Point? = null
+    private val MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS = 2.5
     private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8
     private var lastRawPositionForSnap: Point? = null
     private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 3.0
@@ -368,9 +410,18 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private val offRouteObserver = OffRouteObserver { isOffRoute ->
         if (isOffRoute && isNavigating) {
-            runOnUiThread {
-                Log.d("NavDebug", "Driver is off-route. Triggering automatic reroute...")
-                triggerReroute()
+            val now = System.currentTimeMillis()
+            // Same guard idea as the backup check below: only fire if no reroute is
+            // already in flight AND enough time has passed since the last one. Without
+            // this, this callback keeps firing on ~every GPS tick while off-route,
+            // spamming triggerReroute() and causing each new request to cancel the
+            // previous one before it ever completes.
+            if (!isRerouteInFlight && now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS) {
+                lastOffRouteRerouteTimeMs = now
+                runOnUiThread {
+                    Log.d("NavDebug", "Driver is off-route. Triggering automatic reroute...")
+                    triggerReroute()
+                }
             }
         }
     }
@@ -379,6 +430,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         val route = assignedRoute ?: return
         val nav = mapboxNavigation ?: return
         val loc = currentLocation ?: return
+
+        // Belt-and-suspenders: even if a caller forgets to check isRerouteInFlight
+        // before calling this, don't fire a second overlapping request.
+        if (isRerouteInFlight) return
+        isRerouteInFlight = true
 
         val currentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
         val navPoints = mutableListOf<Point>()
@@ -397,7 +453,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             navPoints.add(Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude))
         }
 
-        if (navPoints.size < 2) return
+        if (navPoints.size < 2) {
+            isRerouteInFlight = false
+            return
+        }
 
         currentNavPoints = navPoints
 
@@ -411,15 +470,19 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
+                    isRerouteInFlight = false
                     navStartIndex = targetStopIndex
                     nextGlobalStopIndex = targetStopIndex
                     nav.setNavigationRoutes(routes)
                     Log.d("NavDebug", "Automatic reroute successful from current location to stop $navStartIndex")
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                    isRerouteInFlight = false
                     Log.e("NavDebug", "Reroute failed: ${reasons.firstOrNull()?.message}")
                 }
-                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {}
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
+                    isRerouteInFlight = false
+                }
             }
         )
     }
@@ -433,6 +496,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                     LineString.fromPolyline(it, 6).coordinates()
                 } ?: emptyList()
                 lastSplitIndex = 0
+                // A fresh route (e.g. right after a reroute) must render on the very
+                // next GPS tick. Without this reset, updateNavigationRouteProgress()'s
+                // "skip if moved < 3m since last raw fix" guard could hold onto a stale
+                // lastRawPositionForSnap from just before the reroute and silently skip
+                // the first render of the NEW route/blue line.
+                lastRawPositionForSnap = null
 
                 if (isNavigating) {
                     currentLocation?.let { loc ->
@@ -466,12 +535,26 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .build()
 
             val transitionOptions: (android.animation.ValueAnimator.() -> Unit) = { duration = 1000 }
-            navigationLocationProvider.changePosition(
-                location = enhancedLocation,
-                keyPoints = locationMatcherResult.keyPoints,
-                latLngTransitionOptions = transitionOptions,
-                bearingTransitionOptions = transitionOptions
-            )
+            val newPuckPoint = Point.fromLngLat(enhancedLocation.longitude, enhancedLocation.latitude)
+            val movedSincePuckUpdate = lastAppliedPuckPoint?.let {
+                TurfMeasurement.distance(newPuckPoint, it, TurfConstants.UNIT_METERS)
+            } ?: Double.MAX_VALUE
+
+            // Ignore duplicate/jittery fixes that don't represent real movement: only move
+            // (and only re-animate) the puck when the new fix is meaningfully different
+            // from the last one we actually applied. This is what keeps the marker locked
+            // in place - no forward/backward wobble, no repeated re-centering of the
+            // camera - while the bus is stationary or has reached the final stop, since a
+            // stationary bus's fixes are exactly this kind of noise around one true spot.
+            if (movedSincePuckUpdate >= MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS) {
+                lastAppliedPuckPoint = newPuckPoint
+                navigationLocationProvider.changePosition(
+                    location = enhancedLocation,
+                    keyPoints = locationMatcherResult.keyPoints,
+                    latLngTransitionOptions = transitionOptions,
+                    bearingTransitionOptions = transitionOptions
+                )
+            }
 
             val androidLocation = android.location.Location("mapbox").apply {
                 latitude = enhancedLocation.latitude
@@ -881,7 +964,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
+            // Same reasoning as the callback below: don't let a cached/stale fix from this
+            // separate raw pipeline overwrite the puck while Mapbox's trip session is
+            // actively driving it (e.g. this fires again on every onResume(), including
+            // right after the app is backgrounded and resumed mid-navigation).
+            if (location != null && !isNavigating) {
                 val wasLive = isCurrentLocationLive
                 currentLocation = location
                 isCurrentLocationLive = true
@@ -906,19 +993,30 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 for (location in locationResult.locations) {
                     val wasLive = isCurrentLocationLive
-                    currentLocation = location
                     isCurrentLocationLive = true
-                    feedRawLocationToPuck(location)
 
                     if (isDutyEnabled) {
                         syncTrackingDataToFirestore(location)
+                    }
 
-                        if (isNavigating) {
-                            runOnUiThread {
-                                checkGeofenceAndStopStatus(location)
-                                updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
-                            }
-                        } else if (!wasLive) {
+                    // While actively navigating, Mapbox's trip session already owns the
+                    // puck position, geofence checks, and route progress via
+                    // locationObserver.onNewLocationMatcherResult() below, using its own
+                    // smoothed/map-matched GPS fix. Also feeding this SEPARATE, unfiltered
+                    // FusedLocationProviderClient fix into feedRawLocationToPuck() /
+                    // checkGeofenceAndStopStatus() / updateNavigationRouteProgress() here
+                    // made two independent, unsynchronized location pipelines race each
+                    // other on the same puck roughly once a second - each overwriting the
+                    // other with a slightly different position - which is what produced
+                    // the repeating forward/backward "jump" of the bus marker and route
+                    // line, most visible while the bus was stationary (the two pipelines'
+                    // jitter is proportionally huge relative to ~0 real movement). So once
+                    // navigation is active, this raw pipeline only keeps Firestore (other
+                    // users' live-tracking view) in sync and stays out of the puck/route.
+                    if (!isNavigating) {
+                        currentLocation = location
+                        feedRawLocationToPuck(location)
+                        if (!wasLive) {
                             runOnUiThread { updateMapDisplay() }
                         }
                     }
@@ -938,12 +1036,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (now - lastFirestoreUpdateTime >= FIRESTORE_UPDATE_INTERVAL || distanceMoved >= FIRESTORE_MIN_DISTANCE) {
 
-            FirebaseRepository.updateDriverLocation(
-                driverId,
-                location.latitude,
-                location.longitude
-            )
-
             val sheet = binding.bottomSummaryCard
             val tvEta = sheet.findViewById<TextView>(R.id.tvEtaSheet)
             val tvLoad = sheet.findViewById<TextView>(R.id.tvLoadSheet)
@@ -952,30 +1044,29 @@ class DriverDashboardActivity : AppCompatActivity() {
             val speedVal = (location.speed * 3.6)
             val loadVal = tvLoad?.text?.toString() ?: "0/0"
 
-            FirebaseRepository.updateDriverStats(
+            // Single consolidated write (was 3 separate .update() calls: location,
+            // stats, route geometry) - see updateDriverLiveState() for why this
+            // matters now that this runs roughly every ~1s instead of every ~5s.
+            // stopEtaTexts (computed every tick in routeProgressObserver) is always
+            // forwarded here too, so Firestore's stopEtaTimes field stays in sync
+            // and Parent/Admin/Principal (TrackDriverActivity.applyDriverStopState)
+            // can show a real per-stop ETA instead of falling back to "TBD".
+            val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
+            val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
+            FirebaseRepository.updateDriverLiveState(
                 driverId,
+                location.latitude,
+                location.longitude,
                 etaVal,
                 speedVal,
-                loadVal
+                loadVal,
+                currentRouteGeometry,
+                traveledRouteGeometry,
+                nextGlobalStopIndex,
+                arrivalMap,
+                etaMap,
+                isNavigating
             )
-
-            if (isNavigating) {
-                val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
-                // stopEtaTexts (computed every tick in routeProgressObserver) was never being
-                // forwarded here, so Firestore's stopEtaTimes field stayed permanently empty
-                // and Parent/Admin/Principal (TrackDriverActivity.applyDriverStopState) always
-                // fell back to "TBD" -> "ETA: --" for every upcoming stop. Sync it now.
-                val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
-                FirebaseRepository.updateDriverRouteGeometry(
-                    driverId,
-                    currentRouteGeometry,
-                    traveledRouteGeometry,
-                    nextGlobalStopIndex,
-                    arrivalMap,
-                    isNavigating,
-                    etaMap
-                )
-            }
 
             lastFirestoreUpdateTime = now
             lastFirestoreLocation = Location(location)
@@ -1413,13 +1504,32 @@ class DriverDashboardActivity : AppCompatActivity() {
             splitIndex = maxOf(splitIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
 
-            if (isNavigating && minDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
+            // Deviation is measured against RAW GPS, not the map-matched `currentPos`
+            // used for the traveled/upcoming line split above. The matched/"enhanced"
+            // location the SDK reports is intentionally smoothed and keeps snapping to
+            // the currently active route for a short grace period after the vehicle has
+            // actually left it, so using it here was the real source of the rerouting
+            // delay - by the time minDistance reflected the deviation, the bus was
+            // already well past it. Raw GPS reflects the road change immediately.
+            val rawCheckPoint = currentRawLocation?.let {
+                Point.fromLngLat(it.longitude, it.latitude)
+            } ?: currentPos
+            var rawMinDistance = Double.MAX_VALUE
+            for (i in searchStart..searchEnd) {
+                val dist = TurfMeasurement.distance(rawCheckPoint, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
+                if (dist < rawMinDistance) {
+                    rawMinDistance = dist
+                }
+            }
+
+            if (isNavigating && rawMinDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
                 offRouteBackupCount++
                 val now = System.currentTimeMillis()
-                if (offRouteBackupCount >= OFF_ROUTE_BACKUP_CONFIRM_COUNT &&
+                if (!isRerouteInFlight &&
+                    offRouteBackupCount >= OFF_ROUTE_BACKUP_CONFIRM_COUNT &&
                     now - lastBackupRerouteTimeMs > MIN_REROUTE_GAP_MS
                 ) {
-                    Log.d("NavDebug", "Backup off-route check triggered reroute (missed turn?)")
+                    Log.d("NavDebug", "Backup off-route check triggered reroute (raw GPS ${rawMinDistance.toInt()}m from route)")
                     lastBackupRerouteTimeMs = now
                     offRouteBackupCount = 0
                     triggerReroute()
