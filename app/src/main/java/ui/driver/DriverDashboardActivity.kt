@@ -176,6 +176,12 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var isCurrentlyAtStop = false
     private val ARRIVAL_RADIUS = 80.0 // meters
     private val DEPARTURE_RADIUS = 70.0 // meters
+    // How many UPCOMING stops ahead of the current pointer we'll check when scanning
+    // for geofence entry. Geofence proximity is the sole source of truth for stop
+    // arrival/skip decisions (see checkGeofenceAndStopStatus below) - this bounds how
+    // far ahead a single GPS fix can jump the pointer, so one noisy/bad fix can't mark
+    // an unreasonable number of stops SKIPPED at once.
+    private val SKIP_DETECTION_LOOKAHEAD_STOPS = 3
     private var currentRawLocation: Location? = null
 
     private var departureCandidateIndex = -1
@@ -608,42 +614,67 @@ class DriverDashboardActivity : AppCompatActivity() {
         val stops = assignedRoute?.stopsList ?: return
         if (nextGlobalStopIndex >= stops.size) return
 
-        val targetStop = stops[nextGlobalStopIndex]
-        val results = FloatArray(1)
-        Location.distanceBetween(
-            location.latitude, location.longitude,
-            targetStop.latitude, targetStop.longitude,
-            results
-        )
-        val distanceMeters = results[0].toDouble()
+        // 1. Entering Geofence: UPCOMING -> ARRIVED.
+        // Geofence proximity is the SOLE source of truth for whether a stop was
+        // reached - not Mapbox's currentLegProgress.legIndex (that only reflects
+        // progress along the *planned* route geometry, and is wrong the moment the
+        // driver deviates from it, e.g. a shortcut or a stale route mid-reroute).
+        // We scan forward a bounded window of UPCOMING stops from the current
+        // pointer, not just the single "next" stop, so that if the driver's real GPS
+        // position lands inside a LATER stop's geofence directly, we can correctly
+        // detect that the stops in between were genuinely skipped, based on actual
+        // physical proximity rather than a route-progress guess.
+        if (!isCurrentlyAtStop) {
+            val scanLimit = minOf(stops.size, nextGlobalStopIndex + 1 + SKIP_DETECTION_LOOKAHEAD_STOPS)
+            for (candidateIndex in nextGlobalStopIndex until scanLimit) {
+                if (stateOf(candidateIndex) != StopState.UPCOMING) continue
 
-        // 1. Entering Geofence: UPCOMING -> ARRIVED (guarded; no-op if already advanced)
-        if (distanceMeters <= ARRIVAL_RADIUS && transitionToArrived(nextGlobalStopIndex)) {
+                val candidateStop = stops[candidateIndex]
+                val results = FloatArray(1)
+                Location.distanceBetween(
+                    location.latitude, location.longitude,
+                    candidateStop.latitude, candidateStop.longitude,
+                    results
+                )
 
-            // Trigger stop arrival notification to parents
-            val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
-            val period = if (isMorning) "MORNING" else "EVENING"
-            val tripId = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Calendar.getInstance().time) + "_$period"
+                if (results[0] <= ARRIVAL_RADIUS) {
+                    // We're physically inside candidateIndex's geofence right now, so
+                    // any still-UPCOMING stop strictly before it was never actually
+                    // reached - mark those SKIPPED before advancing the pointer.
+                    for (skippedIndex in nextGlobalStopIndex until candidateIndex) {
+                        transitionToSkipped(skippedIndex)
+                    }
+                    nextGlobalStopIndex = candidateIndex
 
-            FirebaseRepository.notifyParentsOfStopArrival(
-                assignedRoute?.routeName ?: "",
-                targetStop.stopName,
-                tripId
-            )
+                    if (transitionToArrived(candidateIndex)) {
+                        // Trigger stop arrival notification to parents
+                        val isMorning = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+                        val period = if (isMorning) "MORNING" else "EVENING"
+                        val tripId = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Calendar.getInstance().time) + "_$period"
 
-            if (!attendancePromptedStops.contains(nextGlobalStopIndex)) {
-                attendancePromptedStops.add(nextGlobalStopIndex)
+                        FirebaseRepository.notifyParentsOfStopArrival(
+                            assignedRoute?.routeName ?: "",
+                            candidateStop.stopName,
+                            tripId
+                        )
 
-                // Dismiss existing sheet to reset context (Section 2 Requirement)
-                (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismissAllowingStateLoss()
-                supportFragmentManager.executePendingTransactions()
+                        if (!attendancePromptedStops.contains(candidateIndex)) {
+                            attendancePromptedStops.add(candidateIndex)
 
-                val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
-                val bottomSheet = AttendanceBottomSheet.newInstance(targetStop.stopName, assignedRoute?.routeName ?: "", isMorningTrip)
-                bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+                            // Dismiss existing sheet to reset context (Section 2 Requirement)
+                            (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismissAllowingStateLoss()
+                            supportFragmentManager.executePendingTransactions()
+
+                            val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+                            val bottomSheet = AttendanceBottomSheet.newInstance(candidateStop.stopName, assignedRoute?.routeName ?: "", isMorningTrip)
+                            bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+                        }
+
+                        updateUpcomingStopsUI()
+                    }
+                    break
+                }
             }
-
-            updateUpcomingStopsUI()
         }
 
         // 2. Exiting Geofence: ARRIVED -> COMPLETED (one-way; never returns to UPCOMING/ARRIVED)
@@ -736,19 +767,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 updateLoadStat(tvLoad)
 
-                val currentLegIndex = routeProgress.currentLegProgress?.legIndex ?: 0
-                val mapboxSuggestedIndex = navStartIndex + currentLegIndex
-
-                if (!isCurrentlyAtStop && mapboxSuggestedIndex > nextGlobalStopIndex) {
-                    // Mark skipped stops if Mapbox suggests we moved ahead. transitionToSkipped()
-                    // only touches stops still UPCOMING, so an already ARRIVED/COMPLETED stop
-                    // is never overwritten.
-                    for (i in nextGlobalStopIndex until mapboxSuggestedIndex) {
-                        transitionToSkipped(i)
-                    }
-                    nextGlobalStopIndex = mapboxSuggestedIndex
-                }
-
+                // Stop arrival/skip decisions are made exclusively by geofence proximity,
+                // in checkGeofenceAndStopStatus() below. Mapbox's currentLegProgress.legIndex
+                // is intentionally NOT used to advance or skip stops here anymore: legIndex
+                // only reflects progress along the *planned* route geometry, so it would
+                // happily claim stops were reached the moment the bus's snapped position
+                // moved past them on that geometry - even if the driver took a shortcut, is
+                // mid-reroute, or the route hasn't caught up with a deviation yet.
                 val stops = assignedRoute?.stopsList ?: emptyList()
 
                 currentLocation?.let { loc ->
@@ -1441,25 +1466,47 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
         lastRawPositionForSnap = currentPos
 
+        // Record the driver's actual GPS movement. This - and NOT any point sliced out
+        // of the planned route geometry - is what the grey "traveled" line below is
+        // built from. Because it's independent of fullNavigationPoints, it survives a
+        // reroute untouched (a reroute swaps fullNavigationPoints/lastSplitIndex, but
+        // never touches traveledHistoryPoints) and it can't be fooled into thinking a
+        // shortcut means the driver covered a stretch of road they never actually drove.
+        // It's only ever reset when a genuinely new trip starts or duty is turned off
+        // (see the traveledHistoryPoints.clear() calls in setNavigationMode()/
+        // onDutyStatusChanged()).
+        if (isNavigating) {
+            traveledHistoryPoints.add(currentPos)
+        }
+
         try {
+            // Snap against the FULL route line so the off-route distance below reflects
+            // where the driver actually is relative to the planned route, not just
+            // relative to the small forward-looking window used for splitIndex (that
+            // window search can be misled by a shortcut landing it near a later point).
             val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
             val snappedP = snappedPoint.geometry() as? Point ?: return
+            val actualDistanceToRoute = TurfMeasurement.distance(currentPos, snappedP, TurfConstants.UNIT_METERS)
 
             val searchStart = lastSplitIndex
             val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
             var splitIndex = searchStart
-            var minDistance = Double.MAX_VALUE
+            var minWindowDistance = Double.MAX_VALUE
             for (i in searchStart..searchEnd) {
                 val dist = TurfMeasurement.distance(currentPos, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
-                if (dist < minDistance) {
-                    minDistance = dist
+                if (dist < minWindowDistance) {
+                    minWindowDistance = dist
                     splitIndex = i
                 }
             }
             splitIndex = maxOf(splitIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
 
-            if (isNavigating && minDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
+            // Off-route/reroute decisions use actualDistanceToRoute (distance to the
+            // nearest point anywhere on the full route), not the windowed search above,
+            // so a shortcut that fools the window search can't also suppress a reroute
+            // that's genuinely needed - or trigger one that isn't.
+            if (isNavigating && actualDistanceToRoute > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
                 offRouteBackupCount++
                 val now = System.currentTimeMillis()
                 if (!isRerouteInFlight &&
@@ -1475,7 +1522,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 offRouteBackupCount = 0
             }
 
-            val traveledPoints = fullNavigationPoints.subList(0, splitIndex + 1)
+            // The grey "traveled" line is the driver's actual recorded GPS path - never
+            // derived from fullNavigationPoints - so it can't jump ahead on a shortcut
+            // and won't vanish/reset just because a reroute changed the planned route.
+            val traveledPoints = traveledHistoryPoints.toList()
 
             val upcomingPoints = mutableListOf<Point>()
             upcomingPoints.add(snappedP)
@@ -1933,7 +1983,13 @@ class DriverDashboardActivity : AppCompatActivity() {
         cancelDutyAutoOffTimer()
         binding.apply {
             if (isNavigating) {
+                // Fresh trip: start the actual-GPS traveled history from scratch, seeded
+                // with wherever the driver currently is so the grey line has a starting
+                // point even before the next location fix comes in.
                 traveledHistoryPoints.clear()
+                currentLocation?.let {
+                    traveledHistoryPoints.add(Point.fromLngLat(it.longitude, it.latitude))
+                }
                 traveledRouteGeometry = null
                 currentRouteGeometry = null
 

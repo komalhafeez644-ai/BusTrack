@@ -61,17 +61,17 @@ class AdminDashboardActivity : AppCompatActivity() {
         profileViewModel.adminData.observe(this) { admin ->
             // Update Dashboard Header
             findViewById<TextView>(R.id.tvGreeting)?.text = "${getGreeting().uppercase()}, 👋"
-
+            
             val nameToShow = admin.fullName.ifEmpty { "System Admin" }
             findViewById<TextView>(R.id.tvAdminName)?.text = nameToShow
-
+            
             // Update Drawer Header
             findViewById<TextView>(R.id.drawerName)?.text = nameToShow
             findViewById<TextView>(R.id.drawerEmail)?.text = admin.email
-
+            
             val profileImageView = findViewById<ImageView>(R.id.ivProfile)
             val drawerImageView = findViewById<ImageView>(R.id.drawerImgProfile)
-
+            
             utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, profileImageView)
             utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, drawerImageView)
         }
@@ -85,7 +85,7 @@ class AdminDashboardActivity : AppCompatActivity() {
         super.onResume()
         // Always refresh bottom nav state when coming back
         NavigationUtils.setupBottomNavigation(this)
-
+        
         // Update greeting based on current time
         findViewById<TextView>(R.id.tvGreeting)?.text = "${getGreeting().uppercase()}, 👋"
     }
