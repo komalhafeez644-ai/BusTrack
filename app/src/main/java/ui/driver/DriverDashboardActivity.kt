@@ -183,7 +183,6 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val DEPARTURE_CONFIRM_THRESHOLD = 3
 
     private var lastSplitIndex = 0
-    private val SPLIT_SEARCH_WINDOW = 120
 
     private var offRouteBackupCount = 0
     // Was 80.0 / 3 confirmations: that meant the bus had to already be ~80m off the
@@ -272,11 +271,25 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Used to hold the puck still - no animation, no move - when consecutive fixes are
     // within GPS-noise range of each other, instead of re-triggering a 1s puck animation
     // for every tiny back-and-forth wobble while the bus is stopped/at the final stop.
+    //
+    // Single source of truth for "should the puck move this tick": resolveStablePuckPosition()
+    // below. It uses a SPEED-BASED (not repeat-count-based) hysteresis gate:
+    //  - while the reported speed says the bus is actually moving, a small movement floor
+    //    (MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS) is enough to accept the new fix immediately.
+    //  - while the bus is essentially stopped, a fix must clear a larger floor
+    //    (STATIONARY_JUMP_THRESHOLD_METERS) before it's accepted - large enough that normal
+    //    GPS wobble around a parked/stopped bus never clears it (fixing the fly-forward /
+    //    fly-backward loop), but small enough that ANY deliberate relocation - the bus
+    //    pulling away for real, or a tester manually moving a Mock Location - clears it on
+    //    the very first fix. There is intentionally no "must repeat N times" requirement:
+    //    that was tried before and is what silently froze the puck under Mock Location
+    //    testing (a manual mock move rarely repeats itself on the next tick), which
+    //    violates "must not permanently block valid updates".
     private var lastAppliedPuckPoint: Point? = null
     private val MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS = 2.5
+    private val STATIONARY_JUMP_THRESHOLD_METERS = 12.0
+    private val STATIONARY_SPEED_THRESHOLD_MPS = 0.6
     private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8
-    private var lastRawPositionForSnap: Point? = null
-    private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 3.0
 
     private val NAV_ROUTE_SOURCE_ID = "nav-route-source"
     private val NAV_TRAVELED_SOURCE_ID = "nav-traveled-source"
@@ -496,12 +509,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                     LineString.fromPolyline(it, 6).coordinates()
                 } ?: emptyList()
                 lastSplitIndex = 0
-                // A fresh route (e.g. right after a reroute) must render on the very
-                // next GPS tick. Without this reset, updateNavigationRouteProgress()'s
-                // "skip if moved < 3m since last raw fix" guard could hold onto a stale
-                // lastRawPositionForSnap from just before the reroute and silently skip
-                // the first render of the NEW route/blue line.
-                lastRawPositionForSnap = null
 
                 if (isNavigating) {
                     currentLocation?.let { loc ->
@@ -536,18 +543,16 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             val transitionOptions: (android.animation.ValueAnimator.() -> Unit) = { duration = 1000 }
             val newPuckPoint = Point.fromLngLat(enhancedLocation.longitude, enhancedLocation.latitude)
-            val movedSincePuckUpdate = lastAppliedPuckPoint?.let {
-                TurfMeasurement.distance(newPuckPoint, it, TurfConstants.UNIT_METERS)
-            } ?: Double.MAX_VALUE
 
-            // Ignore duplicate/jittery fixes that don't represent real movement: only move
-            // (and only re-animate) the puck when the new fix is meaningfully different
-            // from the last one we actually applied. This is what keeps the marker locked
-            // in place - no forward/backward wobble, no repeated re-centering of the
-            // camera - while the bus is stationary or has reached the final stop, since a
-            // stationary bus's fixes are exactly this kind of noise around one true spot.
-            if (movedSincePuckUpdate >= MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS) {
-                lastAppliedPuckPoint = newPuckPoint
+            // Single source of truth for "did the bus really move this tick" - see
+            // resolveStablePuckPosition() for the speed-based hysteresis. stablePuckPoint is
+            // non-null only when this fix should actually be applied; it is then reused below
+            // for the route-line update too, instead of that code re-deciding independently
+            // with its own separate distance check (which used to let the puck and the route
+            // line disagree about whether a fix was "real movement" and drift out of sync).
+            val stablePuckPoint = resolveStablePuckPosition(newPuckPoint, currentSpeed)
+
+            if (stablePuckPoint != null) {
                 navigationLocationProvider.changePosition(
                     location = enhancedLocation,
                     keyPoints = locationMatcherResult.keyPoints,
@@ -568,7 +573,27 @@ class DriverDashboardActivity : AppCompatActivity() {
                 isCurrentLocationLive = true
 
                 if (isNavigating) {
-                    updateNavigationRouteProgress(Point.fromLngLat(androidLocation.longitude, androidLocation.latitude))
+                    // Off-route detection runs every tick, unconditionally - it must not depend
+                    // on whether the puck itself moved (see checkOffRouteAndReroute()'s comment:
+                    // a bus can be genuinely off-route while sitting at one spot, and still
+                    // needs to be detected and rerouted). Raw GPS reflects a road change
+                    // immediately; the map-matched/enhanced location the SDK reports keeps
+                    // snapping to the old route for a short grace period after the vehicle has
+                    // actually left it, so raw is checked here instead.
+                    val rawCheckPoint = currentRawLocation?.let {
+                        Point.fromLngLat(it.longitude, it.latitude)
+                    } ?: Point.fromLngLat(androidLocation.longitude, androidLocation.latitude)
+                    checkOffRouteAndReroute(rawCheckPoint)
+
+                    // Only recompute the traveled/upcoming route split when the puck itself
+                    // was actually accepted as moved (see stablePuckPoint above). This is what
+                    // keeps the blue line completely still while the bus is stationary, instead
+                    // of re-snapping every tick off tiny GPS wobble even when the marker didn't
+                    // move. checkGeofenceAndStopStatus still runs every tick off the live
+                    // location so arrival/departure timing stays accurate regardless.
+                    if (stablePuckPoint != null) {
+                        updateNavigationRouteProgress(stablePuckPoint)
+                    }
                     checkGeofenceAndStopStatus(androidLocation)
 
                     val speedKph = (androidLocation.speed * 3.6).toInt()
@@ -951,7 +976,53 @@ class DriverDashboardActivity : AppCompatActivity() {
         return builder.build()
     }
 
+    /**
+     * Single source of truth for whether a new puck fix should actually be applied this tick.
+     * Called by BOTH location pipelines (the Mapbox nav trip-session pipeline in
+     * onNewLocationMatcherResult, and the pre-navigation FusedLocationProviderClient pipeline
+     * in feedRawLocationToPuck) so the two can never disagree about what counts as "real
+     * movement" - previously each had its own separate/slightly different distance check.
+     *
+     * Speed-based hysteresis, single-shot (no "must repeat N times" requirement):
+     *  - Reported speed >= STATIONARY_SPEED_THRESHOLD_MPS ("moving"): a fix clearing the small
+     *    MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS floor is accepted immediately, same as before.
+     *  - Reported speed < STATIONARY_SPEED_THRESHOLD_MPS ("stopped"): a fix must clear the
+     *    larger STATIONARY_JUMP_THRESHOLD_METERS floor. That's comfortably above normal GPS/
+     *    Mock-Location jitter around one true spot (fixes the stationary fly-forward/backward
+     *    loop), while still being cleared on the very FIRST fix after any deliberate
+     *    relocation - the bus genuinely pulling away, or a tester manually moving a Mock
+     *    Location point - so a valid update is never permanently withheld waiting for a
+     *    repeat that may never come.
+     *
+     * Returns the point to apply this tick (and update lastAppliedPuckPoint to), or null if
+     * this fix should be treated as noise and the puck/route/camera should stay exactly as
+     * they are.
+     */
+    private fun resolveStablePuckPosition(rawPoint: Point, speedMps: Double): Point? {
+        val anchor = lastAppliedPuckPoint
+        if (anchor == null) {
+            lastAppliedPuckPoint = rawPoint
+            return rawPoint
+        }
+
+        val distanceFromAnchor = TurfMeasurement.distance(rawPoint, anchor, TurfConstants.UNIT_METERS)
+        val requiredDistance = if (speedMps >= STATIONARY_SPEED_THRESHOLD_MPS) {
+            MIN_MOVEMENT_FOR_PUCK_UPDATE_METERS
+        } else {
+            STATIONARY_JUMP_THRESHOLD_METERS
+        }
+
+        if (distanceFromAnchor < requiredDistance) return null
+
+        lastAppliedPuckPoint = rawPoint
+        return rawPoint
+    }
+
     private fun feedRawLocationToPuck(location: Location) {
+        val rawPoint = Point.fromLngLat(location.longitude, location.latitude)
+        val speedMps = if (location.hasSpeed()) location.speed.toDouble() else 0.0
+        if (resolveStablePuckPosition(rawPoint, speedMps) == null) return
+
         navigationLocationProvider.changePosition(
             location = toMapboxLocation(location)
         )
@@ -999,6 +1070,21 @@ class DriverDashboardActivity : AppCompatActivity() {
                         syncTrackingDataToFirestore(location)
                     }
 
+                    // Off-route distance checking (checkOffRouteAndReroute) reads
+                    // currentRawLocation, which used to be fed ONLY by Mapbox's own internal
+                    // onNewRawLocation callback. That callback goes through Mapbox's own
+                    // location engine/trip-session filtering before it ever reaches this app,
+                    // and can lag or fail to reflect a manually-set Mock Location the way
+                    // FusedLocationProviderClient does (FusedLocationProviderClient reads
+                    // straight from Android's system LocationManager, which is exactly what
+                    // Mock Location injects into) - so off-route checks could be comparing
+                    // against a stale/smoothed position instead of where the mock tool actually
+                    // put the bus, and a genuine off-route excursion could go undetected.
+                    // This line ONLY updates that one read-only distance-check variable - it
+                    // does not touch the puck or the route polyline, so it can't reintroduce
+                    // the dual-pipeline puck-racing bug described below.
+                    currentRawLocation = location
+
                     // While actively navigating, Mapbox's trip session already owns the
                     // puck position, geofence checks, and route progress via
                     // locationObserver.onNewLocationMatcherResult() below, using its own
@@ -1012,7 +1098,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                     // line, most visible while the bus was stationary (the two pipelines'
                     // jitter is proportionally huge relative to ~0 real movement). So once
                     // navigation is active, this raw pipeline only keeps Firestore (other
-                    // users' live-tracking view) in sync and stays out of the puck/route.
+                    // users' live-tracking view) and currentRawLocation in sync, and stays
+                    // out of the puck/route.
                     if (!isNavigating) {
                         currentLocation = location
                         feedRawLocationToPuck(location)
@@ -1475,73 +1562,100 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Off-route detection MUST run independently of the puck-movement gate. If it lived inside
+     * updateNavigationRouteProgress() (which only runs when resolveStablePuckPosition() accepts
+     * a new puck position), then after a single off-route jump gets accepted once, the puck's
+     * own anchor moves to that new spot - so every fix after that, while the tester holds the
+     * new off-route position, reads as "no movement" (jitter around the new anchor) and gets
+     * rejected by the stationary hysteresis. That meant this off-route check only ever ran
+     * ONCE per excursion, so offRouteBackupCount could never reach OFF_ROUTE_BACKUP_CONFIRM_COUNT
+     * and a reroute never fired - a bus sitting off-route looks "stationary" on screen, but
+     * still needs a reroute computed from where it actually is.
+     *
+     * So this runs every raw location tick while navigating, unconditionally - a bus can be
+     * genuinely off-route while visually "not moving," and that must still get detected.
+     */
+    private fun checkOffRouteAndReroute(rawCheckPoint: Point) {
+        if (!isNavigating || fullNavigationPoints.size < 2) {
+            offRouteBackupCount = 0
+            return
+        }
+
+        val nearest = try {
+            TurfMisc.nearestPointOnLine(rawCheckPoint, fullNavigationPoints, TurfConstants.UNIT_METERS)
+        } catch (e: Exception) {
+            return
+        }
+        val rawMinDistance = nearest.getNumberProperty("dist")?.toDouble() ?: return
+
+        if (rawMinDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
+            offRouteBackupCount++
+            val now = System.currentTimeMillis()
+            if (!isRerouteInFlight &&
+                offRouteBackupCount >= OFF_ROUTE_BACKUP_CONFIRM_COUNT &&
+                now - lastBackupRerouteTimeMs > MIN_REROUTE_GAP_MS
+            ) {
+                Log.d("NavDebug", "Backup off-route check triggered reroute (raw GPS ${rawMinDistance.toInt()}m from route)")
+                lastBackupRerouteTimeMs = now
+                offRouteBackupCount = 0
+                triggerReroute()
+            }
+        } else {
+            offRouteBackupCount = 0
+        }
+    }
+
     private fun updateNavigationRouteProgress(currentPos: Point) {
+        // NOTE: callers only invoke this with a point that resolveStablePuckPosition() already
+        // accepted as real movement (see onNewLocationMatcherResult / routesObserver). This
+        // function no longer applies its own separate distance gate on top of that - having two
+        // independent "did we really move" checks (this one used a flat 3m floor regardless of
+        // whether the bus was stopped or moving) meant they could disagree, letting the route
+        // line and the puck drift out of sync with each other.
+        //
+        // Off-route detection/rerouting is handled separately by checkOffRouteAndReroute(),
+        // called every raw tick regardless of puck movement - see that function's comment for
+        // why it can't live here anymore. This function now only redraws the traveled/upcoming
+        // polyline split.
         if (fullNavigationPoints.size < 2) return
 
-        lastRawPositionForSnap?.let { lastRaw ->
-            val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
-            if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
-                return
-            }
-        }
-        lastRawPositionForSnap = currentPos
-
         try {
+            // Both the traveled/upcoming split index AND the connector point MUST come from
+            // this single computation. Previously, snappedP was found globally (nearest point
+            // on the WHOLE route) while splitIndex was found by a separate, fixed-size local
+            // search window starting at lastSplitIndex. Whenever a fix (a big mock GPS jump,
+            // or just a bad GPS ping) landed outside that window, splitIndex effectively froze
+            // near the old position while snappedP jumped to wherever the true nearest point
+            // was - and the upcoming/traveled polylines were then built by joining those two
+            // now-unrelated points, drawing a straight chord across the map instead of
+            // following the road. Deriving splitIndex from the SAME nearestPointOnLine result
+            // that produced snappedP makes that desync impossible.
             val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
             val snappedP = snappedPoint.geometry() as? Point ?: return
+            val candidateIndex = snappedPoint.getNumberProperty("index")?.toInt() ?: lastSplitIndex
 
-            val searchStart = lastSplitIndex
-            val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
-            var splitIndex = searchStart
-            var minDistance = Double.MAX_VALUE
-            for (i in searchStart..searchEnd) {
-                val dist = TurfMeasurement.distance(currentPos, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
-                if (dist < minDistance) {
-                    minDistance = dist
-                    splitIndex = i
-                }
-            }
-            splitIndex = maxOf(splitIndex, lastSplitIndex)
-            lastSplitIndex = splitIndex
-
-            // Deviation is measured against RAW GPS, not the map-matched `currentPos`
-            // used for the traveled/upcoming line split above. The matched/"enhanced"
-            // location the SDK reports is intentionally smoothed and keeps snapping to
-            // the currently active route for a short grace period after the vehicle has
-            // actually left it, so using it here was the real source of the rerouting
-            // delay - by the time minDistance reflected the deviation, the bus was
-            // already well past it. Raw GPS reflects the road change immediately.
-            val rawCheckPoint = currentRawLocation?.let {
-                Point.fromLngLat(it.longitude, it.latitude)
-            } ?: currentPos
-            var rawMinDistance = Double.MAX_VALUE
-            for (i in searchStart..searchEnd) {
-                val dist = TurfMeasurement.distance(rawCheckPoint, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
-                if (dist < rawMinDistance) {
-                    rawMinDistance = dist
-                }
-            }
-
-            if (isNavigating && rawMinDistance > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
-                offRouteBackupCount++
-                val now = System.currentTimeMillis()
-                if (!isRerouteInFlight &&
-                    offRouteBackupCount >= OFF_ROUTE_BACKUP_CONFIRM_COUNT &&
-                    now - lastBackupRerouteTimeMs > MIN_REROUTE_GAP_MS
-                ) {
-                    Log.d("NavDebug", "Backup off-route check triggered reroute (raw GPS ${rawMinDistance.toInt()}m from route)")
-                    lastBackupRerouteTimeMs = now
-                    offRouteBackupCount = 0
-                    triggerReroute()
-                }
+            // Never let the traveled/upcoming split retreat (route must not appear to un-cover
+            // ground, matching "must not jump to previously covered locations" / "must remain
+            // stable while stopped"). If the true nearest point on the route is behind where we
+            // already were, keep the existing splitIndex and reuse the route's own point at
+            // that index as the connector - never the far-away snappedP, which is what used to
+            // create the chord artifact described above.
+            val splitIndex: Int
+            val connectorPoint: Point
+            if (candidateIndex >= lastSplitIndex) {
+                splitIndex = candidateIndex
+                connectorPoint = snappedP
             } else {
-                offRouteBackupCount = 0
+                splitIndex = lastSplitIndex
+                connectorPoint = fullNavigationPoints[lastSplitIndex]
             }
+            lastSplitIndex = splitIndex
 
             val traveledPoints = fullNavigationPoints.subList(0, splitIndex + 1)
 
             val upcomingPoints = mutableListOf<Point>()
-            upcomingPoints.add(snappedP)
+            upcomingPoints.add(connectorPoint)
             if (splitIndex + 1 < fullNavigationPoints.size) {
                 upcomingPoints.addAll(fullNavigationPoints.subList(splitIndex + 1, fullNavigationPoints.size))
             }
