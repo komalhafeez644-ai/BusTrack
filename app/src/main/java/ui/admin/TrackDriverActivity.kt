@@ -35,6 +35,7 @@ import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Feature
 import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
+import com.mapbox.geojson.MultiLineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
@@ -808,8 +809,19 @@ class TrackDriverActivity : AppCompatActivity() {
                     (style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                         ?.geometry(dynamicUpcoming)
 
-                    // Update traveled portion if available from driver's actual history
-                    if (!driver.traveledPolyline.isNullOrEmpty()) {
+                    // New driver clients persist independent road-matched segments so a
+                    // relocation renders a real gap rather than a straight cross-city line.
+                    if (driver.traveledRouteSegments.isNotEmpty()) {
+                        val segments = driver.traveledRouteSegments.mapNotNull { encoded ->
+                            runCatching { LineString.fromPolyline(encoded, 6) }.getOrNull()
+                        }
+                        if (segments.isNotEmpty()) {
+                            val geometry = if (segments.size == 1) segments.first() else MultiLineString.fromLineStrings(segments)
+                            (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                                ?.geometry(geometry)
+                        }
+                    } else if (!driver.traveledPolyline.isNullOrEmpty()) {
+                        // Legacy fallback for trips stored before segmented history.
                         val dynamicTraveled = LineString.fromPolyline(driver.traveledPolyline!!, 6)
                         (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                             ?.geometry(dynamicTraveled)

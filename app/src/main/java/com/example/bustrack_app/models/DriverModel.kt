@@ -25,6 +25,9 @@ data class DriverModel(
     var lastUpdated: Long = 0L,
     var currentRoutePolyline: String? = null,
     var traveledPolyline: String? = null,
+    // Each entry is an independently road-matched visited segment. Keeping segments
+    // separate preserves a visual gap when a device is relocated or loses samples.
+    var traveledRouteSegments: List<String> = emptyList(),
     var nextStopIndex: Int = 0,
     var stopArrivalTimes: Map<String, String> = emptyMap(),
     var stopEtaTimes: Map<String, String> = emptyMap(),

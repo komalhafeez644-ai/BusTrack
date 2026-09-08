@@ -108,13 +108,14 @@ object FirebaseRepository {
         db.collection("drivers").document(driverId).update(updates)
     }
 
-    fun updateDriverRouteGeometry(driverId: String, currentPolyline: String?, traveledPolyline: String?, nextStopIndex: Int, stopArrivalTimes: Map<String, String>, isNavigating: Boolean, stopEtaTimes: Map<String, String> = emptyMap()) {
+    fun updateDriverRouteGeometry(driverId: String, currentPolyline: String?, traveledPolyline: String?, nextStopIndex: Int, stopArrivalTimes: Map<String, String>, isNavigating: Boolean, stopEtaTimes: Map<String, String> = emptyMap(), traveledRouteSegments: List<String> = emptyList()) {
         val updates = mutableMapOf<String, Any?>()
         updates["currentRoutePolyline"] = currentPolyline
         updates["traveledPolyline"] = traveledPolyline
         updates["nextStopIndex"] = nextStopIndex
         updates["stopArrivalTimes"] = stopArrivalTimes
         updates["stopEtaTimes"] = stopEtaTimes
+        updates["traveledRouteSegments"] = traveledRouteSegments
         updates["isNavigating"] = isNavigating
         db.collection("drivers").document(driverId).update(updates)
     }
@@ -148,7 +149,8 @@ object FirebaseRepository {
         nextStopIndex: Int,
         stopArrivalTimes: Map<String, String>,
         stopEtaTimes: Map<String, String>,
-        isNavigating: Boolean
+        isNavigating: Boolean,
+        traveledRouteSegments: List<String> = emptyList()
     ) {
         val updates = mutableMapOf<String, Any?>(
             "latitude" to lat,
@@ -162,6 +164,7 @@ object FirebaseRepository {
         if (isNavigating) {
             updates["currentRoutePolyline"] = currentPolyline
             updates["traveledPolyline"] = traveledPolyline
+            updates["traveledRouteSegments"] = traveledRouteSegments
             updates["nextStopIndex"] = nextStopIndex
             updates["stopArrivalTimes"] = stopArrivalTimes
             updates["stopEtaTimes"] = stopEtaTimes

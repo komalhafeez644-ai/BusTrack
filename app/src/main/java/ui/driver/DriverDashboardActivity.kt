@@ -49,8 +49,14 @@ import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.RouteOptions
+import com.mapbox.api.directions.v5.models.Bearing
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.geojson.LineString
+import com.mapbox.geojson.MultiLineString
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -168,8 +174,30 @@ class DriverDashboardActivity : AppCompatActivity() {
     // because assignedRoute (and its StopItem instances) gets replaced wholesale whenever
     // RouteRepository/dashboardData emits, which would otherwise wipe the ETA back to "".
     private val stopEtaTexts = mutableMapOf<Int, String>()
-    private val traveledHistoryPoints = mutableListOf<Point>()
+    // Road-following traveled history: preserves distinct road-geometry segments.
+    // If a location jump or reroute occurs with a large gap (>60m), segments remain
+    // separated in a MultiLineString so no straight line is drawn across town.
+    private val accumulatedTraveledSegments = mutableListOf<List<Point>>()
+    private var activeTraveledSegment: List<Point> = emptyList()
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+    // Authoritative navigation ETA directly calculated from navigation model state
+    // (RouteProgress / durationRemaining) - never read from UI TextViews.
+    private var currentNavigationEtaText: String? = null
+
+    // Cached load stat ("Present/Total" or "Remaining/Expected") updated on route load
+    // and stop events, avoiding per-second Firestore queries in routeProgressObserver.
+    private var cachedLoadString: String = "0/0"
+
+    private var lastGeocodeTime = 0L
+    private var lastGeocodeLocation: Location? = null
+    private val GEOCODE_MIN_INTERVAL_MS = 15000L
+    private val GEOCODE_MIN_DISTANCE_METERS = 50f
+
+    // Maps an original RouteModel stop index to the corresponding submitted Mapbox
+    // waypoint/leg index. Invalid-coordinate stops are omitted from Mapbox requests
+    // without corrupting the dashboard's original stop state.
+    private val mapboxLegByOriginalStopIndex = mutableMapOf<Int, Int>()
 
     private var activeStopStatus = "NEXT" // NEXT, ARRIVED, PASSED
     private var lastArrivedStopIndex = -1
@@ -191,26 +219,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastSplitIndex = 0
     private val SPLIT_SEARCH_WINDOW = 120
 
-    private var offRouteBackupCount = 0
-    private val OFF_ROUTE_BACKUP_THRESHOLD_METERS = 80.0
-    private val OFF_ROUTE_BACKUP_CONFIRM_COUNT = 3
-    private var lastBackupRerouteTimeMs = 0L
-    private val MIN_REROUTE_GAP_MS = 5000L
-
-    // Guards shared by BOTH reroute trigger paths (offRouteObserver below, and the
-    // backup distance-based check in updateNavigationRouteProgress()). Without these,
-    // Mapbox's OffRouteObserver keeps firing isOffRoute=true on ~every GPS tick while
-    // the bus stays off-route, so triggerReroute() used to be called repeatedly in
-    // quick succession; each new requestRoutes() call cancels the previous still-
-    // in-flight one, so onRoutesReady() (and therefore nav.setNavigationRoutes())
-    // almost never actually completes - this was why the old blue line stayed stuck
-    // on screen after a real road deviation. isRerouteInFlight blocks a second
-    // request while one is already pending; lastOffRouteRerouteTimeMs adds the same
-    // kind of cooldown the backup path already had, so the two paths can't fight
-    // each other either.
+    private val OFF_ROUTE_THRESHOLD_METERS = 35.0
     private var isRerouteInFlight = false
     private var lastOffRouteRerouteTimeMs = 0L
-    private val MIN_OFFROUTE_REROUTE_GAP_MS = 5000L
+    private val MIN_OFFROUTE_REROUTE_GAP_MS = 3000L
 
     private var isNorthUp = false
     private var isUserTriggeredChange = true
@@ -241,19 +253,8 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastFirestoreUpdateTime = 0L
 
     companion object {
-        // Was 5000L / 10f: throttling writes to once per 5s (or 10m of movement)
-        // is the root cause of Admin/Parent/Principal appearing to move much
-        // slower than the Driver Module - the Driver's own puck updates every
-        // ~1s from raw GPS (see locationRequest below), but everyone else only
-        // ever saw a new coordinate every 5s, animated over a fast 400ms tween,
-        // then frozen for the remaining ~4.6s. The same throttle also gated the
-        // traveled/upcoming route geometry write (see syncTrackingDataToFirestore
-        // below), which is why the grey traveled route visibly lagged behind the
-        // bus. Matching this to the GPS request interval makes Firestore receive
-        // (near) every fix, at the cost of more writes - an intentional trade-off
-        // per the "as close to real-time as reasonably possible" requirement.
-        private const val FIRESTORE_UPDATE_INTERVAL = 1000L
-        private const val FIRESTORE_MIN_DISTANCE = 2f
+        private const val FIRESTORE_UPDATE_INTERVAL = 3000L
+        private const val FIRESTORE_MIN_DISTANCE = 5f
     }
     private var locationCallback: LocationCallback? = null
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
@@ -416,6 +417,25 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun clearTraveledRouteHistory() {
+        accumulatedTraveledSegments.clear()
+        activeTraveledSegment = emptyList()
+        currentNavigationEtaText = null
+    }
+
+    /** Preserve a road-matched segment; never join a relocation gap with a straight chord. */
+    private fun freezeActiveTraveledSegment() {
+        val segment = activeTraveledSegment
+        if (segment.size < 2) return
+        val lastStored = accumulatedTraveledSegments.lastOrNull()
+        if (lastStored != null && lastStored == segment) return
+        accumulatedTraveledSegments.add(segment)
+        activeTraveledSegment = emptyList()
+    }
+
+    private fun currentTraveledSegments(): List<List<Point>> =
+        (accumulatedTraveledSegments + listOf(activeTraveledSegment)).filter { it.size >= 2 }
+
     private fun triggerReroute() {
         val route = assignedRoute ?: return
         val nav = mapboxNavigation ?: return
@@ -433,14 +453,19 @@ class DriverDashboardActivity : AppCompatActivity() {
         val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
         val targetStopIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
 
-        val allStops = route.stopsList
-            .filter { it.latitude != 0.0 && it.longitude != 0.0 }
-            .map { Point.fromLngLat(it.longitude, it.latitude) }
+        val remainingStops = route.stopsList.mapIndexed { index, stop -> index to stop }
+            .filter { (index, stop) -> index >= targetStopIndex && stop.latitude != 0.0 && stop.longitude != 0.0 }
 
-        if (targetStopIndex < allStops.size) {
-            navPoints.addAll(allStops.subList(targetStopIndex, allStops.size))
-        } else if (route.pathPoints.isNotEmpty()) {
+        mapboxLegByOriginalStopIndex.clear()
+        remainingStops.forEachIndexed { mapboxStopIndex, (originalIndex, stop) ->
+            mapboxLegByOriginalStopIndex[originalIndex] = mapboxStopIndex
+            navPoints.add(Point.fromLngLat(stop.longitude, stop.latitude))
+        }
+
+        if (remainingStops.isEmpty() && route.pathPoints.isNotEmpty()) {
             navPoints.add(Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude))
+        } else if (route.pathPoints.isNotEmpty()) {
+            // Stops are the authoritative navigation waypoints when present.
         }
 
         if (navPoints.size < 2) {
@@ -450,23 +475,68 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         currentNavPoints = navPoints
 
+        val currentBearing = if (loc.hasBearing() && loc.bearing != 0f) {
+            loc.bearing.toDouble()
+        } else if (lastValidBearing != 0.0) {
+            lastValidBearing
+        } else {
+            null
+        }
+
+        val routeOptionsBuilder = RouteOptions.builder()
+            .applyDefaultNavigationOptions()
+            .coordinatesList(navPoints)
+            .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+            .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .alternatives(false)
+
+        if (currentBearing != null) {
+            val bearings = mutableListOf<Bearing?>()
+            bearings.add(Bearing.builder().angle(currentBearing).degrees(45.0).build())
+            for (i in 1 until navPoints.size) {
+                bearings.add(null)
+            }
+            routeOptionsBuilder.bearingsList(bearings)
+        }
+
         nav.requestRoutes(
-            RouteOptions.builder()
-                .applyDefaultNavigationOptions()
-                .coordinatesList(navPoints)
-                .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-                .overview(DirectionsCriteria.OVERVIEW_FULL)
-                .alternatives(false)
-                .build(),
+            routeOptionsBuilder.build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
-                    isRerouteInFlight = false
-                    navStartIndex = targetStopIndex
-                    nextGlobalStopIndex = targetStopIndex
-                    nav.setNavigationRoutes(routes)
-                    Log.d("NavDebug", "Automatic reroute successful from current location to stop $navStartIndex")
+                    runOnUiThread {
+                        isRerouteInFlight = false
+                        if (routes.isEmpty()) return@runOnUiThread
+
+                        navStartIndex = targetStopIndex
+                        nextGlobalStopIndex = targetStopIndex
+                        nav.setNavigationRoutes(routes)
+
+                        // Immediately update with the newly calculated road geometry
+                        val newCoords = routes[0].directionsRoute.geometry()?.let {
+                            LineString.fromPolyline(it, 6).coordinates()
+                        } ?: emptyList()
+
+                        if (newCoords.isNotEmpty()) {
+                            fullNavigationPoints = newCoords
+                            lastSplitIndex = 0
+                            lastRawPositionForSnap = null
+
+                            // Draw the new route on the map without waiting for next GPS tick
+                            currentLocation?.let { currentLoc ->
+                                updateNavigationRouteProgress(Point.fromLngLat(currentLoc.longitude, currentLoc.latitude))
+                            }
+                        }
+
+                        Log.d("NavDebug", "Automatic reroute successful from current location to stop $navStartIndex")
+                    }
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                    if (!routeOptions.bearingsList().isNullOrEmpty()) {
+                        Log.w("NavDebug", "Reroute with bearing failed, retrying without bearing constraints...")
+                        val unconstrainedOptions = routeOptions.toBuilder().bearingsList(null).build()
+                        nav.requestRoutes(unconstrainedOptions, this)
+                        return
+                    }
                     isRerouteInFlight = false
                     Log.e("NavDebug", "Reroute failed: ${reasons.firstOrNull()?.message}")
                 }
@@ -482,23 +552,25 @@ class DriverDashboardActivity : AppCompatActivity() {
             val routes = result.navigationRoutes
             if (routes.isNotEmpty()) {
                 val route = routes[0]
-                fullNavigationPoints = route.directionsRoute.geometry()?.let {
+                val coords = route.directionsRoute.geometry()?.let {
                     LineString.fromPolyline(it, 6).coordinates()
                 } ?: emptyList()
-                lastSplitIndex = 0
-                // A fresh route (e.g. right after a reroute) must render on the very
-                // next GPS tick. Without this reset, updateNavigationRouteProgress()'s
-                // "skip if moved < 3m since last raw fix" guard could hold onto a stale
-                // lastRawPositionForSnap from just before the reroute and silently skip
-                // the first render of the NEW route/blue line.
-                lastRawPositionForSnap = null
 
-                if (isNavigating) {
-                    currentLocation?.let { loc ->
-                        updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                runOnUiThread {
+                    if (coords.isNotEmpty() && coords != fullNavigationPoints) {
+                        freezeActiveTraveledSegment()
+                        fullNavigationPoints = coords
+                        lastSplitIndex = 0
+                        lastRawPositionForSnap = null
                     }
-                } else {
-                    drawPointsOnMap(fullNavigationPoints)
+
+                    if (isNavigating) {
+                        currentLocation?.let { loc ->
+                            updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                        }
+                    } else {
+                        drawPointsOnMap(fullNavigationPoints)
+                    }
                 }
             }
         }
@@ -538,30 +610,49 @@ class DriverDashboardActivity : AppCompatActivity() {
                 speed = enhancedLocation.speed?.toFloat() ?: 0f
                 bearing = enhancedLocation.bearing?.toFloat() ?: 0f
             }
+
+            val effectiveLocation = currentRawLocation?.let { raw ->
+                val dist = FloatArray(1)
+                Location.distanceBetween(raw.latitude, raw.longitude, enhancedLocation.latitude, enhancedLocation.longitude, dist)
+                if (dist[0] > OFF_ROUTE_THRESHOLD_METERS) raw else androidLocation
+            } ?: androidLocation
+
             runOnUiThread {
-                val wasLive = isCurrentLocationLive
-                currentLocation = androidLocation
-                isCurrentLocationLive = true
-
+                // Fused GPS is the source of truth for route state, Firestore and
+                // geofences. Enhanced Mapbox output is visual-only once raw GPS exists.
+                if (!isCurrentLocationLive) {
+                    handleLocationUpdate(effectiveLocation)
+                }
                 if (isNavigating) {
-                    updateNavigationRouteProgress(Point.fromLngLat(androidLocation.longitude, androidLocation.latitude))
-                    checkGeofenceAndStopStatus(androidLocation)
-
                     val speedKph = (androidLocation.speed * 3.6).toInt()
                     binding.bottomSummaryCard.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "$speedKph km/h"
                     binding.tvSpeedNav.text = "$speedKph"
 
-                    val geocoder = Geocoder(this@DriverDashboardActivity, Locale.getDefault())
-                    try {
-                        val addresses = geocoder.getFromLocation(androidLocation.latitude, androidLocation.longitude, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            val addr = addresses[0]
-                            val displayAddr = addr.getAddressLine(0).replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
-                            binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = displayAddr
-                        }
-                    } catch (e: Exception) {}
-                } else if (!wasLive) {
-                    updateMapDisplay()
+                    reverseGeocodeIfNeeded(effectiveLocation)
+                }
+            }
+        }
+    }
+
+    private fun reverseGeocodeIfNeeded(location: Location) {
+        val now = System.currentTimeMillis()
+        val moved = lastGeocodeLocation?.distanceTo(location) ?: Float.MAX_VALUE
+        if (now - lastGeocodeTime < GEOCODE_MIN_INTERVAL_MS || moved < GEOCODE_MIN_DISTANCE_METERS) return
+        lastGeocodeTime = now
+        lastGeocodeLocation = Location(location)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val address = try {
+                Geocoder(this@DriverDashboardActivity, Locale.getDefault())
+                    .getFromLocation(location.latitude, location.longitude, 1)
+                    ?.firstOrNull()?.getAddressLine(0)
+                    ?.replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
+            } catch (_: Exception) {
+                null
+            }
+            if (!address.isNullOrBlank()) {
+                withContext(Dispatchers.Main) {
+                    binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = address
                 }
             }
         }
@@ -584,6 +675,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         lastArrivedStopIndex = index
         isCurrentlyAtStop = true
         activeStopStatus = "ARRIVED"
+        refreshLoadStat()
         return true
     }
 
@@ -599,6 +691,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         activeStopStatus = "PASSED"
         lastArrivedStopIndex = -1
         nextGlobalStopIndex = index + 1
+        refreshLoadStat()
         return true
     }
 
@@ -765,7 +858,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 tvSpeed?.text = "$speedKph km/h"
                 binding.tvSpeedNav.text = "$speedKph"
 
-                updateLoadStat(tvLoad)
+                tvLoad?.text = cachedLoadString
 
                 // Stop arrival/skip decisions are made exclusively by geofence proximity,
                 // in checkGeofenceAndStopStatus() below. Mapbox's currentLegProgress.legIndex
@@ -795,6 +888,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 } else {
                     "Route completed"
                 }
+                currentNavigationEtaText = etaString
                 tvEta?.text = etaString
                 // instructionCard's own ETA readout (tvEtaNav) — was never being written to
                 // anywhere, so it stayed stuck on the "ETA: --" placeholder baked into the
@@ -826,7 +920,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         Log.d("ETA_DEBUG", "Stop=$index (current), remainingSeconds=$accumulatedSeconds, calculatedETA=$etaText")
                     } else if (index > displayStopIndex) {
                         if (legs != null && (index - navStartIndex) < legs.size) {
-                            val legIdx = index - navStartIndex
+                        val legIdx = mapboxLegByOriginalStopIndex[index] ?: -1
                             if (legIdx >= 0 && legs[legIdx] != null) {
                                 accumulatedSeconds += (legs[legIdx].duration() ?: 0.0).toInt()
                             }
@@ -853,12 +947,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateLoadStat(tvLoad: TextView?) {
+    /** Refreshes the cached attendance value only at meaningful trip events. */
+    private fun refreshLoadStat() {
         val route = assignedRoute ?: return
         val routeName = route.routeName
         val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(java.util.Date())
-
-        if (tvLoad?.text == "--" || tvLoad?.text.isNullOrEmpty()) tvLoad?.text = "0/0"
 
         FirebaseRepository.fetchStudentsByRoute(routeName) { students ->
             FirebaseRepository.fetchAttendance { allAttendance ->
@@ -876,9 +969,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                     loadString = "${if (currentLoad < 0) 0 else currentLoad}/$eveningExpected"
                 }
 
-                runOnUiThread {
-                    tvLoad?.text = loadString
-                }
+                cachedLoadString = loadString
+                runOnUiThread { binding.bottomSummaryCard.findViewById<TextView>(R.id.tvLoadSheet)?.text = cachedLoadString }
             }
         }
     }
@@ -983,28 +1075,30 @@ class DriverDashboardActivity : AppCompatActivity() {
                 if (!isDutyEnabled) return
 
                 for (location in locationResult.locations) {
-                    val wasLive = isCurrentLocationLive
-                    currentLocation = location
-                    isCurrentLocationLive = true
-                    feedRawLocationToPuck(location)
-
-                    if (isDutyEnabled) {
-                        syncTrackingDataToFirestore(location)
-
-                        if (isNavigating) {
-                            runOnUiThread {
-                                checkGeofenceAndStopStatus(location)
-                                updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
-                            }
-                        } else if (!wasLive) {
-                            runOnUiThread { updateMapDisplay() }
-                        }
-                    }
+                    handleLocationUpdate(location)
                 }
             }
         }
 
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback!!, mainLooper)
+    }
+
+    /** Single coordinated route-state path. Raw Fused GPS is authoritative. */
+    private fun handleLocationUpdate(location: Location) {
+        if (!isDutyEnabled) return
+        val wasLive = isCurrentLocationLive
+        currentRawLocation = Location(location)
+        currentLocation = Location(location)
+        isCurrentLocationLive = true
+        feedRawLocationToPuck(location)
+        syncTrackingDataToFirestore(location)
+
+        if (isNavigating) {
+            checkGeofenceAndStopStatus(location)
+            updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
+        } else if (!wasLive) {
+            updateMapDisplay()
+        }
     }
 
     private fun syncTrackingDataToFirestore(location: Location) {
@@ -1014,13 +1108,18 @@ class DriverDashboardActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         val distanceMoved = lastFirestoreLocation?.distanceTo(location) ?: Float.MAX_VALUE
 
-        if (now - lastFirestoreUpdateTime >= FIRESTORE_UPDATE_INTERVAL || distanceMoved >= FIRESTORE_MIN_DISTANCE) {
+        val elapsed = now - lastFirestoreUpdateTime
+        // Regular movement is paced at 3 s AND 5 m. A 10 s heartbeat preserves a
+        // fresh lastUpdated value while the bus is stationary or GPS is noisy.
+        if ((elapsed >= FIRESTORE_UPDATE_INTERVAL && distanceMoved >= FIRESTORE_MIN_DISTANCE) || elapsed >= 10000L) {
 
             val sheet = binding.bottomSummaryCard
             val tvEta = sheet.findViewById<TextView>(R.id.tvEtaSheet)
             val tvLoad = sheet.findViewById<TextView>(R.id.tvLoadSheet)
 
-            val etaVal = tvEta?.text?.toString() ?: "On Way"
+            val etaVal = currentNavigationEtaText
+                ?.takeUnless { it == "--" || it == "Calculating..." }
+                ?: "On Way"
             val speedVal = (location.speed * 3.6)
             val loadVal = tvLoad?.text?.toString() ?: "0/0"
 
@@ -1033,6 +1132,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             // can show a real per-stop ETA instead of falling back to "TBD".
             val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
             val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
+            val traveledSegments = currentTraveledSegments().map { LineString.fromLngLats(it).toPolyline(6) }
             FirebaseRepository.updateDriverLiveState(
                 driverId,
                 location.latitude,
@@ -1045,7 +1145,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 nextGlobalStopIndex,
                 arrivalMap,
                 etaMap,
-                isNavigating
+                isNavigating,
+                traveledSegments
             )
 
             lastFirestoreUpdateTime = now
@@ -1369,7 +1470,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     stopEtaTexts.clear()
                     nextGlobalStopIndex = 0
                     attendancePromptedStops.clear()
-                    traveledHistoryPoints.clear()
+                    clearTraveledRouteHistory()
 
                     viewModel.currentDriver.value?.id?.let { driverId ->
                         lastDutyToggleTime = System.currentTimeMillis()
@@ -1379,6 +1480,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
                 assignedRoute = route
+                refreshLoadStat()
                 // route.stopsList is a fresh set of StopItem instances (time defaults to "").
                 // Restore last-known display text from persisted, index-keyed state before
                 // anything (map markers, bottom sheet, adapter) reads stop.time.
@@ -1458,36 +1560,34 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun updateNavigationRouteProgress(currentPos: Point) {
         if (fullNavigationPoints.size < 2) return
 
-        lastRawPositionForSnap?.let { lastRaw ->
-            val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
-            if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
-                return
-            }
-        }
-        lastRawPositionForSnap = currentPos
-
-        // Record the driver's actual GPS movement. This - and NOT any point sliced out
-        // of the planned route geometry - is what the grey "traveled" line below is
-        // built from. Because it's independent of fullNavigationPoints, it survives a
-        // reroute untouched (a reroute swaps fullNavigationPoints/lastSplitIndex, but
-        // never touches traveledHistoryPoints) and it can't be fooled into thinking a
-        // shortcut means the driver covered a stretch of road they never actually drove.
-        // It's only ever reset when a genuinely new trip starts or duty is turned off
-        // (see the traveledHistoryPoints.clear() calls in setNavigationMode()/
-        // onDutyStatusChanged()).
-        if (isNavigating) {
-            traveledHistoryPoints.add(currentPos)
-        }
-
         try {
-            // Snap against the FULL route line so the off-route distance below reflects
-            // where the driver actually is relative to the planned route, not just
-            // relative to the small forward-looking window used for splitIndex (that
-            // window search can be misled by a shortcut landing it near a later point).
+            // 1. Check deviation against the route BEFORE any movement gating.
+            // If the driver deviated or moved to another road, detect it immediately
+            // regardless of whether vehicle is moving or stationary.
             val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
             val snappedP = snappedPoint.geometry() as? Point ?: return
             val actualDistanceToRoute = TurfMeasurement.distance(currentPos, snappedP, TurfConstants.UNIT_METERS)
 
+            if (isNavigating && actualDistanceToRoute > OFF_ROUTE_THRESHOLD_METERS) {
+                val now = System.currentTimeMillis()
+                if (!isRerouteInFlight && now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS) {
+                    lastOffRouteRerouteTimeMs = now
+                    Log.d("NavDebug", "Bus deviated from route ($actualDistanceToRoute m away). Triggering immediate reroute...")
+                    triggerReroute()
+                }
+                return
+            }
+
+            // 2. Minimum movement filter: only filters updates when vehicle is strictly ON ROUTE
+            lastRawPositionForSnap?.let { lastRaw ->
+                val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
+                if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
+                    return
+                }
+            }
+            lastRawPositionForSnap = currentPos
+
+            // 3. Find split index along the planned route
             val searchStart = lastSplitIndex
             val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
             var splitIndex = searchStart
@@ -1502,31 +1602,21 @@ class DriverDashboardActivity : AppCompatActivity() {
             splitIndex = maxOf(splitIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
 
-            // Off-route/reroute decisions use actualDistanceToRoute (distance to the
-            // nearest point anywhere on the full route), not the windowed search above,
-            // so a shortcut that fools the window search can't also suppress a reroute
-            // that's genuinely needed - or trigger one that isn't.
-            if (isNavigating && actualDistanceToRoute > OFF_ROUTE_BACKUP_THRESHOLD_METERS) {
-                offRouteBackupCount++
-                val now = System.currentTimeMillis()
-                if (!isRerouteInFlight &&
-                    offRouteBackupCount >= OFF_ROUTE_BACKUP_CONFIRM_COUNT &&
-                    now - lastBackupRerouteTimeMs > MIN_REROUTE_GAP_MS
-                ) {
-                    Log.d("NavDebug", "Backup off-route check triggered reroute (missed turn?)")
-                    lastBackupRerouteTimeMs = now
-                    offRouteBackupCount = 0
-                    triggerReroute()
+            // 4. Road-Following Traveled Line:
+            // Sliced strictly from the route's road polyline geometry (never straight-line GPS connections)
+            val currentLegTraveled = mutableListOf<Point>()
+            if (fullNavigationPoints.isNotEmpty()) {
+                val endIdx = minOf(splitIndex + 1, fullNavigationPoints.size)
+                currentLegTraveled.addAll(fullNavigationPoints.subList(0, endIdx))
+                if (currentLegTraveled.isEmpty() || currentLegTraveled.last() != snappedP) {
+                    currentLegTraveled.add(snappedP)
                 }
-            } else {
-                offRouteBackupCount = 0
             }
 
-            // The grey "traveled" line is the driver's actual recorded GPS path - never
-            // derived from fullNavigationPoints - so it can't jump ahead on a shortcut
-            // and won't vanish/reset just because a reroute changed the planned route.
-            val traveledPoints = traveledHistoryPoints.toList()
+            activeTraveledSegment = currentLegTraveled
+            val traveledSegments = currentTraveledSegments()
 
+            // 5. Active Upcoming Route: starts seamlessly from snappedP (on road at bus) to destination
             val upcomingPoints = mutableListOf<Point>()
             upcomingPoints.add(snappedP)
             if (splitIndex + 1 < fullNavigationPoints.size) {
@@ -1535,11 +1625,16 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             mapView?.mapboxMap?.getStyle { style ->
                 var traveledPolyline: String? = null
-                if (traveledPoints.size >= 2) {
-                    val traveledLine = LineString.fromLngLats(traveledPoints)
+                if (traveledSegments.isNotEmpty()) {
+                    val traveledGeometry = if (traveledSegments.size == 1) {
+                        LineString.fromLngLats(traveledSegments.first())
+                    } else {
+                        MultiLineString.fromLineStrings(traveledSegments.map { LineString.fromLngLats(it) })
+                    }
                     (style.getSource(NAV_TRAVELED_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
-                        ?.geometry(traveledLine)
-                    traveledPolyline = traveledLine.toPolyline(6)
+                        ?.geometry(traveledGeometry)
+                    // Kept for old app versions; new versions consume all independent segments.
+                    traveledPolyline = LineString.fromLngLats(traveledSegments.last()).toPolyline(6)
                 }
 
                 var currentPolyline: String? = null
@@ -1759,7 +1854,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         val currentSpeed = (currentLocation?.speed?.times(3.6)) ?: 0.0
         tvSpeed?.text = "${currentSpeed.toInt()} km/h"
 
-        updateLoadStat(tvLoad)
+        tvLoad?.text = cachedLoadString
+        refreshLoadStat()
 
         val stops = route.stopsList
         stops.forEachIndexed { index, stop ->
@@ -1905,14 +2001,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         if (route.stopsList.isNotEmpty()) {
-            val allStops = route.stopsList
-                .filter { it.latitude != 0.0 && it.longitude != 0.0 }
-                .map { Point.fromLngLat(it.longitude, it.latitude) }
-
             val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
             var startIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
 
-            if (startIndex >= allStops.size) {
+            if (startIndex >= route.stopsList.size) {
                 stopArrivalTimes.clear()
                 stopStates.clear()
                 stopEtaTexts.clear()
@@ -1921,8 +2013,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                 startIndex = 0
             }
 
-            if (startIndex < allStops.size) {
-                navPoints.addAll(allStops.subList(startIndex, allStops.size))
+            val remainingStops = route.stopsList.mapIndexed { index, stop -> index to stop }
+                .filter { (index, stop) -> index >= startIndex && stop.latitude != 0.0 && stop.longitude != 0.0 }
+            mapboxLegByOriginalStopIndex.clear()
+            remainingStops.forEachIndexed { mapboxStopIndex, (originalIndex, stop) ->
+                mapboxLegByOriginalStopIndex[originalIndex] = mapboxStopIndex
+                navPoints.add(Point.fromLngLat(stop.longitude, stop.latitude))
+            }
+
+            if (remainingStops.isEmpty() && route.pathPoints.isNotEmpty()) {
+                navPoints.add(Point.fromLngLat(route.pathPoints.last().longitude, route.pathPoints.last().latitude))
             }
 
             navStartIndex = startIndex
@@ -1941,14 +2041,30 @@ class DriverDashboardActivity : AppCompatActivity() {
         currentNavPoints = navPoints
         Toast.makeText(this, "Requesting Route...", Toast.LENGTH_SHORT).show()
 
+        val currentBearing = currentLocation?.let { loc ->
+            if (loc.hasBearing() && loc.bearing != 0f) loc.bearing.toDouble()
+            else if (lastValidBearing != 0.0) lastValidBearing
+            else null
+        }
+
+        val routeOptionsBuilder = RouteOptions.builder()
+            .applyDefaultNavigationOptions()
+            .coordinatesList(navPoints)
+            .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+            .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .alternatives(false)
+
+        if (currentBearing != null) {
+            val bearings = mutableListOf<Bearing?>()
+            bearings.add(Bearing.builder().angle(currentBearing).degrees(45.0).build())
+            for (i in 1 until navPoints.size) {
+                bearings.add(null)
+            }
+            routeOptionsBuilder.bearingsList(bearings)
+        }
+
         nav.requestRoutes(
-            RouteOptions.builder()
-                .applyDefaultNavigationOptions()
-                .coordinatesList(navPoints)
-                .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
-                .overview(DirectionsCriteria.OVERVIEW_FULL)
-                .alternatives(false)
-                .build(),
+            routeOptionsBuilder.build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
                     isNavigating = true
@@ -1967,6 +2083,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                     setNavigationMode(true)
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                    if (!routeOptions.bearingsList().isNullOrEmpty()) {
+                        Log.w("NavDebug", "Initial route with bearing failed, retrying without bearing constraints...")
+                        val unconstrainedOptions = routeOptions.toBuilder().bearingsList(null).build()
+                        nav.requestRoutes(unconstrainedOptions, this)
+                        return
+                    }
                     val errorDetail = reasons.firstOrNull()?.message ?: "Unknown error"
                     Log.e("NavDebug", "Navigation failed: $errorDetail")
                     Toast.makeText(this@DriverDashboardActivity, "Navigation Error: $errorDetail", Toast.LENGTH_LONG).show()
@@ -1983,13 +2105,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         cancelDutyAutoOffTimer()
         binding.apply {
             if (isNavigating) {
-                // Fresh trip: start the actual-GPS traveled history from scratch, seeded
-                // with wherever the driver currently is so the grey line has a starting
-                // point even before the next location fix comes in.
-                traveledHistoryPoints.clear()
-                currentLocation?.let {
-                    traveledHistoryPoints.add(Point.fromLngLat(it.longitude, it.latitude))
-                }
+                clearTraveledRouteHistory()
                 traveledRouteGeometry = null
                 currentRouteGeometry = null
 
@@ -2052,7 +2168,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             } else {
                 mapboxNavigation?.setNavigationRoutes(emptyList())
                 fullNavigationPoints = emptyList()
-                traveledHistoryPoints.clear()
+                clearTraveledRouteHistory()
                 currentRouteGeometry = null
                 traveledRouteGeometry = null
 
@@ -2311,7 +2427,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             stopEtaTexts.clear()
             nextGlobalStopIndex = 0
             attendancePromptedStops.clear()
-            traveledHistoryPoints.clear()
+            clearTraveledRouteHistory()
 
             viewModel.currentDriver.value?.driverId?.let { driverId ->
                 FirebaseRepository.updateDriverStatus(driverId, "Inactive")
