@@ -76,7 +76,14 @@ import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.Location
 import android.provider.Settings
+import android.media.AudioManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.os.Build
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import com.mapbox.navigation.voice.model.SpeechValue
+import com.mapbox.bindgen.Expected
 import android.text.SpannableString
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.common.api.ResolvableApiException
@@ -287,6 +294,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var speechApi: MapboxSpeechApi? = null
     private var fallbackTextToSpeech: TextToSpeech? = null
     private var isFallbackTtsReady = false
+    private var audioFocusRequest: Any? = null
+    private var lastSpokenInstruction: String? = null
+    private var lastSpokenTimeMs: Long = 0L
+    private val MIN_VOICE_REPEAT_INTERVAL_MS = 10000L
     private val navigationLocationProvider = NavigationLocationProvider()
     private val maneuverApi by lazy {
         MapboxManeuverApi(DistanceFormatter { meters ->
@@ -399,6 +410,88 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestNavigationAudioFocus(): Boolean {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val playbackAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(playbackAttributes)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setOnAudioFocusChangeListener { /* Navigation guidance handles ducking */ }
+                    .build()
+                audioFocusRequest = request
+                am.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceNav", "Error requesting audio focus: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun abandonNavigationAudioFocus() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                (audioFocusRequest as? AudioFocusRequest)?.let {
+                    am.abandonAudioFocusRequest(it)
+                }
+                audioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceNav", "Error abandoning audio focus: ${e.message}", e)
+        }
+    }
+
+    private fun formatManeuverDistance(meters: Number?): String {
+        val d = meters?.toDouble() ?: return ""
+        if (d <= 0.0) return ""
+        return if (d < 25.0) {
+            "Now"
+        } else if (d < 1000.0) {
+            val rounded = (Math.round(d / 10.0) * 10).toInt()
+            "$rounded m"
+        } else {
+            String.format(Locale.getDefault(), "%.1f km", d / 1000.0)
+        }
+    }
+
+    private fun getManeuverIconRes(type: String?, modifier: String?): Int {
+        val t = type?.lowercase(Locale.ROOT) ?: ""
+        val m = modifier?.lowercase(Locale.ROOT) ?: ""
+
+        if (t.contains("arrive") || m.contains("arrive")) return R.drawable.ic_nav_arrive
+        if (t.contains("depart") || m.contains("depart")) return R.drawable.ic_nav_depart
+        if (t.contains("u-turn") || t.contains("uturn") || m.contains("u-turn") || m.contains("uturn")) return R.drawable.ic_nav_uturn
+        if (t.contains("roundabout") || t.contains("rotary")) return R.drawable.ic_nav_roundabout
+        if (t.contains("fork")) return R.drawable.ic_nav_fork
+        if (t.contains("merge")) return R.drawable.ic_nav_merge
+
+        return when {
+            m.contains("slight left") -> R.drawable.ic_nav_turn_slight_left
+            m.contains("slight right") -> R.drawable.ic_nav_turn_slight_right
+            m.contains("sharp left") -> R.drawable.ic_nav_turn_sharp_left
+            m.contains("sharp right") -> R.drawable.ic_nav_turn_sharp_right
+            m.contains("left") -> R.drawable.ic_nav_turn_left
+            m.contains("right") -> R.drawable.ic_nav_turn_right
+            m.contains("straight") || t.contains("continue") -> R.drawable.ic_nav_straight
+            else -> R.drawable.ic_nav_straight
+        }
+    }
+
     private fun initNavigation() {
         if (!MapboxNavigationApp.isSetup()) {
             MapboxNavigationApp.setup(
@@ -416,26 +509,50 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
         mapboxNavigation?.registerOffRouteObserver(offRouteObserver)
 
-        // Mapbox Voice expects an IETF language tag (for example, en-US), not just
-        // the two-letter language code. This also makes the requested voice match the
-        // device locale correctly.
+        // Ensure language matches between Mapbox Voice API and device locale
         val locale = java.util.Locale.getDefault().toLanguageTag()
 
         if (speechApi == null) {
             speechApi = MapboxSpeechApi(this, locale)
         }
         if (voiceInstructionsPlayer == null) {
-            voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(this, locale)
+            voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(this, locale).apply {
+                volume(SpeechVolume(1.0f))
+            }
         }
         if (fallbackTextToSpeech == null) {
             fallbackTextToSpeech = TextToSpeech(this) { status ->
                 isFallbackTtsReady = status == TextToSpeech.SUCCESS
                 if (isFallbackTtsReady) {
-                    fallbackTextToSpeech?.language = java.util.Locale.getDefault()
+                    val defaultLocale = Locale.getDefault()
+                    val langResult = fallbackTextToSpeech?.setLanguage(defaultLocale)
+                    if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        Log.w("VoiceNav", "Default locale $defaultLocale not supported for TTS, falling back to Locale.US")
+                        fallbackTextToSpeech?.setLanguage(Locale.US)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        fallbackTextToSpeech?.setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build()
+                        )
+                    }
+                    fallbackTextToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {}
+                        override fun onDone(utteranceId: String?) {
+                            abandonNavigationAudioFocus()
+                        }
+                        override fun onError(utteranceId: String?) {
+                            abandonNavigationAudioFocus()
+                        }
+                    })
                     pendingFallbackInstruction?.let { instruction ->
                         pendingFallbackInstruction = null
                         speakFallbackInstruction(instruction)
                     }
+                } else {
+                    Log.e("VoiceNav", "Failed to initialize Android TextToSpeech engine")
                 }
             }
         }
@@ -443,11 +560,44 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
         if (!isVoiceEnabled) return@VoiceInstructionsObserver
+        val announcement = voiceInstructions.announcement()
+        if (announcement.isNullOrBlank()) return@VoiceInstructionsObserver
 
-        // The instruction text comes from Mapbox, but playback is intentionally
-        // on-device. The network-generated Mapbox speech request could fail without
-        // an audible fallback on a driver's connection.
-        speakFallbackInstruction(voiceInstructions.announcement())
+        val now = System.currentTimeMillis()
+        // Deduplication: do not repeat the exact same instruction within MIN_VOICE_REPEAT_INTERVAL_MS
+        if (announcement.equals(lastSpokenInstruction, ignoreCase = true) && (now - lastSpokenTimeMs) < MIN_VOICE_REPEAT_INTERVAL_MS) {
+            Log.d("VoiceNav", "Skipping duplicated voice instruction: $announcement")
+            return@VoiceInstructionsObserver
+        }
+        lastSpokenInstruction = announcement
+        lastSpokenTimeMs = now
+
+        Log.d("VoiceNav", "Triggering voice instruction: $announcement")
+        val speech = speechApi
+        if (speech != null) {
+            speech.generate(voiceInstructions) { expected ->
+                expected.fold(
+                    { error ->
+                        Log.w("VoiceNav", "SpeechApi generation error: $error, falling back")
+                        val fallback = error.fallback
+                        if (fallback != null && voiceInstructionsPlayer != null) {
+                            voiceInstructionsPlayer?.play(fallback) { a ->
+                                speechApi?.clean(a)
+                            }
+                        } else {
+                            runOnUiThread { speakFallbackInstruction(announcement) }
+                        }
+                    },
+                    { value ->
+                        voiceInstructionsPlayer?.play(value.announcement) { a ->
+                            speechApi?.clean(a)
+                        }
+                    }
+                )
+            }
+        } else {
+            speakFallbackInstruction(announcement)
+        }
     }
 
     private fun speakFallbackInstruction(instruction: String?) {
@@ -456,7 +606,23 @@ class DriverDashboardActivity : AppCompatActivity() {
             pendingFallbackInstruction = instruction
             return
         }
-        fallbackTextToSpeech?.speak(instruction, TextToSpeech.QUEUE_FLUSH, null, "navigation-instruction")
+        requestNavigationAudioFocus()
+        val utteranceId = "nav_inst_${System.currentTimeMillis()}"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val params = Bundle().apply {
+                putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+            }
+            fallbackTextToSpeech?.speak(instruction, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        } else {
+            @Suppress("DEPRECATION")
+            val params = HashMap<String, String>().apply {
+                put(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC.toString())
+                put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            }
+            @Suppress("DEPRECATION")
+            fallbackTextToSpeech?.speak(instruction, TextToSpeech.QUEUE_FLUSH, params)
+        }
     }
 
     private val offRouteObserver = OffRouteObserver { isOffRoute ->
@@ -548,6 +714,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             .coordinatesList(navPoints)
             .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
             .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .steps(true)
+            .bannerInstructions(true)
+            .voiceInstructions(true)
+            .language("en")
+            .voiceUnits(DirectionsCriteria.METRIC)
             .alternatives(false)
 
         if (currentBearing != null) {
@@ -570,6 +741,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                         navStartIndex = targetStopIndex
                         nextGlobalStopIndex = targetStopIndex
                         nav.setNavigationRoutes(routes)
+
+                        // Clear stale voice instructions and audio focus from previous path
+                        speechApi?.cancel()
+                        voiceInstructionsPlayer?.clear()
+                        fallbackTextToSpeech?.stop()
+                        abandonNavigationAudioFocus()
 
                         // Immediately update with the newly calculated road geometry
                         val newCoords = routes[0].directionsRoute.geometry()?.let {
@@ -1098,13 +1275,22 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
                 val sub = bannerInstructions?.sub()
-                // This custom card is fed by the same live Mapbox progress model,
-                // but unlike MapboxManeuverView it does not render as a blank card
-                // with this app's navigation-night theme.
-                binding.maneuverView.visibility = View.GONE
+                val currentStepProgress = routeProgress.currentLegProgress?.currentStepProgress
+                val stepManeuver = currentStepProgress?.step?.maneuver()
+
+                val maneuverType = primary?.type() ?: stepManeuver?.type()
+                val maneuverModifier = primary?.modifier() ?: stepManeuver?.modifier()
+                val primaryInstruction = primary?.text() ?: stepManeuver?.instruction() ?: "Continue straight"
+                val secondaryStreet = sub?.text() ?: currentStepProgress?.step?.name()?.takeIf { it.isNotBlank() } ?: "Current Route"
+                val maneuverDistanceMeters = currentStepProgress?.distanceRemaining
+
+                binding.ivArrow.setImageResource(getManeuverIconRes(maneuverType, maneuverModifier))
+                binding.tvManeuverDistance.text = formatManeuverDistance(maneuverDistanceMeters)
+                binding.tvNextInstruction.text = primaryInstruction
+                binding.tvNextStreet.text = secondaryStreet
+
                 binding.instructionCard.visibility = View.VISIBLE
-                binding.tvNextInstruction.text = primary?.text() ?: "Continue straight"
-                binding.tvNextStreet.text = sub?.text() ?: "Current Route"
+                binding.maneuverView.visibility = View.GONE
             }
         }
     }
@@ -1467,6 +1653,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshProfileData()
+        val voicePref = getSharedPreferences("navigation_preferences", MODE_PRIVATE)
+            .getBoolean("voice_enabled", true)
+        if (isVoiceEnabled != voicePref) {
+            isVoiceEnabled = voicePref
+            binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
+            binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            if (!isVoiceEnabled) {
+                speechApi?.cancel()
+                voiceInstructionsPlayer?.clear()
+                fallbackTextToSpeech?.stop()
+                abandonNavigationAudioFocus()
+            }
+        }
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             startLocationUpdates()
         }
@@ -1987,6 +2186,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 speechApi?.cancel()
                 voiceInstructionsPlayer?.clear()
                 fallbackTextToSpeech?.stop()
+                abandonNavigationAudioFocus()
             }
             Toast.makeText(this, if (isVoiceEnabled) "Voice instructions ON" else "Voice instructions OFF", Toast.LENGTH_SHORT).show()
         }
@@ -2362,16 +2562,20 @@ class DriverDashboardActivity : AppCompatActivity() {
                     nav.setNavigationRoutes(routes)
                     updateStopEtasFromNavigationRoute(routes.first())
 
-                    // Pre-populate native Mapbox maneuver card with the route's initial maneuvers
-                    // so the card is never blank upon starting navigation
-                    val initialManeuvers = maneuverApi.getManeuvers(routes.first())
-                    initialManeuvers.onValue { list ->
-                        if (list.isNotEmpty()) {
-                            binding.instructionCard.visibility = View.GONE
-                            binding.maneuverView.visibility = View.VISIBLE
-                            binding.maneuverView.renderManeuvers(initialManeuvers)
-                        }
+                    // Pre-populate Google Maps style instruction card with the route's initial maneuver
+                    val firstLeg = routes.first().directionsRoute.legs()?.firstOrNull()
+                    val firstStep = firstLeg?.steps()?.firstOrNull()
+                    val firstManeuver = firstStep?.maneuver()
+                    if (firstManeuver != null) {
+                        val initialType = firstManeuver.type()
+                        val initialModifier = firstManeuver.modifier()
+                        binding.ivArrow.setImageResource(getManeuverIconRes(initialType, initialModifier))
+                        binding.tvManeuverDistance.text = formatManeuverDistance(firstStep.distance())
+                        binding.tvNextInstruction.text = firstManeuver.instruction() ?: "Head towards first stop"
+                        binding.tvNextStreet.text = firstStep.name()?.takeIf { it.isNotBlank() } ?: "Current Route"
                     }
+                    binding.instructionCard.visibility = View.VISIBLE
+                    binding.maneuverView.visibility = View.GONE
 
                     if (ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                         ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -2996,6 +3200,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         fallbackTextToSpeech?.stop()
         fallbackTextToSpeech?.shutdown()
         fallbackTextToSpeech = null
+        abandonNavigationAudioFocus()
 
         MapboxNavigationApp.detach(this)
 
