@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
+import android.location.Geocoder
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -40,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -229,7 +231,7 @@ class LocationPickerActivity : AppCompatActivity() {
                 if (query.length >= 2) {
                     searchJob = lifecycleScope.launch {
                         delay(600)
-                        performSearch(query)
+                        lifecycleScope.launch { performSearch(query) }
                     }
                 } else {
                     binding.rvSearchResults.visibility = View.GONE
@@ -246,47 +248,51 @@ class LocationPickerActivity : AppCompatActivity() {
         binding.etSearchLocation.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 val query = binding.etSearchLocation.text.toString().trim()
-                if (query.isNotEmpty()) performSearch(query)
+                if (query.isNotEmpty()) lifecycleScope.launch { performSearch(query) }
                 true
             } else false
         }
     }
 
-    private fun performSearch(query: String) {
+    /**
+     * Runs in the debounced TextWatcher coroutine.  Keeping it suspend is important:
+     * previously this function started a new lifecycle coroutine, so cancelling the
+     * debounce job did not cancel already queued requests.  The log consequently
+     * showed the same "National park road" request repeatedly.
+     */
+    private suspend fun performSearch(query: String) = coroutineScope {
         val cleanQuery = query.trim()
-        lifecycleScope.launch {
-            try {
-                val variants = listOf(
-                    cleanQuery,
-                    cleanQuery.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
-                    cleanQuery.uppercase()
-                ).distinct()
+        try {
+            val variants = listOf(
+                cleanQuery,
+                cleanQuery.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+                cleanQuery.uppercase()
+            ).distinct()
 
-                // Firestore custom-location lookup and the Mapbox geocoding call both run
-                // in parallel (async/awaitAll), same performance fix as before.
-                val firestoreDeferred = variants.map { v ->
-                    async { LocationRepository.searchLocations(v) }
-                }
-
-                // Keep results centered on Rawalpindi even after an admin pans the
-                // map somewhere else; the search field is a Rawalpindi location picker.
-                val geocodeDeferred = async { fetchGeocodingResults(cleanQuery, RAWALPINDI_CENTER) }
-
-                val finalCustomResults = firestoreDeferred.awaitAll().flatten().distinctBy { it.id }
-                val geocodeResults = geocodeDeferred.await()
-
-                val combined = mutableListOf<Any>()
-                combined.addAll(finalCustomResults)
-                combined.addAll(geocodeResults)
-                if (combined.isNotEmpty()) {
-                    searchAdapter.setResults(combined)
-                    binding.rvSearchResults.visibility = View.VISIBLE
-                } else {
-                    binding.rvSearchResults.visibility = View.GONE
-                }
-            } catch (e: Exception) {
-                Log.e("SearchDebug", "Search error: ${e.message}", e)
+            // Firestore custom-location lookup and the Mapbox geocoding call both run
+            // in parallel (async/awaitAll), same performance fix as before.
+            val firestoreDeferred = variants.map { v ->
+                async { LocationRepository.searchLocations(v) }
             }
+
+            // Keep results centered on Rawalpindi even after an admin pans the
+            // map somewhere else; the search field is a Rawalpindi location picker.
+            val geocodeDeferred = async { fetchGeocodingResults(cleanQuery, RAWALPINDI_CENTER) }
+
+            val finalCustomResults = firestoreDeferred.awaitAll().flatten().distinctBy { it.id }
+            val geocodeResults = geocodeDeferred.await()
+
+            val combined = mutableListOf<Any>()
+            combined.addAll(finalCustomResults)
+            combined.addAll(geocodeResults)
+            if (combined.isNotEmpty()) {
+                searchAdapter.setResults(combined)
+                binding.rvSearchResults.visibility = View.VISIBLE
+            } else {
+                binding.rvSearchResults.visibility = View.GONE
+            }
+        } catch (e: Exception) {
+            Log.e("SearchDebug", "Search error: ${e.message}", e)
         }
     }
 
@@ -352,9 +358,23 @@ class LocationPickerActivity : AppCompatActivity() {
                     val coordinates = geometry?.optJSONArray("coordinates")
                     val properties = feature.optJSONObject("properties")
 
-                    if (coordinates != null && coordinates.length() >= 2 && properties != null) {
-                        val lng = coordinates.getDouble(0)
-                        val lat = coordinates.getDouble(1)
+                    if (properties != null) {
+                        // Search Box may return GeoJSON geometry or its documented
+                        // properties.coordinates object, depending on feature type.
+                        // Supporting both is essential for roads such as National
+                        // Park Road, which otherwise disappeared from suggestions.
+                        val propertyCoordinates = properties.optJSONObject("coordinates")
+                        val lng = when {
+                            coordinates != null && coordinates.length() >= 2 -> coordinates.getDouble(0)
+                            propertyCoordinates != null -> propertyCoordinates.optDouble("longitude", Double.NaN)
+                            else -> Double.NaN
+                        }
+                        val lat = when {
+                            coordinates != null && coordinates.length() >= 2 -> coordinates.getDouble(1)
+                            propertyCoordinates != null -> propertyCoordinates.optDouble("latitude", Double.NaN)
+                            else -> Double.NaN
+                        }
+                        if (!lng.isFinite() || !lat.isFinite()) continue
                         val name = properties.optString("name", properties.optString("name_preferred", ""))
 
                         // BUG FIX: for "locality"/"place"-type results (like a named
@@ -394,12 +414,101 @@ class LocationPickerActivity : AppCompatActivity() {
                         }
                     }
                 }
-                results
+                // Search Box is best for POIs, but road names are not consistently
+                // indexed there. Fall back to Mapbox Geocoding v6 for a genuine road
+                // query, while keeping the exact same Rawalpindi boundary.
+                if (results.isEmpty()) fetchRoadGeocodingFallback(query, proximity, token) else results
             } catch (e: Exception) {
                 Log.e("SearchDebug", "Geocoding request failed: ${e.message}", e)
                 emptyList()
             }
         }
+
+    private fun fetchRoadGeocodingFallback(
+        query: String,
+        proximity: Point,
+        token: String
+    ): List<GeocodeResult> {
+        return try {
+            val encodedQuery = URLEncoder.encode(query, "UTF-8")
+            val urlString = "https://api.mapbox.com/search/geocode/v6/forward" +
+                    "?q=$encodedQuery" +
+                    "&access_token=$token" +
+                    "&bbox=$RAWALPINDI_BBOX" +
+                    "&proximity=${proximity.longitude()},${proximity.latitude()}" +
+                    "&country=pk" +
+                    "&types=address,street,place,locality,neighborhood,district" +
+                    "&autocomplete=true" +
+                    "&language=en" +
+                    "&limit=10"
+            val connection = URL(urlString).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                connection.disconnect()
+                return emptyList()
+            }
+            val response = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+            connection.disconnect()
+            val features = JSONObject(response).optJSONArray("features") ?: return emptyList()
+
+            val mapboxResults = buildList {
+                for (i in 0 until features.length()) {
+                    val feature = features.optJSONObject(i) ?: continue
+                    val coordinates = feature.optJSONObject("geometry")?.optJSONArray("coordinates") ?: continue
+                    if (coordinates.length() < 2) continue
+                    val lng = coordinates.optDouble(0, Double.NaN)
+                    val lat = coordinates.optDouble(1, Double.NaN)
+                    if (!lng.isFinite() || !lat.isFinite()) continue
+                    val properties = feature.optJSONObject("properties")
+                    val name = properties?.optString("name", "").orEmpty()
+                        .ifBlank { feature.optString("name", "") }
+                    val address = properties?.optString("full_address", "").orEmpty()
+                        .ifBlank { feature.optString("place_formatted", "") }
+                        .ifBlank { name }
+                    add(GeocodeResult(name.ifBlank { address }, address, Point.fromLngLat(lng, lat), null))
+                }
+            }
+
+            if (mapboxResults.isNotEmpty()) {
+                mapboxResults
+            } else {
+                fetchAndroidGeocoderFallback(query)
+            }
+        } catch (e: Exception) {
+            Log.w("SearchDebug", "Road geocoding fallback failed", e)
+            fetchAndroidGeocoderFallback(query)
+        }
+    }
+
+    /**
+     * Fallback to Android system Geocoder when Mapbox has no search index
+     * for a valid local road/landmark in Pakistan (e.g. National Park Road, Marir Chowk).
+     */
+    private fun fetchAndroidGeocoderFallback(query: String): List<GeocodeResult> {
+        if (!Geocoder.isPresent()) return emptyList()
+        return try {
+            val geocoder = Geocoder(this, Locale("en", "PK"))
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocationName(query, 10, 33.35, 72.70, 33.90, 73.35) ?: emptyList()
+
+            addresses.mapNotNull { address ->
+                val lat = address.latitude
+                val lng = address.longitude
+                if (!lat.isFinite() || !lng.isFinite()) return@mapNotNull null
+                val name = address.featureName ?: address.thoroughfare ?: address.subLocality ?: address.locality ?: query
+                val fullAddress = (0..address.maxAddressLineIndex)
+                    .mapNotNull { address.getAddressLine(it) }
+                    .joinToString(", ")
+                    .ifBlank { name }
+                GeocodeResult(name, fullAddress, Point.fromLngLat(lng, lat), null)
+            }
+        } catch (e: Exception) {
+            Log.w("SearchDebug", "Android Geocoder fallback failed: ${e.message}", e)
+            emptyList()
+        }
+    }
 
     private fun reverseGeocode(point: Point) {
         lifecycleScope.launch {

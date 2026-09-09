@@ -265,6 +265,8 @@
                     android:layout_marginHorizontal="16dp"
                     android:layout_marginTop="8dp"
                     android:visibility="gone"
+                    android:elevation="12dp"
+                    style="@style/MapboxStyleManeuverView"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent"

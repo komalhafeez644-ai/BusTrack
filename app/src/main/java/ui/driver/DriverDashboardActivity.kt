@@ -114,6 +114,7 @@ import com.mapbox.navigation.voice.api.MapboxVoiceInstructionsPlayer
 import com.mapbox.navigation.voice.api.MapboxSpeechApi
 import com.mapbox.navigation.voice.model.SpeechAnnouncement
 import com.mapbox.navigation.voice.model.SpeechError
+import com.mapbox.navigation.voice.model.SpeechVolume
 import com.mapbox.navigation.voice.options.MapboxSpeechApiOptions
 import com.mapbox.navigation.voice.options.VoiceInstructionsPlayerOptions
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
@@ -1206,42 +1207,48 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun startLocationUpdates() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1001)
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1001)
             return
         }
 
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
-                val wasLive = isCurrentLocationLive
-                currentLocation = location
-                isCurrentLocationLive = true
-                feedRawLocationToPuck(location)
-                if (!wasLive) {
-                    updateMapDisplay()
+        try {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                    val wasLive = isCurrentLocationLive
+                    currentLocation = location
+                    isCurrentLocationLive = true
+                    feedRawLocationToPuck(location)
+                    if (!wasLive) {
+                        updateMapDisplay()
+                    }
                 }
             }
-        }
 
-        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+            locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
 
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
-            .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(1000)
-            .setMaxUpdateDelayMillis(2000)
-            .build()
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+                .setWaitForAccurateLocation(false)
+                .setMinUpdateIntervalMillis(1000)
+                .setMaxUpdateDelayMillis(2000)
+                .build()
 
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                if (!isDutyEnabled) return
+            locationCallback = object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    if (!isDutyEnabled) return
 
-                for (location in locationResult.locations) {
-                    handleLocationUpdate(location)
+                    for (location in locationResult.locations) {
+                        handleLocationUpdate(location)
+                    }
                 }
             }
-        }
 
-        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback!!, mainLooper)
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback!!, mainLooper)
+        } catch (e: SecurityException) {
+            Log.e("LocationDebug", "SecurityException in startLocationUpdates: ${e.message}", e)
+        }
     }
 
     /** Single coordinated route-state path. Raw Fused GPS is authoritative. */
@@ -2011,14 +2018,20 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             if (currentLocation == null) {
                 Toast.makeText(this, "Fetching current location...", Toast.LENGTH_SHORT).show()
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                        if (location != null) {
-                            currentLocation = location
-                            handleStartNavigation(route)
-                        } else {
-                            Toast.makeText(this@DriverDashboardActivity, "Unable to fetch location. Please check your GPS.", Toast.LENGTH_LONG).show()
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                            if (location != null) {
+                                currentLocation = location
+                                handleStartNavigation(route)
+                            } else {
+                                Toast.makeText(this@DriverDashboardActivity, "Unable to fetch location. Please check your GPS.", Toast.LENGTH_LONG).show()
+                            }
                         }
+                    } catch (e: SecurityException) {
+                        Log.e("NavDebug", "SecurityException accessing last location: ${e.message}", e)
                     }
                 }
                 return@setOnClickListener
@@ -2325,6 +2338,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             .coordinatesList(navPoints)
             .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
             .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .steps(true)
+            .bannerInstructions(true)
+            .voiceInstructions(true)
+            .language("en")
+            .voiceUnits(DirectionsCriteria.METRIC)
             .alternatives(false)
 
         if (currentBearing != null) {
@@ -2344,12 +2362,27 @@ class DriverDashboardActivity : AppCompatActivity() {
                     nav.setNavigationRoutes(routes)
                     updateStopEtasFromNavigationRoute(routes.first())
 
-                    val hasLocationPermission = ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    Log.d("ETA_DEBUG", "onRoutesReady: hasLocationPermission=$hasLocationPermission, startingTripSession=$hasLocationPermission")
-                    if (hasLocationPermission) {
-                        nav.startTripSession()
+                    // Pre-populate native Mapbox maneuver card with the route's initial maneuvers
+                    // so the card is never blank upon starting navigation
+                    val initialManeuvers = maneuverApi.getManeuvers(routes.first())
+                    initialManeuvers.onValue { list ->
+                        if (list.isNotEmpty()) {
+                            binding.instructionCard.visibility = View.GONE
+                            binding.maneuverView.visibility = View.VISIBLE
+                            binding.maneuverView.renderManeuvers(initialManeuvers)
+                        }
+                    }
+
+                    if (ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                        ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        try {
+                            nav.startTripSession()
+                        } catch (e: SecurityException) {
+                            Log.e("ETA_DEBUG", "SecurityException starting trip session: ${e.message}", e)
+                        }
                     } else {
-                        Log.e("ETA_DEBUG", "startTripSession() SKIPPED - no ACCESS_FINE_LOCATION. RouteProgress/ETA will never update.")
+                        Log.e("ETA_DEBUG", "startTripSession() SKIPPED - no location permission. RouteProgress/ETA will never update.")
                         Toast.makeText(this@DriverDashboardActivity, "Location permission missing - navigation tracking will not update.", Toast.LENGTH_LONG).show()
                     }
 
@@ -2693,8 +2726,14 @@ class DriverDashboardActivity : AppCompatActivity() {
             startLocationUpdates()
             setupLocationPuck()
 
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                mapboxNavigation?.startTripSession()
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            ) {
+                try {
+                    mapboxNavigation?.startTripSession()
+                } catch (e: SecurityException) {
+                    Log.e("DutyDebug", "SecurityException starting trip session: ${e.message}", e)
+                }
             }
 
             viewModel.currentDriver.value?.driverId?.let { driverId ->

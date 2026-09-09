@@ -45,6 +45,7 @@ import com.mapbox.maps.extension.style.expressions.dsl.generated.get
 import com.mapbox.maps.extension.style.expressions.dsl.generated.interpolate
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.addLayerAbove
+import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.layers.generated.modelLayer
 import com.mapbox.maps.extension.style.layers.generated.symbolLayer
@@ -119,6 +120,9 @@ class TrackDriverActivity : AppCompatActivity() {
     // the route surface without touching rotation, scale, or the route layers themselves.
     private val BUS_MODEL_ELEVATION_METERS = 3.0
     private var lastAppliedBusScale = -1f
+    private var lastFollowCameraTarget: Point? = null
+    private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingBusScaleUpdate: Runnable? = null
     private val MIN_BUS_MODEL_SCALE = 1.7f
     private val MAX_BUS_MODEL_SCALE = 2.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
@@ -153,8 +157,16 @@ class TrackDriverActivity : AppCompatActivity() {
         }
     }
 
-    private val busModelCameraChangeListener = OnCameraChangeListener {
-        updateBusModelScaleForZoom()
+    private val busModelCameraChangeListener = OnCameraChangeListener { scheduleBusScaleUpdate() }
+
+    // Do not mutate the style on every animation frame; tracking updates and camera
+    // animations otherwise contend for the UI/render threads and make this screen hang.
+    private fun scheduleBusScaleUpdate() {
+        pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
+        pendingBusScaleUpdate = Runnable {
+            pendingBusScaleUpdate = null
+            updateBusModelScaleForZoom()
+        }.also { busScaleHandler.postDelayed(it, 150L) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -550,6 +562,9 @@ class TrackDriverActivity : AppCompatActivity() {
             if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
                 val currentCamera = mapView?.mapboxMap?.cameraState
                 val isAtDefaultGlobe = currentCamera?.center?.latitude() == 0.0 && currentCamera?.center?.longitude() == 0.0
+                val lastTarget = lastFollowCameraTarget
+                val movedSinceLastCameraUpdate = lastTarget == null ||
+                    TurfMeasurement.distance(lastTarget, displayPoint, TurfConstants.UNIT_METERS) >= 10.0
 
                 if (isAtDefaultGlobe) {
                     // FIRST LOAD: Instant jump to bus location to avoid "Globe Flash"
@@ -560,8 +575,11 @@ class TrackDriverActivity : AppCompatActivity() {
                             .pitch(60.0)
                             .build()
                     )
-                } else {
-                    // SUBSEQUENT UPDATES: Smooth animation for moving bus
+                    lastFollowCameraTarget = displayPoint
+                } else if (movedSinceLastCameraUpdate) {
+                    // Do not restart a 1-second camera animation for every Firestore
+                    // snapshot. That creates the visible zoom snap and makes tracking
+                    // lag even when the bus has not actually moved.
                     mapView?.mapboxMap?.flyTo(
                         CameraOptions.Builder()
                             .center(displayPoint)
@@ -570,6 +588,7 @@ class TrackDriverActivity : AppCompatActivity() {
                             .build(),
                         MapAnimationOptions.mapAnimationOptions { duration(1000) }
                     )
+                    lastFollowCameraTarget = displayPoint
                 }
             }
         } catch (e: Exception) {
@@ -734,7 +753,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
                 // 1. Traveled Portion (Bottom)
                 if (!style.styleLayerExists(TRAVELED_ROUTE_LAYER_ID)) {
-                    style.addLayer(lineLayer(TRAVELED_ROUTE_LAYER_ID, TRAVELED_ROUTE_SOURCE_ID) {
+                    val traveledLayer = lineLayer(TRAVELED_ROUTE_LAYER_ID, TRAVELED_ROUTE_SOURCE_ID) {
                         lineColor(Color.parseColor("#94A3B8")) // Light Gray
                         lineWidth(interpolate {
                             linear()
@@ -746,7 +765,14 @@ class TrackDriverActivity : AppCompatActivity() {
                         lineOpacity(0.8)
                         lineJoin(LineJoin.ROUND)
                         lineCap(LineCap.ROUND)
-                    })
+                    }
+                    // If the bus model arrived first, insert route layers beneath it
+                    // rather than letting the later route draw over the vehicle.
+                    if (style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
+                        style.addLayerBelow(traveledLayer, DRIVER_MODEL_LAYER_ID)
+                    } else {
+                        style.addLayer(traveledLayer)
+                    }
                 }
 
                 // 2. Upcoming Casing (Above Traveled)
@@ -972,6 +998,7 @@ class TrackDriverActivity : AppCompatActivity() {
     override fun onStop() { super.onStop(); mapView?.onStop() }
     override fun onDestroy() {
         super.onDestroy()
+        pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
         mapView?.mapboxMap?.removeOnCameraChangeListener(busModelCameraChangeListener)
         bitmapCache.clear()
         mapView?.onDestroy()
