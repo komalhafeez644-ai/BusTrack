@@ -247,6 +247,20 @@
                     </androidx.constraintlayout.widget.ConstraintLayout>
                 </com.google.android.material.card.MaterialCardView>
 
+                <!-- Mapbox's native turn-by-turn component replaces the custom
+                     instruction card during active navigation. -->
+                <com.mapbox.navigation.ui.components.maneuver.view.MapboxManeuverView
+                    android:id="@+id/maneuverView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:visibility="visible" />
+
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <!-- 4. Bottom Controls Area -->

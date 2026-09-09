@@ -548,13 +548,17 @@ object FirebaseRepository {
 
                 val studentIds = students.map { it.id }
 
-                // Find approved tracking requests for these students where tracking is enabled
-                db.collection("trackingRequests")
-                    .whereIn("studentId", studentIds)
-                    .whereEqualTo("status", "APPROVED")
-                    .whereEqualTo("trackingEnabled", true)
-                    .get()
-                    .addOnSuccessListener { reqSnapshot ->
+                // Firestore permits at most ten values in a whereIn filter. A stop
+                // can legitimately have more students than that, and passing the full
+                // list throws synchronously on the first arrival event (which made the
+                // driver activity crash/restart). Query each legal batch instead.
+                studentIds.distinct().chunked(10).forEach { studentIdBatch ->
+                    db.collection("trackingRequests")
+                        .whereIn("studentId", studentIdBatch)
+                        .whereEqualTo("status", "APPROVED")
+                        .whereEqualTo("trackingEnabled", true)
+                        .get()
+                        .addOnSuccessListener { reqSnapshot ->
                         val requests = reqSnapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
                         if (requests.isEmpty()) {
                             android.util.Log.d("NotifDebug", "No parents found with tracking enabled for stop $stopName")
@@ -587,7 +591,11 @@ object FirebaseRepository {
                                     }
                                 }
                         }
-                    }
+                        }
+                        .addOnFailureListener { error ->
+                            android.util.Log.e("NotifDebug", "Error loading tracking requests for stop $stopName", error)
+                        }
+                }
             }
             .addOnFailureListener { e ->
                 android.util.Log.e("NotifDebug", "Error fetching students for stop arrival: ${e.message}")

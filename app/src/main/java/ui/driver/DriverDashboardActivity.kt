@@ -76,6 +76,8 @@ import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.Location
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.text.SpannableString
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
@@ -133,6 +135,8 @@ import com.mapbox.turf.TurfMisc
 import kotlin.collections.firstOrNull
 import com.mapbox.maps.plugin.ModelScaleMode
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
+import com.mapbox.navigation.tripdata.maneuver.api.MapboxManeuverApi
+import com.mapbox.navigation.base.formatter.DistanceFormatter
 
 /**
  * Unidirectional lifecycle for a single stop: UPCOMING -> ARRIVED -> COMPLETED.
@@ -153,10 +157,17 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var isDutyEnabled = false
     private var isNearStart = false
     private var isNavigating = false
+    // Kept separately from isNavigating because Mapbox marks a trip as navigating
+    // before the dashboard has entered navigation mode.  This lets us distinguish a
+    // brand-new trip (where clearing history is correct) from a route/style update.
+    private var navigationUiActive = false
     private var shouldFitCameraToRoute = true
     private var currentRouteGeometry: String? = null
     private var traveledRouteGeometry: String? = null
     private var isVoiceEnabled = true
+    // Text-to-Speech initialises asynchronously. Keep the first instruction instead of
+    // dropping it when Mapbox emits it before the Android engine is ready.
+    private var pendingFallbackInstruction: String? = null
     private var fullNavigationPoints: List<Point> = emptyList()
     private lateinit var stopsAdapter: com.example.bustrack_app.adapter.NavigationStopsAdapter
     private lateinit var bottomSheetBehavior: com.google.android.material.bottomsheet.BottomSheetBehavior<View>
@@ -191,6 +202,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private var lastGeocodeTime = 0L
     private var lastGeocodeLocation: Location? = null
+    private var lastResolvedAddress: String? = null
     private val GEOCODE_MIN_INTERVAL_MS = 15000L
     private val GEOCODE_MIN_DISTANCE_METERS = 50f
 
@@ -203,6 +215,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastArrivedStopIndex = -1
     private var isCurrentlyAtStop = false
     private val ARRIVAL_RADIUS = 80.0 // meters
+    // Attendance must be ready before the bus is exactly inside the smaller
+    // arrival geofence, otherwise the driver sees it too late at the stop.
+    private val ATTENDANCE_PROMPT_RADIUS = 140.0 // meters
     private val DEPARTURE_RADIUS = 70.0 // meters
     // How many UPCOMING stops ahead of the current pointer we'll check when scanning
     // for geofence entry. Geofence proximity is the sole source of truth for stop
@@ -218,8 +233,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private var lastSplitIndex = 0
     private val SPLIT_SEARCH_WINDOW = 120
+    // Prevent a nearest-point lookup from jumping hundreds of metres ahead to a
+    // parallel/opposite carriageway before the bus has physically made its U-turn.
+    private val MIN_FORWARD_ROUTE_PROGRESS_METERS = 80.0
 
     private val OFF_ROUTE_THRESHOLD_METERS = 35.0
+    private val PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS = 4.0
+    private val OPPOSITE_DIRECTION_REROUTE_DEGREES = 100.0
     private var isRerouteInFlight = false
     private var lastOffRouteRerouteTimeMs = 0L
     private val MIN_OFFROUTE_REROUTE_GAP_MS = 3000L
@@ -262,7 +282,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var mapboxNavigation: MapboxNavigation? = null
     private var voiceInstructionsPlayer: MapboxVoiceInstructionsPlayer? = null
     private var speechApi: MapboxSpeechApi? = null
+    private var fallbackTextToSpeech: TextToSpeech? = null
+    private var isFallbackTtsReady = false
     private val navigationLocationProvider = NavigationLocationProvider()
+    private val maneuverApi by lazy {
+        MapboxManeuverApi(DistanceFormatter { meters ->
+            val label = if (meters < 1000) {
+                "${meters.toInt()} m"
+            } else {
+                String.format(Locale.getDefault(), "%.1f km", meters / 1000.0)
+            }
+            SpannableString(label)
+        })
+    }
     private val attendancePromptedStops = mutableSetOf<Int>()
     private var lastValidBearing: Double = 0.0
     private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8
@@ -296,6 +328,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         drawerLayout = binding.drawerLayout
         mapView = binding.mapView
+        isVoiceEnabled = getSharedPreferences("navigation_preferences", MODE_PRIVATE)
+            .getBoolean("voice_enabled", true)
 
         setupStopsRecyclerView()
 
@@ -376,7 +410,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
         mapboxNavigation?.registerOffRouteObserver(offRouteObserver)
 
-        val locale = java.util.Locale.getDefault().language
+        // Mapbox Voice expects an IETF language tag (for example, en-US), not just
+        // the two-letter language code. This also makes the requested voice match the
+        // device locale correctly.
+        val locale = java.util.Locale.getDefault().toLanguageTag()
 
         if (speechApi == null) {
             speechApi = MapboxSpeechApi(this, locale)
@@ -384,19 +421,46 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (voiceInstructionsPlayer == null) {
             voiceInstructionsPlayer = MapboxVoiceInstructionsPlayer(this, locale)
         }
-    }
-
-    private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
-        if (isVoiceEnabled) {
-            speechApi?.generate(voiceInstructions) { expected ->
-                val value = expected.value
-                if (value != null) {
-                    voiceInstructionsPlayer?.play(value.announcement) { speechAnnouncement ->
-                        speechApi?.clean(speechAnnouncement)
+        if (fallbackTextToSpeech == null) {
+            fallbackTextToSpeech = TextToSpeech(this) { status ->
+                isFallbackTtsReady = status == TextToSpeech.SUCCESS
+                if (isFallbackTtsReady) {
+                    fallbackTextToSpeech?.language = java.util.Locale.getDefault()
+                    pendingFallbackInstruction?.let { instruction ->
+                        pendingFallbackInstruction = null
+                        speakFallbackInstruction(instruction)
                     }
                 }
             }
         }
+    }
+
+    private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
+        if (!isVoiceEnabled) return@VoiceInstructionsObserver
+
+        // Mapbox supplies the high-quality, pre-generated announcement whenever it
+        // can.  If generation fails (for example during a transient network/audio
+        // issue), Android TTS still speaks the maneuver instead of failing silently.
+        speechApi?.generate(voiceInstructions) { expected ->
+            val value = expected.value
+            if (value != null) {
+                voiceInstructionsPlayer?.play(value.announcement) { speechAnnouncement ->
+                    speechApi?.clean(speechAnnouncement)
+                }
+            } else {
+                Log.w("VoiceNavigation", "Mapbox voice generation failed; using device TTS")
+                speakFallbackInstruction(voiceInstructions.announcement())
+            }
+        } ?: speakFallbackInstruction(voiceInstructions.announcement())
+    }
+
+    private fun speakFallbackInstruction(instruction: String?) {
+        if (!isVoiceEnabled || instruction.isNullOrBlank()) return
+        if (!isFallbackTtsReady) {
+            pendingFallbackInstruction = instruction
+            return
+        }
+        fallbackTextToSpeech?.speak(instruction, TextToSpeech.QUEUE_FLUSH, null, "navigation-instruction")
     }
 
     private val offRouteObserver = OffRouteObserver { isOffRoute ->
@@ -520,6 +584,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                             fullNavigationPoints = newCoords
                             lastSplitIndex = 0
                             lastRawPositionForSnap = null
+                            updateStopEtasFromNavigationRoute(routes[0])
 
                             // Draw the new route on the map without waiting for next GPS tick
                             currentLocation?.let { currentLoc ->
@@ -562,6 +627,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         fullNavigationPoints = coords
                         lastSplitIndex = 0
                         lastRawPositionForSnap = null
+                        updateStopEtasFromNavigationRoute(route)
                     }
 
                     if (isNavigating) {
@@ -634,6 +700,35 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    /** Populate every upcoming stop immediately from the route response, before the
+     * first RouteProgress callback arrives. RouteProgress then refines these values
+     * every second as the bus moves. */
+    private fun updateStopEtasFromNavigationRoute(navigationRoute: NavigationRoute) {
+        val stops = assignedRoute?.stopsList ?: return
+        val legs = navigationRoute.directionsRoute.legs() ?: return
+        var accumulatedSeconds = 0
+
+        stops.forEachIndexed { index, stop ->
+            if (stateOf(index) != StopState.UPCOMING || index < nextGlobalStopIndex) return@forEachIndexed
+            val legIndex = mapboxLegByOriginalStopIndex[index] ?: return@forEachIndexed
+            val legSeconds = legs.getOrNull(legIndex)?.duration()?.toInt() ?: return@forEachIndexed
+            accumulatedSeconds += legSeconds
+            val etaText = "ETA: ${timeFormat.format(Calendar.getInstance().apply {
+                add(Calendar.SECOND, accumulatedSeconds)
+            }.time)}"
+            stopEtaTexts[index] = etaText
+            stop.time = etaText
+        }
+
+        val nextEta = stopEtaTexts[nextGlobalStopIndex]
+        if (nextEta != null) {
+            currentNavigationEtaText = nextEta.removePrefix("ETA: ")
+            binding.bottomSummaryCard.findViewById<TextView>(R.id.tvEtaSheet)?.text = currentNavigationEtaText
+            binding.tvEtaNav.text = "ETA: $currentNavigationEtaText"
+        }
+        updateUpcomingStopsUI()
+    }
+
     private fun reverseGeocodeIfNeeded(location: Location) {
         val now = System.currentTimeMillis()
         val moved = lastGeocodeLocation?.distanceTo(location) ?: Float.MAX_VALUE
@@ -652,6 +747,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
             if (!address.isNullOrBlank()) {
                 withContext(Dispatchers.Main) {
+                    lastResolvedAddress = address
                     binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = address
                 }
             }
@@ -707,6 +803,36 @@ class DriverDashboardActivity : AppCompatActivity() {
         val stops = assignedRoute?.stopsList ?: return
         if (nextGlobalStopIndex >= stops.size) return
 
+        // If Android was saving state on the exact GPS tick that entered the stop,
+        // the sheet could not safely be shown then. Retry while the bus is still at
+        // that stop so attendance remains mandatory/visible at every arrival.
+        if (isCurrentlyAtStop && lastArrivedStopIndex != -1 &&
+            !attendancePromptedStops.contains(lastArrivedStopIndex)
+        ) {
+            stops.getOrNull(lastArrivedStopIndex)?.let { arrivedStop ->
+                if (showAttendanceForStop(arrivedStop.stopName)) {
+                    attendancePromptedStops.add(lastArrivedStopIndex)
+                }
+            }
+        }
+
+        // Open attendance as the bus approaches its next stop, not only after it
+        // crosses the tighter arrival radius. The stop is still marked ARRIVED only
+        // at ARRIVAL_RADIUS below, so an early prompt cannot falsely complete it.
+        if (!isCurrentlyAtStop && !attendancePromptedStops.contains(nextGlobalStopIndex)) {
+            stops.getOrNull(nextGlobalStopIndex)?.let { nextStop ->
+                val distance = FloatArray(1)
+                Location.distanceBetween(
+                    location.latitude, location.longitude,
+                    nextStop.latitude, nextStop.longitude,
+                    distance
+                )
+                if (distance[0] <= ATTENDANCE_PROMPT_RADIUS && showAttendanceForStop(nextStop.stopName)) {
+                    attendancePromptedStops.add(nextGlobalStopIndex)
+                }
+            }
+        }
+
         // 1. Entering Geofence: UPCOMING -> ARRIVED.
         // Geofence proximity is the SOLE source of truth for whether a stop was
         // reached - not Mapbox's currentLegProgress.legIndex (that only reflects
@@ -752,18 +878,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                         )
 
                         if (!attendancePromptedStops.contains(candidateIndex)) {
-                            attendancePromptedStops.add(candidateIndex)
-
-                            // Dismiss existing sheet to reset context (Section 2 Requirement)
-                            (supportFragmentManager.findFragmentByTag("AttendanceSheet") as? com.google.android.material.bottomsheet.BottomSheetDialogFragment)?.dismissAllowingStateLoss()
-                            supportFragmentManager.executePendingTransactions()
-
-                            val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
-                            val bottomSheet = AttendanceBottomSheet.newInstance(candidateStop.stopName, assignedRoute?.routeName ?: "", isMorningTrip)
-                            bottomSheet.show(supportFragmentManager, "AttendanceSheet")
+                            if (showAttendanceForStop(candidateStop.stopName)) {
+                                attendancePromptedStops.add(candidateIndex)
+                            }
                         }
 
                         updateUpcomingStopsUI()
+                        drawPointsOnMap(fullNavigationPoints)
                     }
                     break
                 }
@@ -807,6 +928,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                             departureConfirmCount = 0
 
                             updateUpcomingStopsUI()
+                            drawPointsOnMap(fullNavigationPoints)
                         }
                     }
                 } else {
@@ -815,6 +937,23 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Arrival events can race with Android saving the Activity state.  Never force a
+     * FragmentManager transaction from the GPS callback: it can throw and restart the
+     * app.  A later GPS update will keep the stop state intact if the UI cannot be
+     * shown at that exact moment.
+     */
+    private fun showAttendanceForStop(stopName: String): Boolean {
+        if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return false
+        if (supportFragmentManager.findFragmentByTag("AttendanceSheet") != null) return false
+
+        val isMorningTrip = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 14
+        AttendanceBottomSheet
+            .newInstance(stopName, assignedRoute?.routeName.orEmpty(), isMorningTrip)
+            .show(supportFragmentManager, "AttendanceSheet")
+        return true
     }
 
     private fun updateUpcomingStopsUI() {
@@ -941,6 +1080,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
                 val sub = bannerInstructions?.sub()
+                // Feed the official Mapbox maneuver component with live route progress.
+                // The old TextViews remain only as a defensive fallback until the first
+                // progress callback supplies a native maneuver.
+                binding.maneuverView.renderManeuvers(maneuverApi.getManeuvers(routeProgress))
+                binding.maneuverView.visibility = View.VISIBLE
+                binding.instructionCard.visibility = View.GONE
                 binding.tvNextInstruction.text = primary?.text() ?: "Continue straight"
                 binding.tvNextStreet.text = sub?.text() ?: "Current Route"
             }
@@ -1093,12 +1238,40 @@ class DriverDashboardActivity : AppCompatActivity() {
         feedRawLocationToPuck(location)
         syncTrackingDataToFirestore(location)
 
+        // This callback is the app's authoritative live GPS source.  Do the
+        // reverse-geocode here rather than relying on Mapbox's matcher callback,
+        // which is not guaranteed to emit while a route is being rebuilt.
+        if (isNavigating) {
+            updateLocationSummary(location)
+            reverseGeocodeIfNeeded(location)
+            // Keep the camera locked to the bus during active driver navigation.
+            startFollowingPuck()
+        }
+
         if (isNavigating) {
             checkGeofenceAndStopStatus(location)
             updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
         } else if (!wasLive) {
             updateMapDisplay()
         }
+    }
+
+    /** Immediately removes the layout placeholder while a human-readable address loads. */
+    private fun updateLocationSummary(location: Location) {
+        // Coordinates are useful for diagnostics but are not a driver-facing address.
+        // Until geocoding completes, show the closest named stop instead of latitude /
+        // longitude so this field always remains human-readable.
+        val nearestStop = assignedRoute?.stopsList
+            ?.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+            ?.minByOrNull { stop ->
+                val result = FloatArray(1)
+                Location.distanceBetween(location.latitude, location.longitude, stop.latitude, stop.longitude, result)
+                result[0]
+            }
+        val locationText = lastResolvedAddress
+            ?: nearestStop?.let { "Near ${it.stopName}" }
+            ?: "Finding current address..."
+        binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = locationText
     }
 
     private fun syncTrackingDataToFirestore(location: Location) {
@@ -1462,6 +1635,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
 
             RouteRepository.routeList.value?.find { it.routeName == data.currentRoute }?.let { route ->
+                val routeChangedWhileNavigating = assignedRoute?.id != route.id && isNavigating
                 if (assignedRoute?.id != route.id) {
                     isNearStart = false
                     shouldFitCameraToRoute = true
@@ -1470,16 +1644,29 @@ class DriverDashboardActivity : AppCompatActivity() {
                     stopEtaTexts.clear()
                     nextGlobalStopIndex = 0
                     attendancePromptedStops.clear()
-                    clearTraveledRouteHistory()
-
-                    viewModel.currentDriver.value?.id?.let { driverId ->
-                        lastDutyToggleTime = System.currentTimeMillis()
-                        FirebaseRepository.updateDriverRouteGeometry(
-                            driverId, null, null, 0, emptyMap(), false
-                        )
+                    // A route assignment can change while the bus is navigating.
+                    // Keep the already-driven road segment as a completed segment;
+                    // only the upcoming line is replaced by the new route.
+                    if (isNavigating) {
+                        freezeActiveTraveledSegment()
+                        lastSplitIndex = 0
+                        lastRawPositionForSnap = null
+                    } else {
+                        clearTraveledRouteHistory()
+                        viewModel.currentDriver.value?.id?.let { driverId ->
+                            lastDutyToggleTime = System.currentTimeMillis()
+                            FirebaseRepository.updateDriverRouteGeometry(
+                                driverId, null, null, 0, emptyMap(), false
+                            )
+                        }
                     }
                 }
                 assignedRoute = route
+                if (routeChangedWhileNavigating) {
+                    // The route assignment is now updated, so calculate the new
+                    // upcoming path while retaining the frozen travelled segments.
+                    triggerReroute()
+                }
                 refreshLoadStat()
                 // route.stopsList is a fresh set of StopItem instances (time defaults to "").
                 // Restore last-known display text from persisted, index-keyed state before
@@ -1567,8 +1754,23 @@ class DriverDashboardActivity : AppCompatActivity() {
             val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
             val snappedP = snappedPoint.geometry() as? Point ?: return
             val actualDistanceToRoute = TurfMeasurement.distance(currentPos, snappedP, TurfConstants.UNIT_METERS)
+            val nearestRouteIndex = fullNavigationPoints.indices.minByOrNull { index ->
+                TurfMeasurement.distance(currentPos, fullNavigationPoints[index], TurfConstants.UNIT_METERS)
+            } ?: 0
+            val isFacingOppositeRouteDirection = currentLocation
+                ?.takeIf { it.hasBearing() && it.speed >= MIN_SPEED_FOR_BEARING_UPDATE }
+                ?.let { location ->
+                    val routeBearing = routeBearingAt(nearestRouteIndex)
+                    routeBearing != null && headingDifference(location.bearing.toDouble(), routeBearing) >= OPPOSITE_DIRECTION_REROUTE_DEGREES
+                } ?: false
 
-            if (isNavigating && actualDistanceToRoute > OFF_ROUTE_THRESHOLD_METERS) {
+            // A GPS point can be close to the geometry of a parallel/two-way road
+            // while the bus is travelling in the opposite direction. Distance alone
+            // incorrectly advances the grey line in that case; direction detects it
+            // and forces a route recalculation from the road the bus is actually on.
+            val isOffRoute = actualDistanceToRoute > OFF_ROUTE_THRESHOLD_METERS ||
+                (actualDistanceToRoute > PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS && isFacingOppositeRouteDirection)
+            if (isNavigating && isOffRoute) {
                 val now = System.currentTimeMillis()
                 if (!isRerouteInFlight && now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS) {
                     lastOffRouteRerouteTimeMs = now
@@ -1579,7 +1781,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
 
             // 2. Minimum movement filter: only filters updates when vehicle is strictly ON ROUTE
-            lastRawPositionForSnap?.let { lastRaw ->
+            val previousRawPosition = lastRawPositionForSnap
+            previousRawPosition?.let { lastRaw ->
                 val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
                 if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
                     return
@@ -1592,7 +1795,20 @@ class DriverDashboardActivity : AppCompatActivity() {
             val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
             var splitIndex = searchStart
             var minWindowDistance = Double.MAX_VALUE
+            val maxForwardRouteDistance = previousRawPosition?.let { previous ->
+                // Allow normal GPS noise and road curvature, but never a sudden jump
+                // to the return carriageway far ahead in the route order.
+                maxOf(MIN_FORWARD_ROUTE_PROGRESS_METERS,
+                    TurfMeasurement.distance(currentPos, previous, TurfConstants.UNIT_METERS) * 3.0 + 30.0)
+            } ?: MIN_FORWARD_ROUTE_PROGRESS_METERS
+            var forwardRouteDistance = 0.0
             for (i in searchStart..searchEnd) {
+                if (i > searchStart) {
+                    forwardRouteDistance += TurfMeasurement.distance(
+                        fullNavigationPoints[i - 1], fullNavigationPoints[i], TurfConstants.UNIT_METERS
+                    )
+                }
+                if (forwardRouteDistance > maxForwardRouteDistance) break
                 val dist = TurfMeasurement.distance(currentPos, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
                 if (dist < minWindowDistance) {
                     minWindowDistance = dist
@@ -1654,6 +1870,28 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun routeBearingAt(index: Int): Double? {
+        val (startIndex, endIndex) = if (index < fullNavigationPoints.lastIndex) {
+            index to index + 1
+        } else {
+            index - 1 to index
+        }
+        val start = fullNavigationPoints.getOrNull(startIndex) ?: return null
+        val end = fullNavigationPoints.getOrNull(endIndex) ?: return null
+        val lat1 = Math.toRadians(start.latitude())
+        val lat2 = Math.toRadians(end.latitude())
+        val deltaLongitude = Math.toRadians(end.longitude() - start.longitude())
+        val y = Math.sin(deltaLongitude) * Math.cos(lat2)
+        val x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLongitude)
+        return (Math.toDegrees(Math.atan2(y, x)) + 360.0) % 360.0
+    }
+
+    private fun headingDifference(first: Double, second: Double): Double {
+        val difference = kotlin.math.abs(first - second) % 360.0
+        return minOf(difference, 360.0 - difference)
+    }
+
     private fun addMarker(point: Point, iconRes: Int, title: String? = null, iconSize: Double = 0.8) {
         val bitmap = bitmapFromDrawableRes(this, iconRes)
         if (bitmap != null) {
@@ -1713,6 +1951,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         binding.btnSound.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             isVoiceEnabled = !isVoiceEnabled
+            getSharedPreferences("navigation_preferences", MODE_PRIVATE)
+                .edit()
+                .putBoolean("voice_enabled", isVoiceEnabled)
+                .apply()
             binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
             binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
             Toast.makeText(this, if (isVoiceEnabled) "Voice instructions ON" else "Voice instructions OFF", Toast.LENGTH_SHORT).show()
@@ -1848,11 +2090,18 @@ class DriverDashboardActivity : AppCompatActivity() {
         val tvSpeed = sheet.findViewById<TextView>(R.id.tvSpeedSheet)
         val tvLoad = sheet.findViewById<TextView>(R.id.tvLoadSheet)
 
-        tvEta?.text = "Calculating..."
-        binding.tvEtaNav.text = "ETA: Calculating..."
+        val etaText = currentNavigationEtaText ?: "Calculating..."
+        tvEta?.text = etaText
+        binding.tvEtaNav.text = if (etaText.startsWith("Arrived:") || etaText == "Route completed") {
+            etaText
+        } else {
+            "ETA: $etaText"
+        }
 
         val currentSpeed = (currentLocation?.speed?.times(3.6)) ?: 0.0
         tvSpeed?.text = "${currentSpeed.toInt()} km/h"
+        binding.tvSpeedNav.text = currentSpeed.toInt().toString()
+        currentLocation?.let(::updateLocationSummary)
 
         tvLoad?.text = cachedLoadString
         refreshLoadStat()
@@ -2069,6 +2318,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
                     isNavigating = true
                     nav.setNavigationRoutes(routes)
+                    updateStopEtasFromNavigationRoute(routes.first())
 
                     val hasLocationPermission = ActivityCompat.checkSelfPermission(this@DriverDashboardActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     Log.d("ETA_DEBUG", "onRoutesReady: hasLocationPermission=$hasLocationPermission, startingTripSession=$hasLocationPermission")
@@ -2105,20 +2355,26 @@ class DriverDashboardActivity : AppCompatActivity() {
         cancelDutyAutoOffTimer()
         binding.apply {
             if (isNavigating) {
-                clearTraveledRouteHistory()
-                traveledRouteGeometry = null
-                currentRouteGeometry = null
+                val isNewNavigationSession = !navigationUiActive
+                navigationUiActive = true
+                if (isNewNavigationSession) {
+                    clearTraveledRouteHistory()
+                    traveledRouteGeometry = null
+                    currentRouteGeometry = null
+                }
 
                 toolbar.visibility = View.GONE
                 headerBg.visibility = View.GONE
                 dashboardTopContent.visibility = View.GONE
 
-                instructionCard.visibility = View.VISIBLE
-                instructionCard.setCardBackgroundColor(Color.parseColor("#0D1B3E"))
+                // Use Mapbox's native, route-aware turn-by-turn card instead of the
+                // former hard-coded dashboard card.
+                instructionCard.visibility = View.GONE
+                maneuverView.visibility = View.VISIBLE
 
                 updateBottomSheetTheme(true)
 
-                mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
+                if (isNewNavigationSession) mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
                     setupNavigationLayers(style)
                     clearNavigationRouteGeometry(style)
 
@@ -2151,12 +2407,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                 bottomSheetBehavior.isHideable = false
                 bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
 
-                viewModel.currentDriver.value?.driverId?.let { driverId ->
-                    val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
-                    val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
-                    FirebaseRepository.updateDriverRouteGeometry(
-                        driverId, null, null, nextGlobalStopIndex, arrivalMap, true, etaMap
-                    )
+                // Do not write null route geometry when this is merely a reroute/UI
+                // refresh: that write was erasing the persisted grey travelled line.
+                if (isNewNavigationSession) {
+                    viewModel.currentDriver.value?.driverId?.let { driverId ->
+                        val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
+                        val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
+                        FirebaseRepository.updateDriverRouteGeometry(
+                            driverId, null, null, nextGlobalStopIndex, arrivalMap, true, etaMap
+                        )
+                    }
                 }
 
                 lastLegIndex = -1
@@ -2166,6 +2426,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 layoutMapControls.animate().translationY(-240f).setDuration(500).start()
                 btnRecenter.animate().translationY(-240f).setDuration(500).start()
             } else {
+                navigationUiActive = false
                 mapboxNavigation?.setNavigationRoutes(emptyList())
                 fullNavigationPoints = emptyList()
                 clearTraveledRouteHistory()
@@ -2179,6 +2440,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 headerBg.visibility = View.VISIBLE
                 dashboardTopContent.visibility = View.VISIBLE
                 instructionCard.visibility = View.GONE
+                maneuverView.visibility = View.GONE
 
                 updateBottomSheetTheme(false)
 
@@ -2662,6 +2924,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         voiceInstructionsPlayer = null
         speechApi = null
+        fallbackTextToSpeech?.stop()
+        fallbackTextToSpeech?.shutdown()
+        fallbackTextToSpeech = null
 
         MapboxNavigationApp.detach(this)
 

@@ -23,6 +23,9 @@ class NavigationPreferencesActivity : AppCompatActivity() {
         setupBottomNavigation()
         setupListeners()
 
+        val preferences = getSharedPreferences(VOICE_PREFS, MODE_PRIVATE)
+        binding.switch3.isChecked = preferences.getBoolean(VOICE_ENABLED_KEY, true)
+
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, 0)
@@ -37,6 +40,14 @@ class NavigationPreferencesActivity : AppCompatActivity() {
         
         binding.switch1.setOnCheckedChangeListener { _, isChecked ->
             Toast.makeText(this, "Live Tracking: ${if (isChecked) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.switch3.setOnCheckedChangeListener { _, isChecked ->
+            getSharedPreferences(VOICE_PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(VOICE_ENABLED_KEY, isChecked)
+                .apply()
+            Toast.makeText(this, "Voice navigation: ${if (isChecked) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -56,5 +67,10 @@ class NavigationPreferencesActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private companion object {
+        const val VOICE_PREFS = "navigation_preferences"
+        const val VOICE_ENABLED_KEY = "voice_enabled"
     }
 }

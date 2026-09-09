@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.mapbox.maps)
     implementation(libs.mapbox.navigation)
     implementation(libs.mapbox.voice)
+    implementation("com.mapbox.navigationcore:ui-components:3.4.0")
     implementation(libs.mapbox.search)
     implementation("com.mapbox.search:mapbox-search-android-ui:2.2.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
