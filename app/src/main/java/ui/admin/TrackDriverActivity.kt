@@ -102,6 +102,11 @@ class TrackDriverActivity : AppCompatActivity() {
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
 
+    // Display-only map matching: GPS stays authoritative for every route, stop and
+    // Firestore calculation. A normal 5-20m GPS offset is snapped only for the marker
+    // shown on the Admin map; a real off-route bus is deliberately left untouched.
+    private val DISPLAY_ROAD_SNAP_THRESHOLD_METERS = 30.0
+
     // 3D bus model orientation/scale — kept identical to DriverDashboardActivity so the
     // bus renders the same way for Parent/Admin/Principal as it does for the Driver.
     // Static base correction: X=0, Y=0 (no roll offset), Z=90 (asset-forward correction).
@@ -195,7 +200,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 currentCameraMode = TrackingCameraMode.DRIVER_FOLLOW
                 viewModel.targetDriver.value?.let { driver ->
                     if (driver.latitude != 0.0 && driver.longitude != 0.0) {
-                        val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+                        val targetPoint = displayPointForDriver(driver)
                         mapView?.mapboxMap?.flyTo(
                             CameraOptions.Builder()
                                 .center(targetPoint)
@@ -446,7 +451,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvLoadSheet)?.text = driver.load ?: "0/0"
 
                 if (driver.latitude == 0.0 || driver.longitude == 0.0) return@let
-                val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+                val targetPoint = displayPointForDriver(driver)
 
                 mapView?.mapboxMap?.getStyle { style ->
                     if (!style.styleSourceExists(DRIVER_SOURCE_ID)) {
@@ -523,11 +528,12 @@ class TrackDriverActivity : AppCompatActivity() {
             }
 
             if (driver.latitude == 0.0 || driver.longitude == 0.0) return
-            val targetPoint = Point.fromLngLat(driver.longitude, driver.latitude)
-            previousPoint = targetPoint
+            val rawPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+            val displayPoint = displayPointForDriver(driver)
+            previousPoint = displayPoint
 
             viewModel.assignedRoute.value?.let { route ->
-                updateRouteSplitting(targetPoint, route, driver)
+                updateRouteSplitting(rawPoint, route, driver)
 
                 // Stop status is derived ONLY from the Driver Module's authoritative,
                 // persisted state (driver.stopArrivalTimes + driver.nextStopIndex) -
@@ -549,7 +555,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     // FIRST LOAD: Instant jump to bus location to avoid "Globe Flash"
                     mapView?.mapboxMap?.setCamera(
                         CameraOptions.Builder()
-                            .center(targetPoint)
+                            .center(displayPoint)
                             .zoom(17.0)
                             .pitch(60.0)
                             .build()
@@ -558,7 +564,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     // SUBSEQUENT UPDATES: Smooth animation for moving bus
                     mapView?.mapboxMap?.flyTo(
                         CameraOptions.Builder()
-                            .center(targetPoint)
+                            .center(displayPoint)
                             .zoom(17.0)
                             .pitch(60.0)
                             .build(),
@@ -582,6 +588,21 @@ class TrackDriverActivity : AppCompatActivity() {
             }
             uniqueParts
         }.joinToString(", ")
+    }
+
+    private fun displayPointForDriver(driver: DriverModel): Point {
+        val rawPoint = Point.fromLngLat(driver.longitude, driver.latitude)
+        val routePolyline = driver.currentRoutePolyline ?: return rawPoint
+
+        return runCatching {
+            val routePoints = LineString.fromPolyline(routePolyline, 6).coordinates()
+            if (routePoints.size < 2) return@runCatching rawPoint
+
+            val snapped = TurfMisc.nearestPointOnLine(rawPoint, routePoints).geometry() as? Point
+                ?: return@runCatching rawPoint
+            val offset = TurfMeasurement.distance(rawPoint, snapped, TurfConstants.UNIT_METERS)
+            if (offset <= DISPLAY_ROAD_SNAP_THRESHOLD_METERS) snapped else rawPoint
+        }.getOrElse { rawPoint }
     }
 
     private fun animateDriver(start: Point, end: Point) {

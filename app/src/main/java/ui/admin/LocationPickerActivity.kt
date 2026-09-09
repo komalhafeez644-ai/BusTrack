@@ -77,6 +77,14 @@ import java.util.Locale
  */
 class LocationPickerActivity : AppCompatActivity() {
 
+    companion object {
+        // Covers Rawalpindi city and its immediately connected localities. Search Box
+        // treats bbox as a hard result boundary (unlike proximity, which is only a
+        // ranking hint), so every shown Mapbox result belongs to this service area.
+        private const val RAWALPINDI_BBOX = "72.70,33.35,73.35,33.90"
+        private val RAWALPINDI_CENTER = Point.fromLngLat(73.0679, 33.6007)
+    }
+
     private lateinit var binding: ActivityLocationPickerBinding
     private var mapView: MapView? = null
     private var pointAnnotationManager: PointAnnotationManager? = null
@@ -260,8 +268,9 @@ class LocationPickerActivity : AppCompatActivity() {
                     async { LocationRepository.searchLocations(v) }
                 }
 
-                val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
-                val geocodeDeferred = async { fetchGeocodingResults(cleanQuery, mapCenter) }
+                // Keep results centered on Rawalpindi even after an admin pans the
+                // map somewhere else; the search field is a Rawalpindi location picker.
+                val geocodeDeferred = async { fetchGeocodingResults(cleanQuery, RAWALPINDI_CENTER) }
 
                 val finalCustomResults = firestoreDeferred.awaitAll().flatten().distinctBy { it.id }
                 val geocodeResults = geocodeDeferred.await()
@@ -290,11 +299,9 @@ class LocationPickerActivity : AppCompatActivity() {
      * JSON, so there is no constructor/parameter mismatch possible regardless of which
      * mapbox-search-android version (or none at all) is on the classpath.
      * Note: the one-off /forward endpoint does not require a session_token (that's only
-     * needed for the /suggest + /retrieve autocomplete-session pair). auto_complete=true
-     * still enables fuzzy/partial-word matching for text typed as-you-go.
-     * rank_strategy=distance sorts the returned features by proximity to the map center
-     * rather than plain text relevance, so short (1-2 word) queries surface the nearest
-     * matches first instead of the "most textually relevant" match countrywide.
+     * needed for the /suggest + /retrieve autocomplete-session pair). This UI debounces
+     * typed text and displays each forward response as its suggestion list. Search Box's
+     * bbox parameter is a hard boundary, whereas proximity only ranks nearby results.
      */
     private suspend fun fetchGeocodingResults(query: String, proximity: Point): List<GeocodeResult> =
         withContext(Dispatchers.IO) {
@@ -305,10 +312,10 @@ class LocationPickerActivity : AppCompatActivity() {
                         "?q=$encodedQuery" +
                         "&access_token=$token" +
                         "&proximity=${proximity.longitude()},${proximity.latitude()}" +
+                        "&bbox=$RAWALPINDI_BBOX" +
                         "&country=pk" +
                         "&types=poi,address,place,street,locality,neighborhood,district,category" +
-                        "&auto_complete=true" +
-                        "&rank_strategy=distance" +
+                        "&language=en" +
                         "&limit=10"
 
                 Log.d("SearchDebug", "Requesting: $urlString")
