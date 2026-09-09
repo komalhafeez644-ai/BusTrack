@@ -273,8 +273,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastFirestoreUpdateTime = 0L
 
     companion object {
-        private const val FIRESTORE_UPDATE_INTERVAL = 3000L
-        private const val FIRESTORE_MIN_DISTANCE = 5f
+        // Publish the live bus position and route split together at a cadence that
+        // remains visually in step on the Admin tracking map.
+        private const val FIRESTORE_UPDATE_INTERVAL = 1000L
+        private const val FIRESTORE_MIN_DISTANCE = 2f
     }
     private var locationCallback: LocationCallback? = null
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
@@ -299,7 +301,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastValidBearing: Double = 0.0
     private val MIN_SPEED_FOR_BEARING_UPDATE = 0.8
     private var lastRawPositionForSnap: Point? = null
-    private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 3.0
+    // Keep this no greater than FIRESTORE_MIN_DISTANCE. Otherwise a new marker
+    // position can be published while the split route still represents the prior
+    // point, which is precisely the visible line lag on Admin tracking.
+    private val MIN_GPS_MOVEMENT_FOR_SNAP_METERS = 1.0
 
     private val NAV_ROUTE_SOURCE_ID = "nav-route-source"
     private val NAV_TRAVELED_SOURCE_ID = "nav-traveled-source"
@@ -438,20 +443,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val voiceInstructionsObserver = VoiceInstructionsObserver { voiceInstructions ->
         if (!isVoiceEnabled) return@VoiceInstructionsObserver
 
-        // Mapbox supplies the high-quality, pre-generated announcement whenever it
-        // can.  If generation fails (for example during a transient network/audio
-        // issue), Android TTS still speaks the maneuver instead of failing silently.
-        speechApi?.generate(voiceInstructions) { expected ->
-            val value = expected.value
-            if (value != null) {
-                voiceInstructionsPlayer?.play(value.announcement) { speechAnnouncement ->
-                    speechApi?.clean(speechAnnouncement)
-                }
-            } else {
-                Log.w("VoiceNavigation", "Mapbox voice generation failed; using device TTS")
-                speakFallbackInstruction(voiceInstructions.announcement())
-            }
-        } ?: speakFallbackInstruction(voiceInstructions.announcement())
+        // The instruction text comes from Mapbox, but playback is intentionally
+        // on-device. The network-generated Mapbox speech request could fail without
+        // an audible fallback on a driver's connection.
+        speakFallbackInstruction(voiceInstructions.announcement())
     }
 
     private fun speakFallbackInstruction(instruction: String?) {
@@ -581,6 +576,9 @@ class DriverDashboardActivity : AppCompatActivity() {
                         } ?: emptyList()
 
                         if (newCoords.isNotEmpty()) {
+                            if (newCoords != fullNavigationPoints) {
+                                freezeActiveTraveledSegment()
+                            }
                             fullNavigationPoints = newCoords
                             lastSplitIndex = 0
                             lastRawPositionForSnap = null
@@ -742,6 +740,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .getFromLocation(location.latitude, location.longitude, 1)
                     ?.firstOrNull()?.getAddressLine(0)
                     ?.replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
+                    ?.let(::normalizeDisplayAddress)
             } catch (_: Exception) {
                 null
             }
@@ -752,6 +751,19 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun normalizeDisplayAddress(address: String): String {
+        val parts = address.split(',')
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+
+        return parts.fold(mutableListOf<String>()) { uniqueParts, part ->
+            if (uniqueParts.none { it.equals(part, ignoreCase = true) }) {
+                uniqueParts += part
+            }
+            uniqueParts
+        }.joinToString(", ")
     }
 
     // ---------------------------------------------------------------------------------
@@ -1041,6 +1053,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 } else {
                     "ETA: $etaString"
                 }
+                binding.tvDistanceNav.text = if (distanceRemaining < 1.0) {
+                    "Distance: ${(distanceRemaining * 1000).toInt()} m"
+                } else {
+                    String.format(Locale.getDefault(), "Distance: %.1f km", distanceRemaining)
+                }
 
                 val legs = routeProgress.route.legs()
                 var accumulatedSeconds = (routeProgress.currentLegProgress?.durationRemaining ?: 0.0).toInt()
@@ -1080,12 +1097,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val bannerInstructions = routeProgress.bannerInstructions
                 val primary = bannerInstructions?.primary()
                 val sub = bannerInstructions?.sub()
-                // Feed the official Mapbox maneuver component with live route progress.
-                // The old TextViews remain only as a defensive fallback until the first
-                // progress callback supplies a native maneuver.
-                binding.maneuverView.renderManeuvers(maneuverApi.getManeuvers(routeProgress))
-                binding.maneuverView.visibility = View.VISIBLE
-                binding.instructionCard.visibility = View.GONE
+                // This custom card is fed by the same live Mapbox progress model,
+                // but unlike MapboxManeuverView it does not render as a blank card
+                // with this app's navigation-night theme.
+                binding.maneuverView.visibility = View.GONE
+                binding.instructionCard.visibility = View.VISIBLE
                 binding.tvNextInstruction.text = primary?.text() ?: "Continue straight"
                 binding.tvNextStreet.text = sub?.text() ?: "Current Route"
             }
@@ -1236,7 +1252,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         currentLocation = Location(location)
         isCurrentLocationLive = true
         feedRawLocationToPuck(location)
-        syncTrackingDataToFirestore(location)
 
         // This callback is the app's authoritative live GPS source.  Do the
         // reverse-geocode here rather than relying on Mapbox's matcher callback,
@@ -1254,6 +1269,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         } else if (!wasLive) {
             updateMapDisplay()
         }
+
+        // Persist only after the route has been split at this GPS point. Admin,
+        // Parent and Principal then receive marker + blue/grey line in one snapshot.
+        syncTrackingDataToFirestore(location)
     }
 
     /** Immediately removes the layout placeholder while a human-readable address loads. */
@@ -1282,7 +1301,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         val distanceMoved = lastFirestoreLocation?.distanceTo(location) ?: Float.MAX_VALUE
 
         val elapsed = now - lastFirestoreUpdateTime
-        // Regular movement is paced at 3 s AND 5 m. A 10 s heartbeat preserves a
+        // Regular movement is paced at 1 s AND 2 m. A 10 s heartbeat preserves a
         // fresh lastUpdated value while the bus is stationary or GPS is noisy.
         if ((elapsed >= FIRESTORE_UPDATE_INTERVAL && distanceMoved >= FIRESTORE_MIN_DISTANCE) || elapsed >= 10000L) {
 
@@ -1957,6 +1976,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .apply()
             binding.btnSound.setImageResource(if (isVoiceEnabled) R.drawable.volume_up else R.drawable.mute)
             binding.btnSound.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            if (!isVoiceEnabled) {
+                speechApi?.cancel()
+                voiceInstructionsPlayer?.clear()
+                fallbackTextToSpeech?.stop()
+            }
             Toast.makeText(this, if (isVoiceEnabled) "Voice instructions ON" else "Voice instructions OFF", Toast.LENGTH_SHORT).show()
         }
 
@@ -2367,10 +2391,14 @@ class DriverDashboardActivity : AppCompatActivity() {
                 headerBg.visibility = View.GONE
                 dashboardTopContent.visibility = View.GONE
 
-                // Use Mapbox's native, route-aware turn-by-turn card instead of the
-                // former hard-coded dashboard card.
-                instructionCard.visibility = View.GONE
-                maneuverView.visibility = View.VISIBLE
+                // Give the driver a useful card immediately; the next route-progress
+                // update fills in the real instruction, road, distance and ETA.
+                instructionCard.visibility = View.VISIBLE
+                maneuverView.visibility = View.GONE
+                tvNextInstruction.text = "Navigation starting"
+                tvNextStreet.text = "Finding next road"
+                tvDistanceNav.text = "Distance: --"
+                tvEtaNav.text = "ETA: --"
 
                 updateBottomSheetTheme(true)
 
@@ -2922,8 +2950,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapboxNavigation?.unregisterRouteProgressObserver(routeProgressObserver)
         mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
 
-        voiceInstructionsPlayer = null
+        speechApi?.cancel()
         speechApi = null
+        voiceInstructionsPlayer?.shutdown()
+        voiceInstructionsPlayer = null
         fallbackTextToSpeech?.stop()
         fallbackTextToSpeech?.shutdown()
         fallbackTextToSpeech = null

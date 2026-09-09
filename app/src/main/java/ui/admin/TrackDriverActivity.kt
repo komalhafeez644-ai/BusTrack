@@ -427,6 +427,7 @@ class TrackDriverActivity : AppCompatActivity() {
                             .removePrefix(",")
                             .removeSuffix(",")
                             .trim()
+                            .let(::normalizeDisplayAddress)
 
                         it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = cleanedAddress
                     } else {
@@ -568,6 +569,19 @@ class TrackDriverActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("TrackDriverActivity", "Error updating UI", e)
         }
+    }
+
+    private fun normalizeDisplayAddress(address: String): String {
+        val parts = address.split(',')
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+
+        return parts.fold(mutableListOf<String>()) { uniqueParts, part ->
+            if (uniqueParts.none { it.equals(part, ignoreCase = true) }) {
+                uniqueParts += part
+            }
+            uniqueParts
+        }.joinToString(", ")
     }
 
     private fun animateDriver(start: Point, end: Point) {
@@ -825,6 +839,9 @@ class TrackDriverActivity : AppCompatActivity() {
                         val dynamicTraveled = LineString.fromPolyline(driver.traveledPolyline!!, 6)
                         (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                             ?.geometry(dynamicTraveled)
+                    } else {
+                        (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                            ?.geometry(LineString.fromLngLats(emptyList()))
                     }
                 }
                 return // Dynamic logic completes here
@@ -870,12 +887,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         }
                     }
                     override fun onFailure(call: Call<DirectionsResponse>, t: Throwable) {
-                        // Fallback to straight line only if Directions API fails
-                        val fallbackLine = LineString.fromLngLats(directionsPoints)
-                        mapView?.mapboxMap?.getStyle { style ->
-                            (style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
-                                ?.geometry(fallbackLine)
-                        }
+                        Log.w("TrackDriverActivity", "Unable to calculate a road-matched upcoming route", t)
                     }
                 })
             }
