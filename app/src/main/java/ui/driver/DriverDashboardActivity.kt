@@ -106,6 +106,7 @@ import com.example.bustrack_app.data.FirebaseRepository
 import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
+import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
 import com.mapbox.navigation.core.trip.session.LocationMatcherResult
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
@@ -122,8 +123,6 @@ import com.mapbox.navigation.voice.api.MapboxSpeechApi
 import com.mapbox.navigation.voice.model.SpeechAnnouncement
 import com.mapbox.navigation.voice.model.SpeechError
 import com.mapbox.navigation.voice.model.SpeechVolume
-import com.mapbox.navigation.voice.options.MapboxSpeechApiOptions
-import com.mapbox.navigation.voice.options.VoiceInstructionsPlayerOptions
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import com.mapbox.navigation.core.trip.session.OffRouteObserver
 import com.mapbox.maps.extension.style.layers.getLayer
@@ -193,6 +192,15 @@ class DriverDashboardActivity : AppCompatActivity() {
     // because assignedRoute (and its StopItem instances) gets replaced wholesale whenever
     // RouteRepository/dashboardData emits, which would otherwise wipe the ETA back to "".
     private val stopEtaTexts = mutableMapOf<Int, String>()
+    // The return journey is deliberately not a mutation of the forward journey.
+    // Its stop instances, state, arrival times and ETA values are all independent.
+    private var isReverseTripActive = false
+    private var isViewingReverseTrip = false
+    private var reverseTripCompleted = false
+    private var reverseStops: List<com.example.bustrack_app.models.StopItem> = emptyList()
+    private val reverseStopArrivalTimes = mutableMapOf<Int, String>()
+    private val reverseStopStates = mutableMapOf<Int, StopState>()
+    private val reverseStopEtaTexts = mutableMapOf<Int, String>()
     // Road-following traveled history: preserves distinct road-geometry segments.
     // If a location jump or reroute occurs with a large gap (>60m), segments remain
     // separated in a MultiLineString so no straight line is drawn across town.
@@ -323,6 +331,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val NAV_ROUTE_LAYER_ID = "nav-route-layer"
     private val NAV_ROUTE_CASING_LAYER_ID = "nav-route-casing-layer"
     private val NAV_TRAVELED_LAYER_ID = "nav-traveled-layer"
+
+    // FIX (jitter): guard against feeding every noisy raw GPS fix into the puck.
+    private var lastPuckPosition: Location? = null
+    private val PUCK_MIN_MOVEMENT_METERS = 2.0f
 
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -492,6 +504,36 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    // FIX (registration race): MapboxNavigationApp.current() can still be null the
+    // instant after attach(this) if the singleton hasn't finished wiring itself to
+    // the Activity lifecycle yet. Registering observers with `?.` against that null
+    // reference silently no-ops - routeProgressObserver/voiceInstructionsObserver
+    // then never fire for the rest of the session (the nav card stays static, no
+    // voice), even though nav.startTripSession() succeeds later on a fresh,
+    // non-null instance and powers the native trip notification just fine.
+    // MapboxNavigationObserver's onAttached callback is only invoked once Mapbox
+    // hands back a guaranteed-valid instance, so registering through it removes
+    // the race entirely instead of guessing at timing.
+    private val navObserverBinder = object : MapboxNavigationObserver {
+        override fun onAttached(mapboxNavigation: MapboxNavigation) {
+            this@DriverDashboardActivity.mapboxNavigation = mapboxNavigation
+            mapboxNavigation.registerRoutesObserver(routesObserver)
+            mapboxNavigation.registerLocationObserver(locationObserver)
+            mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
+            mapboxNavigation.registerVoiceInstructionsObserver(voiceInstructionsObserver)
+            mapboxNavigation.registerOffRouteObserver(offRouteObserver)
+            Log.d("ETA_DEBUG", "MapboxNavigationObserver.onAttached - all observers registered on a live instance")
+        }
+
+        override fun onDetached(mapboxNavigation: MapboxNavigation) {
+            mapboxNavigation.unregisterRoutesObserver(routesObserver)
+            mapboxNavigation.unregisterLocationObserver(locationObserver)
+            mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
+            mapboxNavigation.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
+            mapboxNavigation.unregisterOffRouteObserver(offRouteObserver)
+        }
+    }
+
     private fun initNavigation() {
         if (!MapboxNavigationApp.isSetup()) {
             MapboxNavigationApp.setup(
@@ -501,13 +543,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
         MapboxNavigationApp.attach(this)
 
+        // Registering through MapboxNavigationApp.registerObserver(...) is idempotent -
+        // Mapbox tracks observers in a Set, so calling this again on a later
+        // initNavigation() re-entry (e.g. from startNavigationAnimation()'s null-check
+        // fallback) will not create duplicate registrations.
+        MapboxNavigationApp.registerObserver(navObserverBinder)
         mapboxNavigation = MapboxNavigationApp.current()
-
-        mapboxNavigation?.registerRoutesObserver(routesObserver)
-        mapboxNavigation?.registerLocationObserver(locationObserver)
-        mapboxNavigation?.registerRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation?.registerVoiceInstructionsObserver(voiceInstructionsObserver)
-        mapboxNavigation?.registerOffRouteObserver(offRouteObserver)
 
         // Ensure language matches between Mapbox Voice API and device locale
         val locale = java.util.Locale.getDefault().toLanguageTag()
@@ -581,7 +622,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                         Log.w("VoiceNav", "SpeechApi generation error: $error, falling back")
                         val fallback = error.fallback
                         if (fallback != null && voiceInstructionsPlayer != null) {
+                            // FIX (silent voice): audio focus was previously requested only
+                            // for the Android TTS fallback path (speakFallbackInstruction),
+                            // never for the Mapbox voice player. Without focus, playback can
+                            // be silently ducked or blocked by another audio session.
+                            requestNavigationAudioFocus()
                             voiceInstructionsPlayer?.play(fallback) { a ->
+                                abandonNavigationAudioFocus()
                                 speechApi?.clean(a)
                             }
                         } else {
@@ -589,7 +636,9 @@ class DriverDashboardActivity : AppCompatActivity() {
                         }
                     },
                     { value ->
+                        requestNavigationAudioFocus()
                         voiceInstructionsPlayer?.play(value.announcement) { a ->
+                            abandonNavigationAudioFocus()
                             speechApi?.clean(a)
                         }
                     }
@@ -676,10 +725,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         val navPoints = mutableListOf<Point>()
         navPoints.add(currentPoint)
 
-        val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
+        val maxVisitedIdx = activeArrivalTimes().keys.maxOrNull() ?: -1
         val targetStopIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
 
-        val remainingStops = route.stopsList.mapIndexed { index, stop -> index to stop }
+        val remainingStops = activeStops().mapIndexed { index, stop -> index to stop }
             .filter { (index, stop) -> index >= targetStopIndex && stop.latitude != 0.0 && stop.longitude != 0.0 }
 
         mapboxLegByOriginalStopIndex.clear()
@@ -880,7 +929,8 @@ class DriverDashboardActivity : AppCompatActivity() {
      * first RouteProgress callback arrives. RouteProgress then refines these values
      * every second as the bus moves. */
     private fun updateStopEtasFromNavigationRoute(navigationRoute: NavigationRoute) {
-        val stops = assignedRoute?.stopsList ?: return
+        val stops = activeStops()
+        if (stops.isEmpty()) return
         val legs = navigationRoute.directionsRoute.legs() ?: return
         var accumulatedSeconds = 0
 
@@ -892,11 +942,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             val etaText = "ETA: ${timeFormat.format(Calendar.getInstance().apply {
                 add(Calendar.SECOND, accumulatedSeconds)
             }.time)}"
-            stopEtaTexts[index] = etaText
+            activeEtaTexts()[index] = etaText
             stop.time = etaText
         }
 
-        val nextEta = stopEtaTexts[nextGlobalStopIndex]
+        val nextEta = activeEtaTexts()[nextGlobalStopIndex]
         if (nextEta != null) {
             currentNavigationEtaText = nextEta.removePrefix("ETA: ")
             binding.bottomSummaryCard.findViewById<TextView>(R.id.tvEtaSheet)?.text = currentNavigationEtaText
@@ -951,13 +1001,28 @@ class DriverDashboardActivity : AppCompatActivity() {
     // ARRIVED to COMPLETED — it can never fall back to UPCOMING.
     // ---------------------------------------------------------------------------------
 
-    private fun stateOf(index: Int): StopState = stopStates[index] ?: StopState.UPCOMING
+    private fun activeStops(): List<com.example.bustrack_app.models.StopItem> =
+        if (isReverseTripActive) reverseStops else assignedRoute?.stopsList.orEmpty()
+
+    private fun displayedStops(): List<com.example.bustrack_app.models.StopItem> =
+        if (isReverseTripActive && !isViewingReverseTrip) assignedRoute?.stopsList.orEmpty() else activeStops()
+
+    private fun activeArrivalTimes(): MutableMap<Int, String> =
+        if (isReverseTripActive) reverseStopArrivalTimes else stopArrivalTimes
+
+    private fun activeEtaTexts(): MutableMap<Int, String> =
+        if (isReverseTripActive) reverseStopEtaTexts else stopEtaTexts
+
+    private fun activeStates(): MutableMap<Int, StopState> =
+        if (isReverseTripActive) reverseStopStates else stopStates
+
+    private fun stateOf(index: Int): StopState = activeStates()[index] ?: StopState.UPCOMING
 
     /** UPCOMING -> ARRIVED. Records the arrival timestamp. No-op (returns false) if not currently UPCOMING. */
     private fun transitionToArrived(index: Int): Boolean {
         if (stateOf(index) != StopState.UPCOMING) return false
-        stopStates[index] = StopState.ARRIVED
-        stopArrivalTimes[index] = timeFormat.format(Calendar.getInstance().time)
+        activeStates()[index] = StopState.ARRIVED
+        activeArrivalTimes()[index] = timeFormat.format(Calendar.getInstance().time)
         lastArrivedStopIndex = index
         isCurrentlyAtStop = true
         activeStopStatus = "ARRIVED"
@@ -972,7 +1037,7 @@ class DriverDashboardActivity : AppCompatActivity() {
      */
     private fun transitionToCompleted(index: Int): Boolean {
         if (stateOf(index) != StopState.ARRIVED) return false
-        stopStates[index] = StopState.COMPLETED
+        activeStates()[index] = StopState.COMPLETED
         isCurrentlyAtStop = false
         activeStopStatus = "PASSED"
         lastArrivedStopIndex = -1
@@ -984,13 +1049,14 @@ class DriverDashboardActivity : AppCompatActivity() {
     /** UPCOMING -> SKIPPED. No-op if the stop already advanced (e.g. it was already ARRIVED). */
     private fun transitionToSkipped(index: Int): Boolean {
         if (stateOf(index) != StopState.UPCOMING) return false
-        stopStates[index] = StopState.SKIPPED
-        stopArrivalTimes[index] = "Skipped"
+        activeStates()[index] = StopState.SKIPPED
+        activeArrivalTimes()[index] = "Skipped"
         return true
     }
 
     private fun checkGeofenceAndStopStatus(location: Location) {
-        val stops = assignedRoute?.stopsList ?: return
+        val stops = activeStops()
+        if (stops.isEmpty()) return
         if (nextGlobalStopIndex >= stops.size) return
 
         // If Android was saving state on the exact GPS tick that entered the stop,
@@ -1004,6 +1070,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                     attendancePromptedStops.add(lastArrivedStopIndex)
                 }
             }
+        }
+
+        // Attendance belongs to the forward flow and is intentionally not involved in
+        // a reverse trip.
+        if (isReverseTripActive) {
+            checkActiveTripGeofence(location, stops)
+            return
         }
 
         // Open attendance as the bus approaches its next stop, not only after it
@@ -1129,6 +1202,52 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    /** Same GPS/geofence progression as the forward trip, without touching forward state. */
+    private fun checkActiveTripGeofence(location: Location, stops: List<com.example.bustrack_app.models.StopItem>) {
+        if (nextGlobalStopIndex >= stops.size) return
+        if (!isCurrentlyAtStop) {
+            val scanLimit = minOf(stops.size, nextGlobalStopIndex + 1 + SKIP_DETECTION_LOOKAHEAD_STOPS)
+            for (index in nextGlobalStopIndex until scanLimit) {
+                if (stateOf(index) != StopState.UPCOMING) continue
+                val distance = FloatArray(1)
+                Location.distanceBetween(location.latitude, location.longitude, stops[index].latitude, stops[index].longitude, distance)
+                if (distance[0] <= ARRIVAL_RADIUS) {
+                    for (skipped in nextGlobalStopIndex until index) transitionToSkipped(skipped)
+                    nextGlobalStopIndex = index
+                    if (transitionToArrived(index)) {
+                        updateUpcomingStopsUI()
+                        drawPointsOnMap(fullNavigationPoints)
+                    }
+                    break
+                }
+            }
+        }
+        if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
+            val arrived = lastArrivedStopIndex
+            val distance = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude, stops[arrived].latitude, stops[arrived].longitude, distance)
+            if (distance[0] > DEPARTURE_RADIUS) {
+                departureConfirmCount = if (departureCandidateIndex == arrived) departureConfirmCount + 1 else 1
+                departureCandidateIndex = arrived
+                if (departureConfirmCount >= DEPARTURE_CONFIRM_THRESHOLD && transitionToCompleted(arrived)) {
+                    departureCandidateIndex = -1
+                    departureConfirmCount = 0
+                    if (nextGlobalStopIndex < stops.size) triggerReroute()
+                    else {
+                        reverseTripCompleted = true
+                        currentNavigationEtaText = "Route completed"
+                        mapboxNavigation?.setNavigationRoutes(emptyList())
+                    }
+                    updateUpcomingStopsUI()
+                    drawPointsOnMap(fullNavigationPoints)
+                }
+            } else {
+                departureCandidateIndex = -1
+                departureConfirmCount = 0
+            }
+        }
+    }
+
     /**
      * Arrival events can race with Android saving the Activity state.  Never force a
      * FragmentManager transaction from the GPS callback: it can throw and restart the
@@ -1147,7 +1266,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateUpcomingStopsUI() {
-        val stops = assignedRoute?.stopsList ?: emptyList()
+        val stops = displayedStops()
 
         // Show the full route stop list for the entire active trip. Stops must never be
         // removed once reached — only each stop's displayed status/time text changes
@@ -1156,7 +1275,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         // liveArrivedIndex tells the adapter which single stop is currently inside its
         // geofence (-> ARRIVED badge); every other already-arrived stop still renders as
         // PASSED with its preserved arrival time, exactly as updateBottomSheetInfo() does.
-        val liveArrivedIndex = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
+        val liveArrivedIndex = if (isViewingReverseTrip && isCurrentlyAtStop && lastArrivedStopIndex != -1) {
             lastArrivedStopIndex
         } else {
             -1
@@ -1196,7 +1315,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // happily claim stops were reached the moment the bus's snapped position
                 // moved past them on that geometry - even if the driver took a shortcut, is
                 // mid-reroute, or the route hasn't caught up with a deviation yet.
-                val stops = assignedRoute?.stopsList ?: emptyList()
+                val stops = activeStops()
 
                 currentLocation?.let { loc ->
                     checkGeofenceAndStopStatus(loc)
@@ -1209,8 +1328,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
                 val displayStopIndex = if (liveArrivedIndex != -1) liveArrivedIndex else nextGlobalStopIndex
 
-                val etaString = if (liveArrivedIndex != -1 && stopArrivalTimes.containsKey(liveArrivedIndex)) {
-                    val arrival = stopArrivalTimes[liveArrivedIndex]
+                val arrivalTimes = activeArrivalTimes()
+                val etaTexts = activeEtaTexts()
+                val etaString = if (liveArrivedIndex != -1 && arrivalTimes.containsKey(liveArrivedIndex)) {
+                    val arrival = arrivalTimes[liveArrivedIndex]
                     "Arrived: $arrival"
                 } else if (displayStopIndex < stops.size) {
                     "${durationRemaining.toInt()} min"
@@ -1241,7 +1362,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 var accumulatedSeconds = (routeProgress.currentLegProgress?.durationRemaining ?: 0.0).toInt()
 
                 stops.forEachIndexed { index, stop ->
-                    val arrivalTime = stopArrivalTimes[index]
+                    val arrivalTime = arrivalTimes[index]
                     if (arrivalTime == "Skipped") {
                         stop.time = "Skipped"
                     } else if (arrivalTime != null) {
@@ -1250,11 +1371,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
                         val etaText = "ETA: ${timeFormat.format(etaTime)}"
                         stop.time = etaText
-                        stopEtaTexts[index] = etaText
+                        etaTexts[index] = etaText
                         Log.d("ETA_DEBUG", "Stop=$index (current), remainingSeconds=$accumulatedSeconds, calculatedETA=$etaText")
                     } else if (index > displayStopIndex) {
                         if (legs != null && (index - navStartIndex) < legs.size) {
-                        val legIdx = mapboxLegByOriginalStopIndex[index] ?: -1
+                            val legIdx = mapboxLegByOriginalStopIndex[index] ?: -1
                             if (legIdx >= 0 && legs[legIdx] != null) {
                                 accumulatedSeconds += (legs[legIdx].duration() ?: 0.0).toInt()
                             }
@@ -1262,7 +1383,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
                         val etaText = "ETA: ${timeFormat.format(etaTime)}"
                         stop.time = etaText
-                        stopEtaTexts[index] = etaText
+                        etaTexts[index] = etaText
                         Log.d("ETA_DEBUG", "Stop=$index (upcoming), accumulatedSeconds=$accumulatedSeconds, calculatedETA=$etaText")
                     } else {
                         stop.time = "ETA: --"
@@ -1386,7 +1507,18 @@ class DriverDashboardActivity : AppCompatActivity() {
         return builder.build()
     }
 
+    // FIX (jitter): only forward a raw fix to the puck once it moved meaningfully,
+    // or the device is genuinely moving (checked via speed, not just distance) -
+    // ordinary GPS noise while parked is dropped instead of nudging the puck.
     private fun feedRawLocationToPuck(location: Location) {
+        val previous = lastPuckPosition
+        val movedMeters = previous?.distanceTo(location) ?: Float.MAX_VALUE
+        val isMovingFast = location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE
+        if (previous != null && movedMeters < PUCK_MIN_MOVEMENT_METERS && !isMovingFast) {
+            return
+        }
+        lastPuckPosition = Location(location)
+
         navigationLocationProvider.changePosition(
             location = toMapboxLocation(location)
         )
@@ -1408,6 +1540,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                     isCurrentLocationLive = true
                     feedRawLocationToPuck(location)
                     if (!wasLive) {
+                        // FIX (dashboard auto-zoom): don't let the very first live GPS
+                        // fix trigger a camera re-fit around the (now smaller) dynamic
+                        // route preview - only refresh markers/route, keep camera as-is.
+                        shouldFitCameraToRoute = false
                         updateMapDisplay()
                     }
                 }
@@ -1444,7 +1580,18 @@ class DriverDashboardActivity : AppCompatActivity() {
         currentRawLocation = Location(location)
         currentLocation = Location(location)
         isCurrentLocationLive = true
-        feedRawLocationToPuck(location)
+
+        // FIX (B -> A -> B replay): while navigating, the Mapbox trip session's own
+        // matched-location stream (locationObserver.onNewLocationMatcherResult) already
+        // drives the puck smoothly via its own ValueAnimator-based transition. Feeding
+        // raw fixes into the puck here AT THE SAME TIME caused two independent
+        // animations to fight over the puck's target, which visually looked like the
+        // bus flying backward to a stale point before flying forward again. Only the
+        // matched stream should drive the puck while navigating; this raw path drives
+        // it only when navigation isn't already doing so.
+        if (!isNavigating) {
+            feedRawLocationToPuck(location)
+        }
 
         // This callback is the app's authoritative live GPS source.  Do the
         // reverse-geocode here rather than relying on Mapbox's matcher callback,
@@ -1460,6 +1607,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             checkGeofenceAndStopStatus(location)
             updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
         } else if (!wasLive) {
+            // FIX (dashboard auto-zoom): same reasoning as startLocationUpdates() above.
+            shouldFitCameraToRoute = false
             updateMapDisplay()
         }
 
@@ -1920,7 +2069,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (points.isEmpty()) return
 
         pointAnnotationManager?.deleteAll()
-        assignedRoute?.stopsList?.forEachIndexed { index, stop ->
+        activeStops().forEachIndexed { index, stop ->
             val isCompleted = stateOf(index) != StopState.UPCOMING || (isNavigating && index < nextGlobalStopIndex)
             val iconRes = if (isCompleted) R.drawable.ic_marker_dest_grey else R.drawable.ic_marker_dest
             addMarker(Point.fromLngLat(stop.longitude, stop.latitude), iconRes, stop.stopName)
@@ -1994,7 +2143,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             // incorrectly advances the grey line in that case; direction detects it
             // and forces a route recalculation from the road the bus is actually on.
             val isOffRoute = actualDistanceToRoute > OFF_ROUTE_THRESHOLD_METERS ||
-                (actualDistanceToRoute > PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS && isFacingOppositeRouteDirection)
+                    (actualDistanceToRoute > PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS && isFacingOppositeRouteDirection)
             if (isNavigating && isOffRoute) {
                 val now = System.currentTimeMillis()
                 if (!isRerouteInFlight && now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS) {
@@ -2108,7 +2257,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         val deltaLongitude = Math.toRadians(end.longitude() - start.longitude())
         val y = Math.sin(deltaLongitude) * Math.cos(lat2)
         val x = Math.cos(lat1) * Math.sin(lat2) -
-            Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLongitude)
+                Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLongitude)
         return (Math.toDegrees(Math.atan2(y, x)) + 360.0) % 360.0
     }
 
@@ -2247,7 +2396,15 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         binding.bottomSummaryCard.findViewById<View>(R.id.btnViewRoute)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            startFollowingPuck()
+            if (!isReverseTripActive) {
+                beginReverseTrip()
+            } else {
+                // The same existing route control switches the sheet's data source;
+                // it does not create a second card or mix the two histories.
+                isViewingReverseTrip = !isViewingReverseTrip
+                updateBottomSheetInfo()
+                Toast.makeText(this, if (isViewingReverseTrip) "Showing reverse trip" else "Showing forward trip", Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.btnNotifications.setOnClickListener {
@@ -2291,6 +2448,45 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun beginReverseTrip() {
+        val forwardStops = assignedRoute?.stopsList.orEmpty()
+        val location = currentLocation
+        if (forwardStops.isEmpty() || location == null) {
+            Toast.makeText(this, "Current location and route stops are required for reverse trip", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val startIndex = forwardStops.indices
+            .filter { forwardStops[it].latitude != 0.0 && forwardStops[it].longitude != 0.0 }
+            .minByOrNull { index ->
+                val results = FloatArray(1)
+                val stop = forwardStops[index]
+                Location.distanceBetween(location.latitude, location.longitude, stop.latitude, stop.longitude, results)
+                results[0]
+            } ?: return
+
+        // Copying is important: the adapter updates StopItem.time, so reusing the
+        // forward objects would overwrite the forward-trip display/history.
+        reverseStops = forwardStops.subList(0, startIndex + 1).asReversed().map { it.copy(time = "TBD") }
+        reverseStopArrivalTimes.clear()
+        reverseStopStates.clear()
+        reverseStopEtaTexts.clear()
+        isReverseTripActive = true
+        isViewingReverseTrip = true
+        reverseTripCompleted = false
+        nextGlobalStopIndex = 0
+        navStartIndex = 0
+        lastArrivedStopIndex = -1
+        isCurrentlyAtStop = false
+        departureCandidateIndex = -1
+        departureConfirmCount = 0
+        attendancePromptedStops.clear()
+        currentNavigationEtaText = null
+        clearTraveledRouteHistory()
+        updateBottomSheetInfo()
+        startNavigationAnimation()
+        Toast.makeText(this, "Reverse trip started at ${reverseStops.first().stopName}", Toast.LENGTH_SHORT).show()
+    }
+
     private fun setupStopsRecyclerView() {
         bottomSheetBehavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(binding.bottomSummaryCard)
         bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_HIDDEN
@@ -2320,7 +2516,16 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         val sheet = binding.bottomSummaryCard
         sheet.findViewById<TextView>(R.id.tvBusIdSheet)?.text = route.busNo.ifEmpty { "BUS-TRACK" }
-        sheet.findViewById<TextView>(R.id.tvRouteSheet)?.text = route.routeName
+        sheet.findViewById<TextView>(R.id.tvRouteSheet)?.text = when {
+            isReverseTripActive && isViewingReverseTrip -> "${route.routeName} • Reverse Trip"
+            isReverseTripActive -> "${route.routeName} • Forward Trip"
+            else -> route.routeName
+        }
+        sheet.findViewById<TextView>(R.id.tvUpcomingLabel)?.text = when {
+            isReverseTripActive && isViewingReverseTrip -> "Reverse Trip Stops"
+            isReverseTripActive -> "Forward Trip Stops"
+            else -> "Upcoming Stops"
+        }
         sheet.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver?.name ?: "Driver"
 
         val tvEta = sheet.findViewById<TextView>(R.id.tvEtaSheet)
@@ -2343,19 +2548,21 @@ class DriverDashboardActivity : AppCompatActivity() {
         tvLoad?.text = cachedLoadString
         refreshLoadStat()
 
-        val stops = route.stopsList
+        val stops = displayedStops()
+        val arrivalTimes = if (isReverseTripActive && isViewingReverseTrip) reverseStopArrivalTimes else stopArrivalTimes
+        val etaTexts = if (isReverseTripActive && isViewingReverseTrip) reverseStopEtaTexts else stopEtaTexts
         stops.forEachIndexed { index, stop ->
-            val arrival = stopArrivalTimes[index]
+            val arrival = arrivalTimes[index]
             if (arrival == "Skipped") {
                 stop.time = "Skipped"
             } else if (arrival != null) {
                 stop.time = "Arrived: $arrival"
             } else {
-                stop.time = stopEtaTexts[index] ?: "TBD"
+                stop.time = etaTexts[index] ?: "TBD"
             }
         }
 
-        val liveArrivedIndexForSheet = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) lastArrivedStopIndex else -1
+        val liveArrivedIndexForSheet = if (isViewingReverseTrip && isCurrentlyAtStop && lastArrivedStopIndex != -1) lastArrivedStopIndex else -1
         stopsAdapter.updateStops(stops, liveArrivedIndexForSheet)
     }
 
@@ -2487,10 +2694,13 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         if (route.stopsList.isNotEmpty()) {
-            val maxVisitedIdx = stopArrivalTimes.keys.maxOrNull() ?: -1
+            val maxVisitedIdx = activeArrivalTimes().keys.maxOrNull() ?: -1
             var startIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
 
-            if (startIndex >= route.stopsList.size) {
+            if (startIndex >= activeStops().size) {
+                // A completed reverse trip stays completed; it must never roll into a
+                // fresh forward trip automatically.
+                if (isReverseTripActive) return
                 stopArrivalTimes.clear()
                 stopStates.clear()
                 stopEtaTexts.clear()
@@ -2499,7 +2709,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 startIndex = 0
             }
 
-            val remainingStops = route.stopsList.mapIndexed { index, stop -> index to stop }
+            val remainingStops = activeStops().mapIndexed { index, stop -> index to stop }
                 .filter { (index, stop) -> index >= startIndex && stop.latitude != 0.0 && stop.longitude != 0.0 }
             mapboxLegByOriginalStopIndex.clear()
             remainingStops.forEachIndexed { mapboxStopIndex, (originalIndex, stop) ->
@@ -2591,7 +2801,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
 
                     startFollowingPuck()
-                    setNavigationMode(true)
+                    setNavigationMode(true, showPlaceholderInstruction = false)
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
                     if (!routeOptions.bearingsList().isNullOrEmpty()) {
@@ -2611,7 +2821,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         )
     }
 
-    private fun setNavigationMode(isNavigating: Boolean, reloadStyle: Boolean = true) {
+    // FIX (static card on start): startNavigationAnimation()'s onRoutesReady callback
+    // populates the card with the route's real first maneuver, then immediately calls
+    // this function - which used to unconditionally overwrite that real data with
+    // "Navigation starting" / "Distance: --" placeholders below. showPlaceholderInstruction
+    // lets a caller that already wrote real data opt out of clobbering it.
+    private fun setNavigationMode(isNavigating: Boolean, reloadStyle: Boolean = true, showPlaceholderInstruction: Boolean = true) {
         this.isNavigating = isNavigating
         cancelDutyAutoOffTimer()
         binding.apply {
@@ -2632,10 +2847,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // update fills in the real instruction, road, distance and ETA.
                 instructionCard.visibility = View.VISIBLE
                 maneuverView.visibility = View.GONE
-                tvNextInstruction.text = "Navigation starting"
-                tvNextStreet.text = "Finding next road"
-                tvDistanceNav.text = "Distance: --"
-                tvEtaNav.text = "ETA: --"
+                if (showPlaceholderInstruction) {
+                    tvNextInstruction.text = "Navigation starting"
+                    tvNextStreet.text = "Finding next road"
+                    tvDistanceNav.text = "Distance: --"
+                    tvEtaNav.text = "ETA: --"
+                }
 
                 updateBottomSheetTheme(true)
 
@@ -2658,6 +2875,15 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                         drawPointsOnMap(fullNavigationPoints)
 
+                        // FIX (route line missing after restart): on restart, this style's
+                        // loadStyle callback runs *after* routesObserver already tried to
+                        // draw the route once against the *old* style - before this style's
+                        // sources existed, so that draw silently failed but still recorded
+                        // currentLocation as lastRawPositionForSnap. Without this reset,
+                        // updateNavigationRouteProgress() below sees near-zero movement
+                        // since that recording and returns early, leaving the route line
+                        // undrawn until the next genuine >=1m GPS fix arrives.
+                        lastRawPositionForSnap = null
                         currentLocation?.let { loc ->
                             updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
                         }
@@ -3188,10 +3414,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     override fun onDestroy() {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         mapView?.mapboxMap?.removeOnCameraChangeListener(cameraChangeListener)
-        mapboxNavigation?.unregisterRoutesObserver(routesObserver)
-        mapboxNavigation?.unregisterLocationObserver(locationObserver)
-        mapboxNavigation?.unregisterRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation?.unregisterVoiceInstructionsObserver(voiceInstructionsObserver)
+        // Unregistering through the binder (rather than mapboxNavigation?.unregisterX)
+        // guarantees cleanup even if mapboxNavigation was never successfully bound.
+        MapboxNavigationApp.unregisterObserver(navObserverBinder)
 
         speechApi?.cancel()
         speechApi = null
