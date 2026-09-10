@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.bumptech.glide.Glide
@@ -334,7 +335,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     // FIX (jitter): guard against feeding every noisy raw GPS fix into the puck.
     private var lastPuckPosition: Location? = null
-    private val PUCK_MIN_MOVEMENT_METERS = 2.0f
+    private var lastAcceptedLocationElapsedNanos = 0L
+    private val PUCK_MIN_MOVEMENT_METERS = 6.0f
+    private val MIN_SPEED_FOR_PUCK_MOVEMENT = 1.5f
 
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -887,14 +890,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .bearing(lastValidBearing)
                 .build()
 
-            val transitionOptions: (android.animation.ValueAnimator.() -> Unit) = { duration = 1000 }
-            navigationLocationProvider.changePosition(
-                location = enhancedLocation,
-                keyPoints = locationMatcherResult.keyPoints,
-                latLngTransitionOptions = transitionOptions,
-                bearingTransitionOptions = transitionOptions
-            )
-
             val androidLocation = android.location.Location("mapbox").apply {
                 latitude = enhancedLocation.latitude
                 longitude = enhancedLocation.longitude
@@ -909,8 +904,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             } ?: androidLocation
 
             runOnUiThread {
-                // Fused GPS is the source of truth for route state, Firestore and
-                // geofences. Enhanced Mapbox output is visual-only once raw GPS exists.
+                // Fused GPS is the only source that moves the visual puck.  Feeding
+                // both the matched Mapbox location and Fused location into the same
+                // NavigationLocationProvider queued stale animations (B -> A -> B).
+                // Mapbox's matched result remains available for route progress only.
                 if (!isCurrentLocationLive) {
                     handleLocationUpdate(effectiveLocation)
                 }
@@ -1513,7 +1510,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun feedRawLocationToPuck(location: Location) {
         val previous = lastPuckPosition
         val movedMeters = previous?.distanceTo(location) ?: Float.MAX_VALUE
-        val isMovingFast = location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE
+        val isMovingFast = location.hasSpeed() && location.speed >= MIN_SPEED_FOR_PUCK_MOVEMENT
         if (previous != null && movedMeters < PUCK_MIN_MOVEMENT_METERS && !isMovingFast) {
             return
         }
@@ -1535,8 +1532,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         try {
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 if (location != null) {
+                    // lastLocation is an asynchronous cached read. It may return after
+                    // a newer callback; never let that stale point pull the puck back.
+                    if (location.elapsedRealtimeNanos <= lastAcceptedLocationElapsedNanos) return@addOnSuccessListener
+                    lastAcceptedLocationElapsedNanos = location.elapsedRealtimeNanos
                     val wasLive = isCurrentLocationLive
-                    currentLocation = location
+                    currentLocation = Location(location)
                     isCurrentLocationLive = true
                     feedRawLocationToPuck(location)
                     if (!wasLive) {
@@ -1560,10 +1561,14 @@ class DriverDashboardActivity : AppCompatActivity() {
             locationCallback = object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
                     if (!isDutyEnabled) return
-
-                    for (location in locationResult.locations) {
-                        handleLocationUpdate(location)
-                    }
+                    // Fused can batch several old fixes. Animating every member of the
+                    // batch replays the route visually; only the newest fix is valid for
+                    // the bus marker and navigation state.
+                    val location = locationResult.lastLocation ?: return
+                    val timestamp = location.elapsedRealtimeNanos
+                    if (timestamp <= lastAcceptedLocationElapsedNanos) return
+                    lastAcceptedLocationElapsedNanos = timestamp
+                    handleLocationUpdate(location)
                 }
             }
 
@@ -1581,17 +1586,9 @@ class DriverDashboardActivity : AppCompatActivity() {
         currentLocation = Location(location)
         isCurrentLocationLive = true
 
-        // FIX (B -> A -> B replay): while navigating, the Mapbox trip session's own
-        // matched-location stream (locationObserver.onNewLocationMatcherResult) already
-        // drives the puck smoothly via its own ValueAnimator-based transition. Feeding
-        // raw fixes into the puck here AT THE SAME TIME caused two independent
-        // animations to fight over the puck's target, which visually looked like the
-        // bus flying backward to a stale point before flying forward again. Only the
-        // matched stream should drive the puck while navigating; this raw path drives
-        // it only when navigation isn't already doing so.
-        if (!isNavigating) {
-            feedRawLocationToPuck(location)
-        }
+        // The newest Fused GPS fix is the single visual-puck authority, both before
+        // and during navigation. Mapbox matcher callbacks no longer animate it.
+        feedRawLocationToPuck(location)
 
         // This callback is the app's authoritative live GPS source.  Do the
         // reverse-geocode here rather than relying on Mapbox's matcher callback,
@@ -2396,15 +2393,12 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         binding.bottomSummaryCard.findViewById<View>(R.id.btnViewRoute)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            if (!isReverseTripActive) {
-                beginReverseTrip()
-            } else {
-                // The same existing route control switches the sheet's data source;
-                // it does not create a second card or mix the two histories.
-                isViewingReverseTrip = !isViewingReverseTrip
-                updateBottomSheetInfo()
-                Toast.makeText(this, if (isViewingReverseTrip) "Showing reverse trip" else "Showing forward trip", Toast.LENGTH_SHORT).show()
-            }
+            startFollowingPuck()
+        }
+
+        binding.bottomSummaryCard.findViewById<View>(R.id.btnStartReturnTrip)?.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            showStartReturnTripConfirmation()
         }
 
         binding.btnNotifications.setOnClickListener {
@@ -2485,6 +2479,19 @@ class DriverDashboardActivity : AppCompatActivity() {
         updateBottomSheetInfo()
         startNavigationAnimation()
         Toast.makeText(this, "Reverse trip started at ${reverseStops.first().stopName}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showStartReturnTripConfirmation() {
+        if (isReverseTripActive) {
+            Toast.makeText(this, "Return trip is already active", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Start Return Trip?")
+            .setMessage("Are you sure you want to start the return trip? The bus will begin travelling back toward the source.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start Return") { _, _ -> beginReverseTrip() }
+            .show()
     }
 
     private fun setupStopsRecyclerView() {

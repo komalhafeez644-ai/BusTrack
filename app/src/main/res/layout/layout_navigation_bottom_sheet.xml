@@ -283,7 +283,18 @@
         android:clipToPadding="false"
         android:nestedScrollingEnabled="false"
         app:layout_constraintTop_toBottomOf="@id/tvUpcomingLabel"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnStartReturnTrip"
         tools:listitem="@layout/item_stop_timeline" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnStartReturnTrip"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="16dp"
+        android:text="Start Return Trip"
+        android:textStyle="bold"
+        app:cornerRadius="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/rvUpcomingStops" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
