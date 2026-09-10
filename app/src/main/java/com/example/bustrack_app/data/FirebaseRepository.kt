@@ -108,6 +108,12 @@ object FirebaseRepository {
         db.collection("drivers").document(driverId).update(updates)
     }
 
+    fun updateDriverTripDirection(driverId: String, tripDirection: String) {
+        db.collection("drivers").document(driverId).update(
+            mapOf("tripDirection" to tripDirection, "lastUpdated" to System.currentTimeMillis())
+        )
+    }
+
     fun updateDriverRouteGeometry(driverId: String, currentPolyline: String?, traveledPolyline: String?, nextStopIndex: Int, stopArrivalTimes: Map<String, String>, isNavigating: Boolean, stopEtaTimes: Map<String, String> = emptyMap(), traveledRouteSegments: List<String> = emptyList()) {
         val updates = mutableMapOf<String, Any?>()
         updates["currentRoutePolyline"] = currentPolyline

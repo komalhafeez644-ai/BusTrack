@@ -56,19 +56,35 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/tvMorningTime"
+                android:id="@+id/tvMorningPickup"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="M: 07:30 AM"
+                android:text="Morning Pickup: --"
                 android:textColor="@color/lightGray"
                 android:textSize="11sp" />
 
             <TextView
-                android:id="@+id/tvEveningTime"
+                android:id="@+id/tvMorningDrop"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="E: 02:15 PM"
+                android:text="Morning Drop: --"
+                android:textColor="@color/lightGray"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvEveningPickup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Evening Pickup: --"
+                android:textColor="@color/lightGray"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvEveningDrop"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Evening Drop: --"
                 android:textColor="@color/lightGray"
                 android:textSize="11sp" />
         </LinearLayout>

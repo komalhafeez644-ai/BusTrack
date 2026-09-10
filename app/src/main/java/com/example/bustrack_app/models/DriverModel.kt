@@ -31,5 +31,6 @@ data class DriverModel(
     var nextStopIndex: Int = 0,
     var stopArrivalTimes: Map<String, String> = emptyMap(),
     var stopEtaTimes: Map<String, String> = emptyMap(),
+    var tripDirection: String = "FORWARD",
     var isNavigating: Boolean = false
 ) : Serializable

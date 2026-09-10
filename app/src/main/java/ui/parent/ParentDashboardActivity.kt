@@ -375,10 +375,11 @@ class ParentDashboardActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "Route"}"
         
+        val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
         val statusText = if (passengerNames.isNotEmpty()) {
-            "Passenger: $passengerNames"
+            "Passenger: $passengerNames • $trip"
         } else {
-            "Active Status: ${driver.status}"
+            "Active Status: ${driver.status} • $trip"
         }
         findViewById<TextView>(R.id.tvRouteDetail)?.text = statusText
 

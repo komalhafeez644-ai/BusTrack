@@ -46,7 +46,7 @@ class NavigationStopsAdapter(
 
             val displayTime = when {
                 stop.time.isEmpty() || stop.time == "TBD" -> "ETA: --"
-                stop.time == "Skipped" -> "Skipped"
+                stop.time == "Skipped" || stop.time == "NOT VISITED" -> stop.time
                 stop.time.startsWith("Arrived:") -> stop.time
                 stop.time.startsWith("COMPLETED") -> stop.time.replace("COMPLETED", "Arrived:")
                 stop.time.startsWith("ARRIVED") -> stop.time.replace("ARRIVED", "Arrived:")
@@ -76,7 +76,7 @@ class NavigationStopsAdapter(
             //   ye -1 (ya kisi aur stop ka index) ho jaata hai - is stop ka status turant aur
             //   permanently "Passed" ban jaata hai (time same rehta hai).
             val hasArrived = displayTime.startsWith("Arrived:")
-            val isSkipped = displayTime == "Skipped"
+            val isSkipped = displayTime == "Skipped" || displayTime == "NOT VISITED"
             val isLive = hasArrived && position == currentStopIndex
 
             when {

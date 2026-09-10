@@ -467,7 +467,8 @@ class LiveTrackingActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
-        findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status}"
+        val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
+        findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status} • $trip"
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"

@@ -298,8 +298,10 @@ class StudentAttendanceActivity : AppCompatActivity() {
             val tvDay: TextView = view.findViewById(R.id.tvDay)
             val tvDate: TextView = view.findViewById(R.id.tvDate)
             val tvStatus: TextView = view.findViewById(R.id.tvStatus)
-            val tvMorningTime: TextView = view.findViewById(R.id.tvMorningTime)
-            val tvEveningTime: TextView = view.findViewById(R.id.tvEveningTime)
+            val tvMorningPickup: TextView = view.findViewById(R.id.tvMorningPickup)
+            val tvMorningDrop: TextView = view.findViewById(R.id.tvMorningDrop)
+            val tvEveningPickup: TextView = view.findViewById(R.id.tvEveningPickup)
+            val tvEveningDrop: TextView = view.findViewById(R.id.tvEveningDrop)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -349,20 +351,10 @@ class StudentAttendanceActivity : AppCompatActivity() {
                 holder.tvStatus.setBackgroundResource(R.drawable.bg_status_badge_red)
             }
 
-            // Morning Timing
-            val mTime = when {
-                item.morningPickup.contains(":") -> item.morningPickup
-                else -> "--:--"
-            }
-            holder.tvMorningTime.text = "M: $mTime"
-
-            // Evening Timing
-            val eTime = when {
-                item.eveningDrop.contains(":") -> item.eveningDrop
-                item.eveningPickup.contains(":") -> item.eveningPickup // Check both fields
-                else -> "--:--"
-            }
-            holder.tvEveningTime.text = "E: $eTime"
+            holder.tvMorningPickup.text = "Morning Pickup: ${item.morningPickup.ifBlank { "--" }}"
+            holder.tvMorningDrop.text = "Morning Drop: ${item.morningDrop.ifBlank { "--" }}"
+            holder.tvEveningPickup.text = "Evening Pickup: ${item.eveningPickup.ifBlank { "--" }}"
+            holder.tvEveningDrop.text = "Evening Drop: ${item.eveningDrop.ifBlank { "--" }}"
         }
 
         override fun getItemCount() = items.size

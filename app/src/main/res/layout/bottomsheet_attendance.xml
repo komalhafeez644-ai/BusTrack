@@ -115,7 +115,7 @@
             android:layout_height="56dp"
             android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:backgroundTint="#0D1B3E"
+            android:backgroundTint="@color/primary_blue"
             android:text="Save Attendance"
             app:cornerRadius="14dp" />
     </LinearLayout>
