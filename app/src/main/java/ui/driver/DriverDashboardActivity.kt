@@ -130,6 +130,7 @@ import com.mapbox.maps.extension.style.layers.getLayer
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
+import com.mapbox.maps.extension.style.layers.generated.ModelLayer
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.sources.getSource
@@ -273,13 +274,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val dutyHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var dutyAutoOffRunnable: Runnable? = null
 
-    private var lastAppliedBusScale = -1f
+    // MAP-mode world scale, compensated so the bus shrinks into the road when zooming
+    // in and stays readable when zooming out — the same visual idea as stop markers.
+    // VIEWPORT + a fixed scale made Re-Center (zoom 19) collapse the model to a speck.
     private val MIN_BUS_MODEL_SCALE = 1.7f
     private val MAX_BUS_MODEL_SCALE = 2.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
+    private val MIN_BUS_WORLD_SCALE = 1.2f
+    private val MAX_BUS_WORLD_SCALE = 48.0f
+    private val LOCATION_MODEL_LAYER_ID = "mapbox-location-model-layer"
+    private var lastAppliedBusScale = -1f
 
     private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0f
     private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0f
@@ -337,11 +344,16 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val NAV_ROUTE_CASING_LAYER_ID = "nav-route-casing-layer"
     private val NAV_TRAVELED_LAYER_ID = "nav-traveled-layer"
 
-    // FIX (jitter): guard against feeding every noisy raw GPS fix into the puck.
+    // Visual puck uses Fused GPS only. Filter noise without waiting for a 6 m snap,
+    // which looked like the bus jumping to a new coordinate.
     private var lastPuckPosition: Location? = null
+    private var lastPuckElapsedNanos = 0L
     private var lastAcceptedLocationElapsedNanos = 0L
-    private val PUCK_MIN_MOVEMENT_METERS = 6.0f
-    private val MIN_SPEED_FOR_PUCK_MOVEMENT = 1.5f
+    private val MAX_ACCEPTABLE_PUCK_ACCURACY_METERS = 50f
+    private val STATIONARY_HOLD_SPEED_MPS = 1.0f
+    private val MIN_MOVING_PUCK_UPDATE_METERS = 1.5f
+    private val MAX_PLAUSIBLE_PUCK_SPEED_MPS = 55.0
+    private val STALE_CACHED_LOCATION_MAX_AGE_MS = 5000L
 
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -910,13 +922,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             } ?: androidLocation
 
             runOnUiThread {
-                // Fused GPS is the only source that moves the visual puck.  Feeding
-                // both the matched Mapbox location and Fused location into the same
-                // NavigationLocationProvider queued stale animations (B -> A -> B).
-                // Mapbox's matched result remains available for route progress only.
-                if (!isCurrentLocationLive) {
-                    handleLocationUpdate(effectiveLocation)
-                }
+                // Never move the visual puck from Mapbox's matcher. Enhanced/snapped
+                // coordinates fight Fused GPS and make the bus jump, reverse, and drift.
                 if (isNavigating) {
                     val speedKph = (androidLocation.speed * 3.6).toInt()
                     binding.bottomSummaryCard.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "$speedKph km/h"
@@ -1553,20 +1560,45 @@ class DriverDashboardActivity : AppCompatActivity() {
         return builder.build()
     }
 
-    // FIX (jitter): only forward a raw fix to the puck once it moved meaningfully,
-    // or the device is genuinely moving (checked via speed, not just distance) -
-    // ordinary GPS noise while parked is dropped instead of nudging the puck.
+    // Accuracy-aware GPS hold: drop noisy stationary wander, keep real movement, and
+    // never animate the puck for a full second (Mapbox's default) — overlapping
+    // interpolations were sliding the bus backward and sideways between fixes.
     private fun feedRawLocationToPuck(location: Location) {
-        val previous = lastPuckPosition
-        val movedMeters = previous?.distanceTo(location) ?: Float.MAX_VALUE
-        val isMovingFast = location.hasSpeed() && location.speed >= MIN_SPEED_FOR_PUCK_MOVEMENT
-        if (previous != null && movedMeters < PUCK_MIN_MOVEMENT_METERS && !isMovingFast) {
+        if (location.hasAccuracy() && location.accuracy > MAX_ACCEPTABLE_PUCK_ACCURACY_METERS) {
             return
         }
+        val previous = lastPuckPosition
+        val movedMeters = previous?.distanceTo(location) ?: Float.MAX_VALUE
+        val speed = if (location.hasSpeed()) location.speed else 0f
+        val isMoving = speed >= STATIONARY_HOLD_SPEED_MPS
+        if (previous != null) {
+            val noiseFloor = maxOf(
+                if (location.hasAccuracy()) location.accuracy else 8f,
+                if (previous.hasAccuracy()) previous.accuracy else 8f,
+                5f
+            )
+            if (!isMoving && movedMeters < noiseFloor) {
+                return
+            }
+            if (isMoving && movedMeters < MIN_MOVING_PUCK_UPDATE_METERS) {
+                return
+            }
+            if (lastPuckElapsedNanos > 0L && location.elapsedRealtimeNanos > lastPuckElapsedNanos) {
+                val dtSec = (location.elapsedRealtimeNanos - lastPuckElapsedNanos) / 1_000_000_000.0
+                if (dtSec in 0.05..12.0 && (movedMeters / dtSec) > MAX_PLAUSIBLE_PUCK_SPEED_MPS) {
+                    return
+                }
+            }
+        }
         lastPuckPosition = Location(location)
+        lastPuckElapsedNanos = location.elapsedRealtimeNanos
 
+        val animMs = if (previous == null || !isMoving) 0L else 280L
         navigationLocationProvider.changePosition(
-            location = toMapboxLocation(location)
+            location = toMapboxLocation(location),
+            keyPoints = emptyList(),
+            latLngTransitionOptions = { duration = animMs },
+            bearingTransitionOptions = { duration = animMs }
         )
     }
 
@@ -1583,6 +1615,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 if (location != null) {
                     // lastLocation is an asynchronous cached read. It may return after
                     // a newer callback; never let that stale point pull the puck back.
+                    val cacheAgeMs = System.currentTimeMillis() - location.time
+                    if (cacheAgeMs > STALE_CACHED_LOCATION_MAX_AGE_MS) return@addOnSuccessListener
                     if (location.elapsedRealtimeNanos <= lastAcceptedLocationElapsedNanos) return@addOnSuccessListener
                     lastAcceptedLocationElapsedNanos = location.elapsedRealtimeNanos
                     val wasLive = isCurrentLocationLive
@@ -1645,8 +1679,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isNavigating) {
             updateLocationSummary(location)
             reverseGeocodeIfNeeded(location)
-            // Keep the camera locked to the bus during active driver navigation.
-            startFollowingPuck()
         }
 
         if (isNavigating) {
@@ -1918,7 +1950,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapView?.mapboxMap?.setCamera(
             CameraOptions.Builder()
                 .center(targetPoint)
-                .zoom(15.0)
+                .zoom(16.0)
                 .pitch(0.0)
                 .build()
         )
@@ -1926,6 +1958,57 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun setupInitialCamera() {
         centerCameraOnUser()
+    }
+
+    private fun setupLocationPuck() {
+        val cameraState = mapView?.mapboxMap?.cameraState
+        val initialScale = computeBusModelScale(
+            cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM,
+            cameraState?.pitch ?: 0.0
+        )
+        lastAppliedBusScale = initialScale
+
+        mapView?.location?.apply {
+            setLocationProvider(navigationLocationProvider)
+            enabled = isDutyEnabled
+            pulsingEnabled = isDutyEnabled
+            puckBearingEnabled = true
+
+            locationPuck = LocationPuck3D(
+                modelUri = "asset://bus.glb",
+                modelScale = listOf(initialScale, initialScale, initialScale),
+                modelScaleExpression = busModelScaleExpression(),
+                modelScaleMode = ModelScaleMode.MAP,
+                modelTranslation = listOf(0f, 0f, 0f),
+                modelRotation = listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, 90f)
+            )
+        }
+
+        if (isCurrentLocationLive) {
+            currentLocation?.let { feedRawLocationToPuck(it) }
+        }
+        mapView?.post {
+            lastAppliedBusScale = -1f
+            updateBusModelScaleForZoom()
+        }
+    }
+
+    // Reassigning LocationPuck3D while the location component is active asks Mapbox
+    // to add its model layer again. That can throw a fatal JNI exception because the
+    // existing "mapbox-location-model-layer" already belongs to the component.
+    // Scale is updated on that existing layer only.
+    private val cameraChangeListener = OnCameraChangeListener {
+        updateBusModelScaleForZoom()
+    }
+
+    private fun busModelScaleExpression(): String {
+        val zoomStops = listOf(10.0, 12.0, 14.0, 16.0, 17.0, 17.5, 18.0, 19.0, 20.0)
+        val interpolated = zoomStops.joinToString(",") { zoom ->
+            val pitch = if (zoom >= 17.5) 65.0 else 0.0
+            val scale = computeBusModelScale(zoom, pitch)
+            """$zoom,["literal",[$scale,$scale,$scale]]"""
+        }
+        return """["interpolate",["linear"],["zoom"],$interpolated]"""
     }
 
     private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
@@ -1937,41 +2020,33 @@ class DriverDashboardActivity : AppCompatActivity() {
             .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
 
         val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
-        return (apparentTarget * worldToScreenCompensation).toFloat()
+        return (apparentTarget * worldToScreenCompensation)
+            .coerceIn(MIN_BUS_WORLD_SCALE.toDouble(), MAX_BUS_WORLD_SCALE.toDouble())
+            .toFloat()
     }
 
-    private fun setupLocationPuck() {
-        mapView?.location?.apply {
-            setLocationProvider(navigationLocationProvider)
-            enabled = isDutyEnabled
-            pulsingEnabled = isDutyEnabled
-            puckBearingEnabled = true
-
-            val initialZoom = mapView?.mapboxMap?.cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM
-            val initialPitch = mapView?.mapboxMap?.cameraState?.pitch ?: 0.0
-            val initialScale = computeBusModelScale(initialZoom, initialPitch)
-
-            locationPuck = LocationPuck3D(
-                modelUri = "asset://bus.glb",
-                modelScale = listOf(initialScale, initialScale, initialScale),
-                modelScaleMode = ModelScaleMode.MAP,
-                modelTranslation = listOf(0f, 0f, 0f),
-                modelRotation = listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, 90f)
-            )
-            lastAppliedBusScale = initialScale
-        }
-
-        currentLocation?.let { feedRawLocationToPuck(it) }
+    private fun locationModelLayer(style: Style): ModelLayer? {
+        (style.getLayer(LOCATION_MODEL_LAYER_ID) as? ModelLayer)?.let { return it }
+        val layerId = style.styleLayers.firstOrNull { layer ->
+            layer.id.contains("location", ignoreCase = true) &&
+                    layer.id.contains("model", ignoreCase = true)
+        }?.id ?: return null
+        return style.getLayer(layerId) as? ModelLayer
     }
-
-    // Reassigning LocationPuck3D while the location component is active asks Mapbox
-    // to add its model layer again. That can throw a fatal JNI exception because the
-    // existing "mapbox-location-model-layer" already belongs to the component.
-    private val cameraChangeListener = OnCameraChangeListener { }
 
     private fun updateBusModelScaleForZoom() {
-        // Intentionally no-op. The 3D puck is configured once per style in
-        // setupLocationPuck(); changing it for every camera event is unsafe.
+        val cameraState = mapView?.mapboxMap?.cameraState ?: return
+        val newScale = computeBusModelScale(cameraState.zoom, cameraState.pitch)
+        if (kotlin.math.abs(newScale - lastAppliedBusScale) < 0.02f) return
+        lastAppliedBusScale = newScale
+
+        val scaleVec = listOf(newScale, newScale, newScale)
+        (mapView?.location?.locationPuck as? LocationPuck3D)?.modelScale = scaleVec
+
+        mapView?.mapboxMap?.getStyle { style ->
+            val modelLayer = locationModelLayer(style) ?: return@getStyle
+            modelLayer.modelScale(listOf(newScale.toDouble(), newScale.toDouble(), newScale.toDouble()))
+        }
     }
 
     private fun observeViewModel() {
@@ -2505,7 +2580,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         forwardStops.forEachIndexed { index, _ ->
             forwardMarkerWasVisitedAtReturnStart[index] =
                 (stopStates[index] ?: StopState.UPCOMING) != StopState.UPCOMING ||
-                    (isNavigating && index < nextGlobalStopIndex)
+                        (isNavigating && index < nextGlobalStopIndex)
         }
         // A forward UPCOMING stop was never visited. Retain it in the return list as
         // SKIPPED without changing the original forward state/history.
@@ -2635,6 +2710,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         } else {
             followPuckHeadingUp()
         }
+        lastAppliedBusScale = -1f
+        updateBusModelScaleForZoom()
     }
 
     private fun followPuckHeadingUp() {
