@@ -33,6 +33,7 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.animation.flyTo
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.annotation.annotations
@@ -140,7 +141,6 @@ import com.mapbox.maps.extension.style.expressions.dsl.generated.*
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
-import com.mapbox.turf.TurfMisc
 import kotlin.collections.firstOrNull
 import com.mapbox.maps.plugin.ModelScaleMode
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
@@ -258,6 +258,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Prevent a nearest-point lookup from jumping hundreds of metres ahead to a
     // parallel/opposite carriageway before the bus has physically made its U-turn.
     private val MIN_FORWARD_ROUTE_PROGRESS_METERS = 80.0
+    // Follow is opt-in for a navigation session.  A map gesture deliberately pauses it
+    // until Re-centre is tapped, matching the behaviour users expect from navigation.
+    private var isCameraFollowingBus = false
+    private var lastCameraFollowLocation: Location? = null
 
     private val OFF_ROUTE_THRESHOLD_METERS = 35.0
     private val PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS = 4.0
@@ -274,17 +278,19 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val dutyHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var dutyAutoOffRunnable: Runnable? = null
 
-    // MAP-mode world scale, compensated so the bus shrinks into the road when zooming
-    // in and stays readable when zooming out — the same visual idea as stop markers.
-    // VIEWPORT + a fixed scale made Re-Center (zoom 19) collapse the model to a speck.
-    private val MIN_BUS_MODEL_SCALE = 1.7f
-    private val MAX_BUS_MODEL_SCALE = 2.0f
-    private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
-    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
-    private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
-    private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
-    private val MIN_BUS_WORLD_SCALE = 1.2f
-    private val MAX_BUS_WORLD_SCALE = 48.0f
+    // Keep the established Re-centre appearance exactly (zoom 19).  MAP-mode models
+    // need inverse world scaling, while visual limits keep zooming out modest and make
+    // the bus deliberately shrink, but never disappear, when zooming in.
+    private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 19.0
+    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.2f
+    // Zooming out only needs a small visibility boost. A larger factor made the
+    // model look oversized before the world-scale ceiling eventually shrank it.
+    private val MAX_BUS_ZOOM_OUT_SCREEN_FACTOR = 1.10
+    private val MIN_BUS_ZOOM_IN_SCREEN_FACTOR = 0.65
+    private val MIN_BUS_WORLD_SCALE = 0.2f
+    // MAP-mode needs inverse world scaling to preserve the deliberate screen-size
+    // curve. This ceiling is high enough that it cannot create a mid-zoom size drop.
+    private val MAX_BUS_WORLD_SCALE = 384.0f
     private val LOCATION_MODEL_LAYER_ID = "mapbox-location-model-layer"
     private var lastAppliedBusScale = -1f
 
@@ -740,7 +746,16 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isRerouteInFlight) return
         isRerouteInFlight = true
 
-        val currentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
+        // Small GPS drift should not make a reroute start off the road and produce a
+        // long detour.  When the bus is still near the existing route, start from its
+        // forward projected road position; genuine deviations still use raw GPS.
+        val rawCurrentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
+        val projectedCurrentPoint = if (fullNavigationPoints.size >= 2) {
+            projectOntoForwardRoute(rawCurrentPoint, MIN_FORWARD_ROUTE_PROGRESS_METERS * 2)
+                ?.takeIf { it.distanceMeters <= OFF_ROUTE_THRESHOLD_METERS }
+                ?.point
+        } else null
+        val currentPoint = projectedCurrentPoint ?: rawCurrentPoint
         val navPoints = mutableListOf<Point>()
         navPoints.add(currentPoint)
 
@@ -789,7 +804,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             .voiceInstructions(true)
             .language("en")
             .voiceUnits(DirectionsCriteria.METRIC)
-            .alternatives(false)
+            .alternatives(navPoints.size == 2)
 
         if (currentBearing != null) {
             val bearings = mutableListOf<Bearing?>()
@@ -807,10 +822,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                     runOnUiThread {
                         isRerouteInFlight = false
                         if (routes.isEmpty()) return@runOnUiThread
+                        val selectedRoute = shortestRoadRoute(routes)
 
                         navStartIndex = targetStopIndex
                         nextGlobalStopIndex = targetStopIndex
-                        nav.setNavigationRoutes(routes)
+                        nav.setNavigationRoutes(listOf(selectedRoute))
 
                         // Clear stale voice instructions and audio focus from previous path
                         speechApi?.cancel()
@@ -819,7 +835,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         abandonNavigationAudioFocus()
 
                         // Immediately update with the newly calculated road geometry
-                        val newCoords = routes[0].directionsRoute.geometry()?.let {
+                        val newCoords = selectedRoute.directionsRoute.geometry()?.let {
                             LineString.fromPolyline(it, 6).coordinates()
                         } ?: emptyList()
 
@@ -830,7 +846,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                             fullNavigationPoints = newCoords
                             lastSplitIndex = 0
                             lastRawPositionForSnap = null
-                            updateStopEtasFromNavigationRoute(routes[0])
+                            updateStopEtasFromNavigationRoute(selectedRoute)
 
                             // Draw the new route on the map without waiting for next GPS tick
                             currentLocation?.let { currentLoc ->
@@ -857,6 +873,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
         )
     }
+
+    /** Select the shortest returned road-following alternative, never a straight line. */
+    private fun shortestRoadRoute(routes: List<NavigationRoute>): NavigationRoute =
+        routes.minByOrNull { it.directionsRoute.distance() ?: Double.MAX_VALUE } ?: routes.first()
 
     private val routesObserver = object : RoutesObserver {
         override fun onRoutesChanged(result: RoutesUpdatedResult) {
@@ -1549,9 +1569,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             .latitude(location.latitude)
             .longitude(location.longitude)
 
-        if (location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE && location.hasBearing()) {
-            lastValidBearing = location.bearing.toDouble()
-        }
         builder.bearing(lastValidBearing)
 
         if (location.hasSpeed()) {
@@ -1590,6 +1607,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
         }
+        updateBusHeading(location, previous, movedMeters)
         lastPuckPosition = Location(location)
         lastPuckElapsedNanos = location.elapsedRealtimeNanos
 
@@ -1672,6 +1690,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         // The newest Fused GPS fix is the single visual-puck authority, both before
         // and during navigation. Mapbox matcher callbacks no longer animate it.
         feedRawLocationToPuck(location)
+        followLiveBusCamera(location)
 
         // This callback is the app's authoritative live GPS source.  Do the
         // reverse-geocode here rather than relying on Mapbox's matcher callback,
@@ -1693,6 +1712,46 @@ class DriverDashboardActivity : AppCompatActivity() {
         // Persist only after the route has been split at this GPS point. Admin,
         // Parent and Principal then receive marker + blue/grey line in one snapshot.
         syncTrackingDataToFirestore(location)
+    }
+
+    /**
+     * The viewport follow state is useful for initial pitch/bearing, but it can become
+     * idle after a style reload.  Drive the camera from the same accepted GPS fix as
+     * the puck so navigation never leaves the bus behind.  This is disabled as soon
+     * as the driver pans, and Re-centre enables it again.
+     */
+    private fun followLiveBusCamera(location: Location) {
+        if (!isNavigating || !isCameraFollowingBus) return
+
+        val previous = lastCameraFollowLocation
+        if (previous != null && previous.distanceTo(location) < MIN_MOVING_PUCK_UPDATE_METERS) return
+        lastCameraFollowLocation = Location(location)
+
+        val target = Point.fromLngLat(location.longitude, location.latitude)
+        mapView?.mapboxMap?.easeTo(
+            CameraOptions.Builder().center(target).build(),
+            MapAnimationOptions.mapAnimationOptions { duration(650) }
+        )
+    }
+
+    /**
+     * Prefer the device heading when it is reliable; otherwise derive heading from
+     * consecutive accepted GPS fixes. Circular interpolation filters small jitter
+     * without making genuine turns lag behind the bus.
+     */
+    private fun updateBusHeading(location: Location, previous: Location?, movedMeters: Float) {
+        val measured = when {
+            location.hasBearing() && location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE ->
+                location.bearing.toDouble()
+            previous != null && movedMeters >= MIN_MOVING_PUCK_UPDATE_METERS ->
+                previous.bearingTo(location).toDouble()
+            else -> null
+        } ?: return
+
+        lastValidBearing = if (lastValidBearing == 0.0) measured else {
+            val delta = ((measured - lastValidBearing + 540.0) % 360.0) - 180.0
+            (lastValidBearing + delta * 0.45 + 360.0) % 360.0
+        }
     }
 
     /** Immediately removes the layout placeholder while a human-readable address loads. */
@@ -1962,10 +2021,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun setupLocationPuck() {
         val cameraState = mapView?.mapboxMap?.cameraState
-        val initialScale = computeBusModelScale(
-            cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM,
-            cameraState?.pitch ?: 0.0
-        )
+        val initialScale = computeBusModelScale(cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM)
         lastAppliedBusScale = initialScale
 
         mapView?.location?.apply {
@@ -1987,40 +2043,31 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isCurrentLocationLive) {
             currentLocation?.let { feedRawLocationToPuck(it) }
         }
-        mapView?.post {
-            lastAppliedBusScale = -1f
-            updateBusModelScaleForZoom()
-        }
     }
 
-    // Reassigning LocationPuck3D while the location component is active asks Mapbox
-    // to add its model layer again. That can throw a fatal JNI exception because the
-    // existing "mapbox-location-model-layer" already belongs to the component.
-    // Scale is updated on that existing layer only.
-    private val cameraChangeListener = OnCameraChangeListener {
-        updateBusModelScaleForZoom()
-    }
+    // The scale expression installed with the puck is evaluated by Mapbox for every
+    // zoom change. Do not touch/reassign LocationPuck3D from camera callbacks: doing
+    // so can attempt to add mapbox-location-model-layer a second time and crash JNI.
+    private val cameraChangeListener = OnCameraChangeListener { }
 
     private fun busModelScaleExpression(): String {
-        val zoomStops = listOf(10.0, 12.0, 14.0, 16.0, 17.0, 17.5, 18.0, 19.0, 20.0)
+        val zoomStops = listOf(0.0, 5.0, 10.0, 12.0, 14.0, 16.0, 17.0, 18.0, 19.0, 20.0, 22.0)
         val interpolated = zoomStops.joinToString(",") { zoom ->
-            val pitch = if (zoom >= 17.5) 65.0 else 0.0
-            val scale = computeBusModelScale(zoom, pitch)
+            val scale = computeBusModelScale(zoom)
             """$zoom,["literal",[$scale,$scale,$scale]]"""
         }
         return """["interpolate",["linear"],["zoom"],$interpolated]"""
     }
 
-    private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
-        val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
-            .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
-
-        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
-        val apparentTarget = (BUS_MODEL_SCALE_REFERENCE_VALUE * Math.pow(2.0, apparentExponent))
-            .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
-
-        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
-        return (apparentTarget * worldToScreenCompensation)
+    private fun computeBusModelScale(zoom: Double): Float {
+        val zoomDelta = zoom - BUS_MODEL_SCALE_REFERENCE_ZOOM
+        val visualFactor = if (zoomDelta < 0.0) {
+            Math.pow(1.03, -zoomDelta).coerceAtMost(MAX_BUS_ZOOM_OUT_SCREEN_FACTOR)
+        } else {
+            Math.pow(0.86, zoomDelta).coerceAtLeast(MIN_BUS_ZOOM_IN_SCREEN_FACTOR)
+        }
+        val mapScaleCompensation = Math.pow(2.0, -zoomDelta)
+        return (BUS_MODEL_SCALE_REFERENCE_VALUE * visualFactor * mapScaleCompensation)
             .coerceIn(MIN_BUS_WORLD_SCALE.toDouble(), MAX_BUS_WORLD_SCALE.toDouble())
             .toFloat()
     }
@@ -2035,18 +2082,8 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateBusModelScaleForZoom() {
-        val cameraState = mapView?.mapboxMap?.cameraState ?: return
-        val newScale = computeBusModelScale(cameraState.zoom, cameraState.pitch)
-        if (kotlin.math.abs(newScale - lastAppliedBusScale) < 0.02f) return
-        lastAppliedBusScale = newScale
-
-        val scaleVec = listOf(newScale, newScale, newScale)
-        (mapView?.location?.locationPuck as? LocationPuck3D)?.modelScale = scaleVec
-
-        mapView?.mapboxMap?.getStyle { style ->
-            val modelLayer = locationModelLayer(style) ?: return@getStyle
-            modelLayer.modelScale(listOf(newScale.toDouble(), newScale.toDouble(), newScale.toDouble()))
-        }
+        // Kept as a harmless call-site compatibility hook. modelScaleExpression above
+        // owns zoom scaling, so no layer/component mutation is required here.
     }
 
     private fun observeViewModel() {
@@ -2232,15 +2269,22 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (fullNavigationPoints.size < 2) return
 
         try {
-            // 1. Check deviation against the route BEFORE any movement gating.
-            // If the driver deviated or moved to another road, detect it immediately
-            // regardless of whether vehicle is moving or stationary.
-            val snappedPoint = TurfMisc.nearestPointOnLine(currentPos, fullNavigationPoints)
-            val snappedP = snappedPoint.geometry() as? Point ?: return
-            val actualDistanceToRoute = TurfMeasurement.distance(currentPos, snappedP, TurfConstants.UNIT_METERS)
-            val nearestRouteIndex = fullNavigationPoints.indices.minByOrNull { index ->
-                TurfMeasurement.distance(currentPos, fullNavigationPoints[index], TurfConstants.UNIT_METERS)
-            } ?: 0
+            val previousRawPosition = lastRawPositionForSnap
+            val maxForwardRouteDistance = previousRawPosition?.let { previous ->
+                maxOf(
+                    MIN_FORWARD_ROUTE_PROGRESS_METERS,
+                    TurfMeasurement.distance(currentPos, previous, TurfConstants.UNIT_METERS) * 3.0 + 30.0
+                )
+            } ?: MIN_FORWARD_ROUTE_PROGRESS_METERS
+
+            // Pick a point on a *forward* route segment, not merely the closest point
+            // on the entire route.  On loops, parallel roads and U-turns the global
+            // nearest point can belong to an old/future section. Combining that point
+            // with a different local vertex was the source of the visible chord/loop.
+            val projection = projectOntoForwardRoute(currentPos, maxForwardRouteDistance) ?: return
+            val snappedP = projection.point
+            val actualDistanceToRoute = projection.distanceMeters
+            val nearestRouteIndex = projection.segmentIndex
             val isFacingOppositeRouteDirection = currentLocation
                 ?.takeIf { it.hasBearing() && it.speed >= MIN_SPEED_FOR_BEARING_UPDATE }
                 ?.let { location ->
@@ -2265,7 +2309,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
 
             // 2. Minimum movement filter: only filters updates when vehicle is strictly ON ROUTE
-            val previousRawPosition = lastRawPositionForSnap
             previousRawPosition?.let { lastRaw ->
                 val movedMeters = TurfMeasurement.distance(currentPos, lastRaw, TurfConstants.UNIT_METERS)
                 if (movedMeters < MIN_GPS_MOVEMENT_FOR_SNAP_METERS) {
@@ -2274,32 +2317,8 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
             lastRawPositionForSnap = currentPos
 
-            // 3. Find split index along the planned route
-            val searchStart = lastSplitIndex
-            val searchEnd = minOf(fullNavigationPoints.size - 1, lastSplitIndex + SPLIT_SEARCH_WINDOW)
-            var splitIndex = searchStart
-            var minWindowDistance = Double.MAX_VALUE
-            val maxForwardRouteDistance = previousRawPosition?.let { previous ->
-                // Allow normal GPS noise and road curvature, but never a sudden jump
-                // to the return carriageway far ahead in the route order.
-                maxOf(MIN_FORWARD_ROUTE_PROGRESS_METERS,
-                    TurfMeasurement.distance(currentPos, previous, TurfConstants.UNIT_METERS) * 3.0 + 30.0)
-            } ?: MIN_FORWARD_ROUTE_PROGRESS_METERS
-            var forwardRouteDistance = 0.0
-            for (i in searchStart..searchEnd) {
-                if (i > searchStart) {
-                    forwardRouteDistance += TurfMeasurement.distance(
-                        fullNavigationPoints[i - 1], fullNavigationPoints[i], TurfConstants.UNIT_METERS
-                    )
-                }
-                if (forwardRouteDistance > maxForwardRouteDistance) break
-                val dist = TurfMeasurement.distance(currentPos, fullNavigationPoints[i], TurfConstants.UNIT_METERS)
-                if (dist < minWindowDistance) {
-                    minWindowDistance = dist
-                    splitIndex = i
-                }
-            }
-            splitIndex = maxOf(splitIndex, lastSplitIndex)
+            // The projection and split now always refer to the same road segment.
+            val splitIndex = maxOf(projection.segmentIndex, lastSplitIndex)
             lastSplitIndex = splitIndex
 
             // 4. Road-Following Traveled Line:
@@ -2352,6 +2371,70 @@ class DriverDashboardActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("NavDebug", "Error updating route progress", e)
         }
+    }
+
+    private data class RouteProjection(
+        val point: Point,
+        val segmentIndex: Int,
+        val distanceMeters: Double
+    )
+
+    /**
+     * Projects GPS onto the reachable, forward portion of the route.  Restricting the
+     * search both by route order and travelled distance makes progress monotonic and
+     * prevents GPS jitter near a crossing from selecting an earlier route section.
+     */
+    private fun projectOntoForwardRoute(currentPos: Point, maxForwardMeters: Double): RouteProjection? {
+        val firstSegment = lastSplitIndex.coerceIn(0, fullNavigationPoints.lastIndex - 1)
+        val lastSegment = minOf(fullNavigationPoints.lastIndex - 1, firstSegment + SPLIT_SEARCH_WINDOW)
+        var routeDistance = 0.0
+        var best: RouteProjection? = null
+
+        for (segmentIndex in firstSegment..lastSegment) {
+            val start = fullNavigationPoints[segmentIndex]
+            val end = fullNavigationPoints[segmentIndex + 1]
+            if (segmentIndex > firstSegment) {
+                routeDistance += TurfMeasurement.distance(
+                    fullNavigationPoints[segmentIndex - 1], start, TurfConstants.UNIT_METERS
+                )
+            }
+            if (routeDistance > maxForwardMeters) break
+
+            val routeBearing = routeBearingAt(segmentIndex)
+            val busBearing = currentLocation
+                ?.takeIf { it.speed >= MIN_SPEED_FOR_BEARING_UPDATE }
+                ?.let { if (it.hasBearing()) it.bearing.toDouble() else lastValidBearing }
+                ?: lastValidBearing.takeIf { it != 0.0 }
+            // On a divided/two-way road, ignore a nearby segment that points in the
+            // opposite direction. Route order still advances monotonically afterwards.
+            if (busBearing != null && routeBearing != null &&
+                headingDifference(busBearing, routeBearing) >= OPPOSITE_DIRECTION_REROUTE_DEGREES
+            ) continue
+
+            val projected = projectPointOntoSegment(currentPos, start, end)
+            val distance = TurfMeasurement.distance(currentPos, projected, TurfConstants.UNIT_METERS)
+            if (best == null || distance < best.distanceMeters) {
+                best = RouteProjection(projected, segmentIndex, distance)
+            }
+        }
+        return best
+    }
+
+    private fun projectPointOntoSegment(point: Point, start: Point, end: Point): Point {
+        // Routes cover small geographic areas, so an equirectangular projection gives
+        // a stable segment projection without ever introducing a GPS-to-route chord.
+        val latitudeScale = 111_320.0
+        val longitudeScale = latitudeScale * kotlin.math.cos(Math.toRadians((start.latitude() + end.latitude()) / 2.0))
+        val px = (point.longitude() - start.longitude()) * longitudeScale
+        val py = (point.latitude() - start.latitude()) * latitudeScale
+        val dx = (end.longitude() - start.longitude()) * longitudeScale
+        val dy = (end.latitude() - start.latitude()) * latitudeScale
+        val denominator = dx * dx + dy * dy
+        val t = if (denominator == 0.0) 0.0 else ((px * dx + py * dy) / denominator).coerceIn(0.0, 1.0)
+        return Point.fromLngLat(
+            start.longitude() + (end.longitude() - start.longitude()) * t,
+            start.latitude() + (end.latitude() - start.latitude()) * t
+        )
     }
 
     private fun routeBearingAt(index: Int): Double? {
@@ -2637,6 +2720,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun setupMapGestures() {
         mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
             override fun onMoveBegin(detector: MoveGestureDetector) {
+                if (isNavigating && isCameraFollowingBus) {
+                    // Do not fight a driver who pans the map.  The viewport's follow
+                    // state is intentionally stopped only for a real user gesture;
+                    // GPS updates continue normally and Re-centre resumes follow.
+                    isCameraFollowingBus = false
+                    mapView?.viewport?.idle()
+                }
                 if (binding.bottomSummaryCard.visibility == View.VISIBLE) {
                     binding.btnRecenter.visibility = View.VISIBLE
                 }
@@ -2704,12 +2794,16 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun startFollowingPuck() {
+        if (!isNavigating) return
+        isCameraFollowingBus = true
+        lastCameraFollowLocation = null
         binding.btnRecenter.visibility = View.GONE
         if (isNorthUp) {
             followPuckNorthUp()
         } else {
             followPuckHeadingUp()
         }
+        currentLocation?.let(::followLiveBusCamera)
         lastAppliedBusScale = -1f
         updateBusModelScaleForZoom()
     }
@@ -2894,7 +2988,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             .voiceInstructions(true)
             .language("en")
             .voiceUnits(DirectionsCriteria.METRIC)
-            .alternatives(false)
+            .alternatives(navPoints.size == 2)
 
         if (currentBearing != null) {
             val bearings = mutableListOf<Bearing?>()
@@ -2909,12 +3003,14 @@ class DriverDashboardActivity : AppCompatActivity() {
             routeOptionsBuilder.build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
+                    if (routes.isEmpty()) return
+                    val selectedRoute = shortestRoadRoute(routes)
                     isNavigating = true
-                    nav.setNavigationRoutes(routes)
-                    updateStopEtasFromNavigationRoute(routes.first())
+                    nav.setNavigationRoutes(listOf(selectedRoute))
+                    updateStopEtasFromNavigationRoute(selectedRoute)
 
                     // Pre-populate Google Maps style instruction card with the route's initial maneuver
-                    val firstLeg = routes.first().directionsRoute.legs()?.firstOrNull()
+                    val firstLeg = selectedRoute.directionsRoute.legs()?.firstOrNull()
                     val firstStep = firstLeg?.steps()?.firstOrNull()
                     val firstManeuver = firstStep?.maneuver()
                     if (firstManeuver != null) {
@@ -3059,6 +3155,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 btnRecenter.animate().translationY(-240f).setDuration(500).start()
             } else {
                 navigationUiActive = false
+                isCameraFollowingBus = false
                 mapboxNavigation?.setNavigationRoutes(emptyList())
                 fullNavigationPoints = emptyList()
                 clearTraveledRouteHistory()

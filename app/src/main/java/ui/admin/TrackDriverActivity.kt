@@ -60,10 +60,14 @@ import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfMisc
@@ -121,6 +125,7 @@ class TrackDriverActivity : AppCompatActivity() {
     private val BUS_MODEL_ELEVATION_METERS = 3.0
     private var lastAppliedBusScale = -1f
     private var lastFollowCameraTarget: Point? = null
+    private val CAMERA_FOLLOW_MIN_MOVEMENT_METERS = 1.5
     private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingBusScaleUpdate: Runnable? = null
     private val MIN_BUS_MODEL_SCALE = 1.7f
@@ -197,6 +202,18 @@ class TrackDriverActivity : AppCompatActivity() {
 
                 observeViewModel()
             }
+
+            // Let a person inspect the map without the next location snapshot pulling
+            // it away. Re-centre explicitly restores live bus follow.
+            mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
+                override fun onMoveBegin(detector: MoveGestureDetector) {
+                    if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                        currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
+                    }
+                }
+                override fun onMove(detector: MoveGestureDetector): Boolean = false
+                override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+            })
 
             setupBottomSheet()
             viewModel.setDriverId(driverId)
@@ -564,7 +581,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 val isAtDefaultGlobe = currentCamera?.center?.latitude() == 0.0 && currentCamera?.center?.longitude() == 0.0
                 val lastTarget = lastFollowCameraTarget
                 val movedSinceLastCameraUpdate = lastTarget == null ||
-                    TurfMeasurement.distance(lastTarget, displayPoint, TurfConstants.UNIT_METERS) >= 10.0
+                    TurfMeasurement.distance(lastTarget, displayPoint, TurfConstants.UNIT_METERS) >= CAMERA_FOLLOW_MIN_MOVEMENT_METERS
 
                 if (isAtDefaultGlobe) {
                     // FIRST LOAD: Instant jump to bus location to avoid "Globe Flash"
@@ -577,16 +594,11 @@ class TrackDriverActivity : AppCompatActivity() {
                     )
                     lastFollowCameraTarget = displayPoint
                 } else if (movedSinceLastCameraUpdate) {
-                    // Do not restart a 1-second camera animation for every Firestore
-                    // snapshot. That creates the visible zoom snap and makes tracking
-                    // lag even when the bus has not actually moved.
-                    mapView?.mapboxMap?.flyTo(
-                        CameraOptions.Builder()
-                            .center(displayPoint)
-                            .zoom(17.0)
-                            .pitch(60.0)
-                            .build(),
-                        MapAnimationOptions.mapAnimationOptions { duration(1000) }
+                    // Move on every meaningful live update, retaining the person's
+                    // current zoom/pitch instead of repeatedly resetting the camera.
+                    mapView?.mapboxMap?.easeTo(
+                        CameraOptions.Builder().center(displayPoint).build(),
+                        MapAnimationOptions.mapAnimationOptions { duration(650) }
                     )
                     lastFollowCameraTarget = displayPoint
                 }
