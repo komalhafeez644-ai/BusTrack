@@ -278,20 +278,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val dutyHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var dutyAutoOffRunnable: Runnable? = null
 
-    // Reference zoom now matches the actual Re-centre navigation zoom (19), so the
-    // "normal" size (BUS_MODEL_SCALE_REFERENCE_VALUE) is exactly what you see right
-    // after tapping Re-centre. Previously this was set to 16 while Re-centre actually
-    // uses zoom 19, which silently forced the bus down near its minimum-size floor
-    // at all times (zoomDelta=3 -> mapScaleCompensation ~= 0.125).
+
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 19.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
-    // Zooming out should make the bus grow gradually and then plateau at this ceiling
-    // (a value equal to 1.0 disabled growth entirely - it clamped the factor back to
-    // the base size immediately). Zooming in shrinks gradually then floors here.
+
     private val MAX_BUS_ZOOM_OUT_SCREEN_FACTOR = 1.6
     private val MIN_BUS_ZOOM_IN_SCREEN_FACTOR = 0.6
-    // Loose safety bounds only. With the reference zoom now correct, normal
-    // operating zooms (roughly 10-20) should never actually hit these clamps.
+
     private val MIN_BUS_WORLD_SCALE = 0.05f
     private val MAX_BUS_WORLD_SCALE = 50000.0f
     private val LOCATION_MODEL_LAYER_ID = "mapbox-location-model-layer"
@@ -532,16 +525,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
-    // FIX (registration race): MapboxNavigationApp.current() can still be null the
-    // instant after attach(this) if the singleton hasn't finished wiring itself to
-    // the Activity lifecycle yet. Registering observers with `?.` against that null
-    // reference silently no-ops - routeProgressObserver/voiceInstructionsObserver
-    // then never fire for the rest of the session (the nav card stays static, no
-    // voice), even though nav.startTripSession() succeeds later on a fresh,
-    // non-null instance and powers the native trip notification just fine.
-    // MapboxNavigationObserver's onAttached callback is only invoked once Mapbox
-    // hands back a guaranteed-valid instance, so registering through it removes
-    // the race entirely instead of guessing at timing.
+
     private val navObserverBinder = object : MapboxNavigationObserver {
         override fun onAttached(mapboxNavigation: MapboxNavigation) {
             this@DriverDashboardActivity.mapboxNavigation = mapboxNavigation
@@ -570,11 +554,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             )
         }
         MapboxNavigationApp.attach(this)
-
-        // Registering through MapboxNavigationApp.registerObserver(...) is idempotent -
-        // Mapbox tracks observers in a Set, so calling this again on a later
-        // initNavigation() re-entry (e.g. from startNavigationAnimation()'s null-check
-        // fallback) will not create duplicate registrations.
         MapboxNavigationApp.registerObserver(navObserverBinder)
         mapboxNavigation = MapboxNavigationApp.current()
 
@@ -650,10 +629,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         Log.w("VoiceNav", "SpeechApi generation error: $error, falling back")
                         val fallback = error.fallback
                         if (fallback != null && voiceInstructionsPlayer != null) {
-                            // FIX (silent voice): audio focus was previously requested only
-                            // for the Android TTS fallback path (speakFallbackInstruction),
-                            // never for the Mapbox voice player. Without focus, playback can
-                            // be silently ducked or blocked by another audio session.
+
                             requestNavigationAudioFocus()
                             voiceInstructionsPlayer?.play(fallback) { a ->
                                 abandonNavigationAudioFocus()
@@ -705,11 +681,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val offRouteObserver = OffRouteObserver { isOffRoute ->
         if (isOffRoute && isNavigating) {
             val now = System.currentTimeMillis()
-            // Same guard idea as the backup check below: only fire if no reroute is
-            // already in flight AND enough time has passed since the last one. Without
-            // this, this callback keeps firing on ~every GPS tick while off-route,
-            // spamming triggerReroute() and causing each new request to cancel the
-            // previous one before it ever completes.
+
             if (!isRerouteInFlight && now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS) {
                 lastOffRouteRerouteTimeMs = now
                 runOnUiThread {
@@ -749,9 +721,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isRerouteInFlight) return
         isRerouteInFlight = true
 
-        // Small GPS drift should not make a reroute start off the road and produce a
-        // long detour.  When the bus is still near the existing route, start from its
-        // forward projected road position; genuine deviations still use raw GPS.
+
         val rawCurrentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
         val projectedCurrentPoint = if (fullNavigationPoints.size >= 2) {
             projectOntoForwardRoute(rawCurrentPoint, MIN_FORWARD_ROUTE_PROGRESS_METERS * 2)
@@ -1027,11 +997,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         }.joinToString(", ")
     }
 
-    // ---------------------------------------------------------------------------------
-    // Stop state machine: UPCOMING -> ARRIVED -> COMPLETED (SKIPPED branches off UPCOMING).
-    // Every transition is guarded by the stop's current state, so a stop can only ever
-    // move forward. In particular, leaving a stop's geofence can only push it from
-    // ARRIVED to COMPLETED — it can never fall back to UPCOMING.
+
     // ---------------------------------------------------------------------------------
 
     private fun activeStops(): List<com.example.bustrack_app.models.StopItem> =
@@ -1344,13 +1310,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun updateUpcomingStopsUI() {
         val stops = displayedStops()
 
-        // Show the full route stop list for the entire active trip. Stops must never be
-        // removed once reached — only each stop's displayed status/time text changes
-        // (that's driven by stop.time, which routeProgressObserver already sets per-index
-        // every tick: "Arrived: ..."/"Skipped" for reached stops, "ETA: ..." for the rest).
-        // liveArrivedIndex tells the adapter which single stop is currently inside its
-        // geofence (-> ARRIVED badge); every other already-arrived stop still renders as
-        // PASSED with its preserved arrival time, exactly as updateBottomSheetInfo() does.
+
         val liveArrivedIndex = if (isViewingReverseTrip && isCurrentlyAtStop && lastArrivedStopIndex != -1) {
             lastArrivedStopIndex
         } else {
@@ -1384,13 +1344,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 tvLoad?.text = cachedLoadString
 
-                // Stop arrival/skip decisions are made exclusively by geofence proximity,
-                // in checkGeofenceAndStopStatus() below. Mapbox's currentLegProgress.legIndex
-                // is intentionally NOT used to advance or skip stops here anymore: legIndex
-                // only reflects progress along the *planned* route geometry, so it would
-                // happily claim stops were reached the moment the bus's snapped position
-                // moved past them on that geometry - even if the driver took a shortcut, is
-                // mid-reroute, or the route hasn't caught up with a deviation yet.
                 val stops = activeStops()
 
                 currentLocation?.let { loc ->
@@ -1416,13 +1369,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
                 currentNavigationEtaText = etaString
                 tvEta?.text = etaString
-                // instructionCard's own ETA readout (tvEtaNav) — was never being written to
-                // anywhere, so it stayed stuck on the "ETA: --" placeholder baked into the
-                // layout XML, while tvEtaSheet (bottomSummaryCard, which can be scrolled out
-                // of view during nav via the collapsible BottomSheetBehavior) updated fine.
-                // Mirror the same value here; tvEtaSheet has no "ETA:" prefix (it sits next
-                // to its own tvEtaLabel), but tvEtaNav's text carries the "ETA:" label itself,
-                // so only prepend it for the plain-duration case.
+
                 binding.tvEtaNav.text = if (etaString.startsWith("Arrived:") || etaString == "Route completed") {
                     etaString
                 } else {
@@ -1695,9 +1642,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         feedRawLocationToPuck(location)
         followLiveBusCamera(location)
 
-        // This callback is the app's authoritative live GPS source.  Do the
-        // reverse-geocode here rather than relying on Mapbox's matcher callback,
-        // which is not guaranteed to emit while a route is being rebuilt.
         if (isNavigating) {
             updateLocationSummary(location)
             reverseGeocodeIfNeeded(location)
@@ -1797,13 +1741,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             val speedVal = (location.speed * 3.6)
             val loadVal = tvLoad?.text?.toString() ?: "0/0"
 
-            // Single consolidated write (was 3 separate .update() calls: location,
-            // stats, route geometry) - see updateDriverLiveState() for why this
-            // matters now that this runs roughly every ~1s instead of every ~5s.
-            // stopEtaTexts (computed every tick in routeProgressObserver) is always
-            // forwarded here too, so Firestore's stopEtaTimes field stays in sync
-            // and Parent/Admin/Principal (TrackDriverActivity.applyDriverStopState)
-            // can show a real per-stop ETA instead of falling back to "TBD".
             val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
             val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
             val traveledSegments = currentTraveledSegments().map { LineString.fromLngLats(it).toPolyline(6) }
@@ -2062,15 +1999,6 @@ class DriverDashboardActivity : AppCompatActivity() {
         return """["interpolate",["linear"],["zoom"],$interpolated]"""
     }
 
-    // FIX (bus stayed tiny at every zoom): BUS_MODEL_SCALE_REFERENCE_ZOOM previously
-    // did not match the zoom Re-centre actually uses (19.0), which pinned the
-    // "normal" size at zoomDelta=3 -> ~1/8 scale, right up against
-    // MIN_BUS_WORLD_SCALE. Zoom-out growth was also disabled because
-    // MAX_BUS_ZOOM_OUT_SCREEN_FACTOR was left equal to the base factor (1.0),
-    // so it clamped to no-growth immediately instead of letting the bus get
-    // gradually bigger. Reference zoom, ceiling/floor factors and the world-scale
-    // clamps above have all been corrected so this now grows/shrinks smoothly and
-    // plateaus at a sensible min/max around the Re-centre size.
     private fun computeBusModelScale(zoom: Double): Float {
         val zoomDelta = zoom - BUS_MODEL_SCALE_REFERENCE_ZOOM
         val visualFactor = if (zoomDelta < 0.0) {
@@ -2304,10 +2232,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     routeBearing != null && headingDifference(location.bearing.toDouble(), routeBearing) >= OPPOSITE_DIRECTION_REROUTE_DEGREES
                 } ?: false
 
-            // A GPS point can be close to the geometry of a parallel/two-way road
-            // while the bus is travelling in the opposite direction. Distance alone
-            // incorrectly advances the grey line in that case; direction detects it
-            // and forces a route recalculation from the road the bus is actually on.
+
             val isOffRoute = actualDistanceToRoute > OFF_ROUTE_THRESHOLD_METERS ||
                     (actualDistanceToRoute > PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS && isFacingOppositeRouteDirection)
             if (isNavigating && isOffRoute) {
@@ -3124,14 +3049,6 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                         drawPointsOnMap(fullNavigationPoints)
 
-                        // FIX (route line missing after restart): on restart, this style's
-                        // loadStyle callback runs *after* routesObserver already tried to
-                        // draw the route once against the *old* style - before this style's
-                        // sources existed, so that draw silently failed but still recorded
-                        // currentLocation as lastRawPositionForSnap. Without this reset,
-                        // updateNavigationRouteProgress() below sees near-zero movement
-                        // since that recording and returns early, leaving the route line
-                        // undrawn until the next genuine >=1m GPS fix arrives.
                         lastRawPositionForSnap = null
                         currentLocation?.let { loc ->
                             updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))

@@ -157,24 +157,42 @@ class TrackDriverActivity : AppCompatActivity() {
     private val CAMERA_FOLLOW_MIN_MOVEMENT_METERS = 1.5
     private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingBusScaleUpdate: Runnable? = null
+    // Bounds used only inside computeBusModelScale()'s intermediate "apparent size"
+    // term - this is the same clamp that was already here before and gives the
+    // bus its normal, correct on-screen look at everyday zoom levels.
     private val MIN_BUS_MODEL_SCALE = 1.7f
     private val MAX_BUS_MODEL_SCALE = 2.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
+    // FIX (bus kept growing/shrinking with no limit past a point): the zoom value
+    // that feeds the size formula below is now clamped to this range before the
+    // calculation runs. Any zoom level inside [MIN_ZOOM_FOR_BUS_SCALE,
+    // MAX_ZOOM_FOR_BUS_SCALE] (which includes TRACKING_ZOOM = 17, used on Recenter)
+    // is completely unaffected - the exact same formula/output as before runs for
+    // it, so the normal/default bus size and its gradual zoom-in/zoom-out change
+    // are untouched. Only once you zoom out past MIN_ZOOM_FOR_BUS_SCALE, or zoom in
+    // past MAX_ZOOM_FOR_BUS_SCALE, does the size stop growing/shrinking further -
+    // it holds at whatever value it had at that boundary zoom level. Tune these two
+    // numbers if you want the "stops changing" point to kick in earlier or later.
+    private val MIN_ZOOM_FOR_BUS_SCALE = 13.0
+    private val MAX_ZOOM_FOR_BUS_SCALE = 20.0
 
-    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly so the bus appears
-    // the same apparent size on Parent/Admin/Principal screens as on the Driver's own.
+    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly (same formula
+    // as originally, only the zoom clamp above is new) so the bus appears the same
+    // apparent size on Parent/Admin/Principal screens as on the Driver's own.
     private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
         val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
             .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
 
-        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
+        val clampedZoom = zoom.coerceIn(MIN_ZOOM_FOR_BUS_SCALE, MAX_ZOOM_FOR_BUS_SCALE)
+
+        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - clampedZoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
         val apparentTarget = (BUS_MODEL_SCALE_REFERENCE_VALUE * Math.pow(2.0, apparentExponent))
             .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
 
-        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
+        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - clampedZoom) * pitchCompensation
         return (apparentTarget * worldToScreenCompensation).toFloat()
     }
 
@@ -193,18 +211,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
     private val busModelCameraChangeListener = OnCameraChangeListener { scheduleBusScaleUpdate() }
 
-    // ROOT-CAUSE FIX (bus size not scaling smoothly on Recenter/zoom): this used to
-    // be a debounce - every camera-change event cancelled the previous pending
-    // update and rescheduled a new one 150ms out. During a smooth zoom animation
-    // (e.g. Recenter's 900ms easeTo), camera-change events fire continuously, so
-    // the debounce kept getting pushed back and never actually settled until
-    // 150ms after the animation fully finished - meaning the bus model jumped to
-    // its new size in one abrupt step at the very end, instead of scaling
-    // gradually alongside the zoom. This is now a throttle: once a run is
-    // scheduled, further camera-change events are ignored until that run fires,
-    // so the scale updates every ~150ms throughout the animation (not just
-    // once, and not on every single frame - preserving the original
-    // performance intent below).
+
     private fun scheduleBusScaleUpdate() {
         if (pendingBusScaleUpdate != null) return
         val runnable = Runnable {
@@ -261,6 +268,14 @@ class TrackDriverActivity : AppCompatActivity() {
             // it away. Re-centre explicitly restores live bus follow.
             mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
                 override fun onMoveBegin(detector: MoveGestureDetector) {
+                    // FIX (camera stops following the bus): pinch-to-zoom and two-finger
+                    // rotate gestures also fire a MoveGestureDetector "begin" event because
+                    // they inherently contain a two-finger drag component - without this
+                    // guard, merely pinch-zooming the map (never actually dragging it) was
+                    // silently kicking the camera out of DRIVER_FOLLOW mode, so live updates
+                    // stopped re-centering on the bus until Recenter was tapped again. Only
+                    // a genuine single-finger pan should hand camera control back to the user.
+                    if (detector.pointersCount > 1) return
                     if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
                         currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
                     }
@@ -539,7 +554,22 @@ class TrackDriverActivity : AppCompatActivity() {
                 }
 
                 // Update Live Stats in Bottom Sheet
-                val etaValue = if (driver.eta.isNullOrEmpty()) "On Way" else driver.eta
+                // FIX (Top ETA not matching upcoming stop ETA): this used to always show
+                // driver.eta, a generic/overall field that isn't guaranteed to match the
+                // actual next-stop ETA shown in the stops list below. applyDriverStopState()
+                // already treats driver.stopEtaTimes[nextStopIndex] as the single source of
+                // truth for "the upcoming stop's ETA" (same value the Driver Module itself
+                // computes and persists per stop). Reusing that exact value here means the
+                // top ETA and the highlighted upcoming-stop row always agree - e.g. a 4-5 min
+                // stop ETA is reflected at the top instead of a stale/generic driver.eta.
+                // driver.eta remains the fallback (then "On Way") so behavior is unchanged
+                // when no per-stop ETA has been synced yet.
+                val upcomingStopEta = driver.stopEtaTimes[driver.nextStopIndex.toString()]
+                val etaValue = when {
+                    !upcomingStopEta.isNullOrEmpty() && upcomingStopEta != "TBD" -> upcomingStopEta
+                    !driver.eta.isNullOrEmpty() -> driver.eta
+                    else -> "On Way"
+                }
                 it.findViewById<TextView>(R.id.tvEtaSheet)?.text = etaValue
                 it.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "${driver.speed.toInt()} km/h"
                 it.findViewById<TextView>(R.id.tvLoadSheet)?.text = driver.load ?: "0/0"
