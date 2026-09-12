@@ -284,7 +284,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     // uses zoom 19, which silently forced the bus down near its minimum-size floor
     // at all times (zoomDelta=3 -> mapScaleCompensation ~= 0.125).
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 19.0
-    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.2f
+    private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     // Zooming out should make the bus grow gradually and then plateau at this ceiling
     // (a value equal to 1.0 disabled growth entirely - it clamped the factor back to
     // the base size immediately). Zooming in shrinks gradually then floors here.

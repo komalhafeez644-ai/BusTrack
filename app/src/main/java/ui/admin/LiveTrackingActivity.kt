@@ -66,6 +66,7 @@ class LiveTrackingActivity : AppCompatActivity() {
     private lateinit var searchAdapter: BusSearchAdapter
     private var unavailableDialog: android.app.Dialog? = null
     private var isUnavailablePopupDismissed = false
+    private var cancelCompassSubscription: (() -> Unit)? = null
 
     private val BUS_SOURCE_ID = "bus-source"
     private val BUS_MODEL_LAYER_ID = "bus-model-layer"
@@ -140,10 +141,11 @@ class LiveTrackingActivity : AppCompatActivity() {
             }
 
             // Sync Compass UI with map rotation
-            mapView?.mapboxMap?.subscribeCameraChanged {
+            val compassSubscription = mapView?.mapboxMap?.subscribeCameraChanged {
                 val bearing = mapView?.mapboxMap?.cameraState?.bearing?.toFloat() ?: 0f
                 findViewById<ImageView>(R.id.ivCompass)?.rotation = -bearing
             }
+            cancelCompassSubscription = { compassSubscription?.cancel() }
 
             observeViewModel()
         }
@@ -240,8 +242,12 @@ class LiveTrackingActivity : AppCompatActivity() {
         // Map Controls
         findViewById<View>(R.id.mapControls)?.let { controls ->
             controls.findViewById<View>(R.id.compassCard)?.setOnClickListener {
-                // Reset map rotation to North
-                mapView?.mapboxMap?.flyTo(CameraOptions.Builder().bearing(0.0).build())
+                // Reset map rotation to North. easeTo (not flyTo) so a rotation
+                // reset can never collide with focusOnDriver()/focusOnAllDrivers()'s
+                // own easeTo() camera transitions - see the flyTo->easeTo note on
+                // focusOnAllDrivers() below for why mixing animator types here
+                // causes visible camera jumps.
+                mapView?.mapboxMap?.easeTo(CameraOptions.Builder().bearing(0.0).build())
             }
 
             controls.findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
@@ -505,6 +511,7 @@ class LiveTrackingActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelCompassSubscription?.invoke()
         bitmapCache.clear()
         mapView?.onDestroy()
     }
