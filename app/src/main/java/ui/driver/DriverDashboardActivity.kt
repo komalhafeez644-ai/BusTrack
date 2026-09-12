@@ -278,19 +278,22 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val dutyHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var dutyAutoOffRunnable: Runnable? = null
 
-    // Keep the established Re-centre appearance exactly (zoom 19).  MAP-mode models
-    // need inverse world scaling, while visual limits keep zooming out modest and make
-    // the bus deliberately shrink, but never disappear, when zooming in.
+    // Reference zoom now matches the actual Re-centre navigation zoom (19), so the
+    // "normal" size (BUS_MODEL_SCALE_REFERENCE_VALUE) is exactly what you see right
+    // after tapping Re-centre. Previously this was set to 16 while Re-centre actually
+    // uses zoom 19, which silently forced the bus down near its minimum-size floor
+    // at all times (zoomDelta=3 -> mapScaleCompensation ~= 0.125).
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 19.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.2f
-    // Zooming out only needs a small visibility boost. A larger factor made the
-    // model look oversized before the world-scale ceiling eventually shrank it.
-    private val MAX_BUS_ZOOM_OUT_SCREEN_FACTOR = 1.10
-    private val MIN_BUS_ZOOM_IN_SCREEN_FACTOR = 0.65
-    private val MIN_BUS_WORLD_SCALE = 0.2f
-    // MAP-mode needs inverse world scaling to preserve the deliberate screen-size
-    // curve. This ceiling is high enough that it cannot create a mid-zoom size drop.
-    private val MAX_BUS_WORLD_SCALE = 384.0f
+    // Zooming out should make the bus grow gradually and then plateau at this ceiling
+    // (a value equal to 1.0 disabled growth entirely - it clamped the factor back to
+    // the base size immediately). Zooming in shrinks gradually then floors here.
+    private val MAX_BUS_ZOOM_OUT_SCREEN_FACTOR = 1.6
+    private val MIN_BUS_ZOOM_IN_SCREEN_FACTOR = 0.6
+    // Loose safety bounds only. With the reference zoom now correct, normal
+    // operating zooms (roughly 10-20) should never actually hit these clamps.
+    private val MIN_BUS_WORLD_SCALE = 0.05f
+    private val MAX_BUS_WORLD_SCALE = 50000.0f
     private val LOCATION_MODEL_LAYER_ID = "mapbox-location-model-layer"
     private var lastAppliedBusScale = -1f
 
@@ -2059,12 +2062,21 @@ class DriverDashboardActivity : AppCompatActivity() {
         return """["interpolate",["linear"],["zoom"],$interpolated]"""
     }
 
+    // FIX (bus stayed tiny at every zoom): BUS_MODEL_SCALE_REFERENCE_ZOOM previously
+    // did not match the zoom Re-centre actually uses (19.0), which pinned the
+    // "normal" size at zoomDelta=3 -> ~1/8 scale, right up against
+    // MIN_BUS_WORLD_SCALE. Zoom-out growth was also disabled because
+    // MAX_BUS_ZOOM_OUT_SCREEN_FACTOR was left equal to the base factor (1.0),
+    // so it clamped to no-growth immediately instead of letting the bus get
+    // gradually bigger. Reference zoom, ceiling/floor factors and the world-scale
+    // clamps above have all been corrected so this now grows/shrinks smoothly and
+    // plateaus at a sensible min/max around the Re-centre size.
     private fun computeBusModelScale(zoom: Double): Float {
         val zoomDelta = zoom - BUS_MODEL_SCALE_REFERENCE_ZOOM
         val visualFactor = if (zoomDelta < 0.0) {
-            Math.pow(1.03, -zoomDelta).coerceAtMost(MAX_BUS_ZOOM_OUT_SCREEN_FACTOR)
+            Math.pow(1.05, -zoomDelta).coerceAtMost(MAX_BUS_ZOOM_OUT_SCREEN_FACTOR)
         } else {
-            Math.pow(0.86, zoomDelta).coerceAtLeast(MIN_BUS_ZOOM_IN_SCREEN_FACTOR)
+            Math.pow(0.75, zoomDelta).coerceAtLeast(MIN_BUS_ZOOM_IN_SCREEN_FACTOR.toDouble())
         }
         val mapScaleCompensation = Math.pow(2.0, -zoomDelta)
         return (BUS_MODEL_SCALE_REFERENCE_VALUE * visualFactor * mapScaleCompensation)
