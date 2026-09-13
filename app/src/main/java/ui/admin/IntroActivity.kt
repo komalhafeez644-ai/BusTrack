@@ -4,12 +4,15 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
 import com.example.bustrack_app.adapter.IntroSlideAdapter
-import com.example.bustrack_app.databinding.ActivityIntroBinding
 import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.data.AuthRepository
+import com.example.bustrack_app.R
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.firebase.auth.ktx.auth
@@ -20,48 +23,57 @@ import utils.ViewUtils
 
 class IntroActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityIntroBinding
+    private lateinit var viewPager: ViewPager2
+    private lateinit var tabLayoutIndicator: TabLayout
+    private lateinit var fabNextAction: FloatingActionButton
+    private lateinit var tvSkipAction: TextView
+    private lateinit var loadingIndicator: ProgressBar
     private var userRole: String? = null
     private var isNavigating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityIntroBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_intro)
+
+        viewPager = findViewById(R.id.viewPager)
+        tabLayoutIndicator = findViewById(R.id.tabLayoutIndicator)
+        fabNextAction = findViewById(R.id.fabNextAction)
+        tvSkipAction = findViewById(R.id.tvSkipAction)
+        loadingIndicator = findViewById(R.id.loadingIndicator)
 
         window.statusBarColor = Color.parseColor("#051024")
 
         val pagerAdapter = IntroSlideAdapter(this)
-        binding.viewPager.adapter = pagerAdapter
+        viewPager.adapter = pagerAdapter
 
         // Pre-fetch role in background to avoid delay on last slide
         prefetchUserRole()
 
         // Dots indicator ka setup
-        TabLayoutMediator(binding.tabLayoutIndicator, binding.viewPager) { _, _ -> }.attach()
+        TabLayoutMediator(tabLayoutIndicator, viewPager) { _, _ -> }.attach()
 
         // Dots ko stretch hone se rokne ke liye
-        binding.tabLayoutIndicator.tabMode = TabLayout.MODE_FIXED
+        tabLayoutIndicator.tabMode = TabLayout.MODE_FIXED
 
-        binding.fabNextAction.setOnClickListener {
+        fabNextAction.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            val currentPos = binding.viewPager.currentItem
+            val currentPos = viewPager.currentItem
             if (currentPos + 1 < 3) {
-                binding.viewPager.currentItem = currentPos + 1
+                viewPager.currentItem = currentPos + 1
             } else {
                 handleNavigation()
             }
         }
 
-        binding.tvSkipAction.setOnClickListener { 
+        tvSkipAction.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             handleNavigation() 
         }
 
-        binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
-                binding.tvSkipAction.visibility = if (position == 2) View.INVISIBLE else View.VISIBLE
+                tvSkipAction.visibility = if (position == 2) View.INVISIBLE else View.VISIBLE
             }
         })
     }
@@ -113,13 +125,13 @@ class IntroActivity : AppCompatActivity() {
 
     private fun showLoading(isLoading: Boolean) {
         if (isLoading) {
-            binding.loadingIndicator.visibility = View.VISIBLE
-            binding.fabNextAction.setImageDrawable(null)
-            binding.fabNextAction.isEnabled = false
+            loadingIndicator.visibility = View.VISIBLE
+            fabNextAction.setImageDrawable(null)
+            fabNextAction.isEnabled = false
         } else {
-            binding.loadingIndicator.visibility = View.GONE
-            binding.fabNextAction.setImageResource(com.example.bustrack_app.R.drawable.baseline_arrow_forward_24)
-            binding.fabNextAction.isEnabled = true
+            loadingIndicator.visibility = View.GONE
+            fabNextAction.setImageResource(R.drawable.baseline_arrow_forward_24)
+            fabNextAction.isEnabled = true
         }
     }
 }

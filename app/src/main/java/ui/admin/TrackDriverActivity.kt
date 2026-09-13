@@ -60,10 +60,14 @@ import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.sources.getSource
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
 import com.mapbox.maps.plugin.animation.flyTo
+import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfMisc
@@ -103,6 +107,35 @@ class TrackDriverActivity : AppCompatActivity() {
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
 
+    // ROOT-CAUSE FIX (globe flash on Track Driver + Recenter zoom jump):
+    // The old code guessed whether the camera was "still at the globe" by
+    // comparing the camera center to exactly (0.0, 0.0). That heuristic
+    // silently failed whenever the MapView's own default/XML camera wasn't
+    // precisely (0,0) - the automatic instant-jump branch never ran, the
+    // camera only ever nudged its center (never its zoom) on live updates,
+    // and the globe/overview stayed on screen until Recenter was pressed.
+    // Separately, Recenter used flyTo() while every live-follow update used
+    // easeTo() - two different animator types fighting over the same camera
+    // plugin, which is what produced the "zooms in very close, then
+    // auto-adjusts smaller" jump. hasCenteredOnDriver + isRecenterAnimationInProgress
+    // below make both paths explicit and mutually exclusive, and
+    // recenterOnDriver() is now the single place that drives the camera to
+    // the tracking zoom/pitch, using easeTo() everywhere.
+    private val TRACKING_ZOOM = 17.0
+    private val TRACKING_PITCH = 60.0
+    private val RECENTER_ANIMATION_DURATION_MS = 900L
+    private var hasCenteredOnDriver = false
+    private var isRecenterAnimationInProgress = false
+    private val recenterAnimationHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingRecenterAnimationReset: Runnable? = null
+
+    // Compass sync - completely missing before this fix, which is why the
+    // compass looked "Not responding" on this screen. Stored as a plain
+    // cancel-lambda (rather than naming the subscription's exact type) so
+    // this compiles regardless of which package your Mapbox SDK version
+    // puts that return type in.
+    private var cancelCompassSubscription: (() -> Unit)? = null
+
     // Display-only map matching: GPS stays authoritative for every route, stop and
     // Firestore calculation. A normal 5-20m GPS offset is snapped only for the marker
     // shown on the Admin map; a real off-route bus is deliberately left untouched.
@@ -121,26 +154,45 @@ class TrackDriverActivity : AppCompatActivity() {
     private val BUS_MODEL_ELEVATION_METERS = 3.0
     private var lastAppliedBusScale = -1f
     private var lastFollowCameraTarget: Point? = null
+    private val CAMERA_FOLLOW_MIN_MOVEMENT_METERS = 1.5
     private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingBusScaleUpdate: Runnable? = null
+    // Bounds used only inside computeBusModelScale()'s intermediate "apparent size"
+    // term - this is the same clamp that was already here before and gives the
+    // bus its normal, correct on-screen look at everyday zoom levels.
     private val MIN_BUS_MODEL_SCALE = 1.7f
     private val MAX_BUS_MODEL_SCALE = 2.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
+    // FIX (bus kept growing/shrinking with no limit past a point): the zoom value
+    // that feeds the size formula below is now clamped to this range before the
+    // calculation runs. Any zoom level inside [MIN_ZOOM_FOR_BUS_SCALE,
+    // MAX_ZOOM_FOR_BUS_SCALE] (which includes TRACKING_ZOOM = 17, used on Recenter)
+    // is completely unaffected - the exact same formula/output as before runs for
+    // it, so the normal/default bus size and its gradual zoom-in/zoom-out change
+    // are untouched. Only once you zoom out past MIN_ZOOM_FOR_BUS_SCALE, or zoom in
+    // past MAX_ZOOM_FOR_BUS_SCALE, does the size stop growing/shrinking further -
+    // it holds at whatever value it had at that boundary zoom level. Tune these two
+    // numbers if you want the "stops changing" point to kick in earlier or later.
+    private val MIN_ZOOM_FOR_BUS_SCALE = 13.0
+    private val MAX_ZOOM_FOR_BUS_SCALE = 20.0
 
-    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly so the bus appears
-    // the same apparent size on Parent/Admin/Principal screens as on the Driver's own.
+    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly (same formula
+    // as originally, only the zoom clamp above is new) so the bus appears the same
+    // apparent size on Parent/Admin/Principal screens as on the Driver's own.
     private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
         val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
             .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
 
-        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
+        val clampedZoom = zoom.coerceIn(MIN_ZOOM_FOR_BUS_SCALE, MAX_ZOOM_FOR_BUS_SCALE)
+
+        val apparentExponent = (BUS_MODEL_SCALE_REFERENCE_ZOOM - clampedZoom) * BUS_MODEL_SCALE_COMPENSATION_FACTOR
         val apparentTarget = (BUS_MODEL_SCALE_REFERENCE_VALUE * Math.pow(2.0, apparentExponent))
             .coerceIn(MIN_BUS_MODEL_SCALE.toDouble(), MAX_BUS_MODEL_SCALE.toDouble())
 
-        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - zoom) * pitchCompensation
+        val worldToScreenCompensation = Math.pow(2.0, BUS_MODEL_SCALE_REFERENCE_ZOOM - clampedZoom) * pitchCompensation
         return (apparentTarget * worldToScreenCompensation).toFloat()
     }
 
@@ -159,14 +211,18 @@ class TrackDriverActivity : AppCompatActivity() {
 
     private val busModelCameraChangeListener = OnCameraChangeListener { scheduleBusScaleUpdate() }
 
-    // Do not mutate the style on every animation frame; tracking updates and camera
-    // animations otherwise contend for the UI/render threads and make this screen hang.
+
     private fun scheduleBusScaleUpdate() {
-        pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
-        pendingBusScaleUpdate = Runnable {
+        if (pendingBusScaleUpdate != null) return
+        val runnable = Runnable {
             pendingBusScaleUpdate = null
             updateBusModelScaleForZoom()
-        }.also { busScaleHandler.postDelayed(it, 150L) }
+        }
+        pendingBusScaleUpdate = runnable
+        // Do not mutate the style on every animation frame; tracking updates and
+        // camera animations otherwise contend for the UI/render threads and make
+        // this screen hang.
+        busScaleHandler.postDelayed(runnable, 150L)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -195,8 +251,38 @@ class TrackDriverActivity : AppCompatActivity() {
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)?.let { style.addImage("stop-icon", it) }
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest_grey)?.let { style.addImage("stop-icon-grey", it) }
 
+                // Sync Compass UI with map rotation (mirrors LiveTrackingActivity).
+                // This screen previously had no compass wiring at all - the icon
+                // never rotated and never responded to taps, which is exactly what
+                // "Not responding" looks like.
+                val compassSubscription = mapView?.mapboxMap?.subscribeCameraChanged {
+                    val bearing = mapView?.mapboxMap?.cameraState?.bearing?.toFloat() ?: 0f
+                    findViewById<ImageView>(R.id.ivCompass)?.rotation = -bearing
+                }
+                cancelCompassSubscription = { compassSubscription?.cancel() }
+
                 observeViewModel()
             }
+
+            // Let a person inspect the map without the next location snapshot pulling
+            // it away. Re-centre explicitly restores live bus follow.
+            mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
+                override fun onMoveBegin(detector: MoveGestureDetector) {
+                    // FIX (camera stops following the bus): pinch-to-zoom and two-finger
+                    // rotate gestures also fire a MoveGestureDetector "begin" event because
+                    // they inherently contain a two-finger drag component - without this
+                    // guard, merely pinch-zooming the map (never actually dragging it) was
+                    // silently kicking the camera out of DRIVER_FOLLOW mode, so live updates
+                    // stopped re-centering on the bus until Recenter was tapped again. Only
+                    // a genuine single-finger pan should hand camera control back to the user.
+                    if (detector.pointersCount > 1) return
+                    if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                        currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
+                    }
+                }
+                override fun onMove(detector: MoveGestureDetector): Boolean = false
+                override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+            })
 
             setupBottomSheet()
             viewModel.setDriverId(driverId)
@@ -208,19 +294,18 @@ class TrackDriverActivity : AppCompatActivity() {
 
             findViewById<ImageView>(R.id.btnBack)?.setOnClickListener { finish() }
 
+            findViewById<View>(R.id.compassCard)?.setOnClickListener {
+                // Reset rotation to North only - a plain easeTo() so it can never
+                // collide with the tracking camera's own easeTo() transitions
+                // (see recenterOnDriver() / updateUI()).
+                mapView?.mapboxMap?.easeTo(CameraOptions.Builder().bearing(0.0).build())
+            }
+
             findViewById<View>(R.id.btnRecenter)?.setOnClickListener {
                 currentCameraMode = TrackingCameraMode.DRIVER_FOLLOW
                 viewModel.targetDriver.value?.let { driver ->
                     if (driver.latitude != 0.0 && driver.longitude != 0.0) {
-                        val targetPoint = displayPointForDriver(driver)
-                        mapView?.mapboxMap?.flyTo(
-                            CameraOptions.Builder()
-                                .center(targetPoint)
-                                .zoom(17.0)
-                                .pitch(60.0)
-                                .build(),
-                            MapAnimationOptions.mapAnimationOptions { duration(1500) }
-                        )
+                        recenterOnDriver(displayPointForDriver(driver))
                     }
                 }
             }
@@ -254,6 +339,18 @@ class TrackDriverActivity : AppCompatActivity() {
             bottomSheet.findViewById<View>(R.id.btnViewAllStops)?.setOnClickListener {
                 bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             }
+
+            // ROOT-CAUSE FIX: this bottom sheet layout is shared with
+            // DriverDashboardActivity's bottomSummaryCard, which is where
+            // btnStartReturnTrip's click listener and the reverse-trip logic
+            // (beginReverseTrip(), FirebaseRepository.updateDriverTripDirection)
+            // actually live. Neither this Activity nor LiveTrackingActivity ever
+            // wire up that button, so on this screen it was just an inert but
+            // visible control - confusing for a Parent/Admin/Principal viewer,
+            // who should never be able to trigger a driver-only trip-direction
+            // change anyway. Hide it here rather than in the layout XML, since
+            // the same XML is still needed as-is for the driver's own dashboard.
+            bottomSheet.findViewById<View>(R.id.btnStartReturnTrip)?.visibility = View.GONE
 
             bottomSheet.findViewById<View>(R.id.btnCloseNav)?.setOnClickListener {
                 finish()
@@ -457,7 +554,22 @@ class TrackDriverActivity : AppCompatActivity() {
                 }
 
                 // Update Live Stats in Bottom Sheet
-                val etaValue = if (driver.eta.isNullOrEmpty()) "On Way" else driver.eta
+                // FIX (Top ETA not matching upcoming stop ETA): this used to always show
+                // driver.eta, a generic/overall field that isn't guaranteed to match the
+                // actual next-stop ETA shown in the stops list below. applyDriverStopState()
+                // already treats driver.stopEtaTimes[nextStopIndex] as the single source of
+                // truth for "the upcoming stop's ETA" (same value the Driver Module itself
+                // computes and persists per stop). Reusing that exact value here means the
+                // top ETA and the highlighted upcoming-stop row always agree - e.g. a 4-5 min
+                // stop ETA is reflected at the top instead of a stale/generic driver.eta.
+                // driver.eta remains the fallback (then "On Way") so behavior is unchanged
+                // when no per-stop ETA has been synced yet.
+                val upcomingStopEta = driver.stopEtaTimes[driver.nextStopIndex.toString()]
+                val etaValue = when {
+                    !upcomingStopEta.isNullOrEmpty() && upcomingStopEta != "TBD" -> upcomingStopEta
+                    !driver.eta.isNullOrEmpty() -> driver.eta
+                    else -> "On Way"
+                }
                 it.findViewById<TextView>(R.id.tvEtaSheet)?.text = etaValue
                 it.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "${driver.speed.toInt()} km/h"
                 it.findViewById<TextView>(R.id.tvLoadSheet)?.text = driver.load ?: "0/0"
@@ -560,35 +672,39 @@ class TrackDriverActivity : AppCompatActivity() {
 
             // Apply a tilted 3D perspective
             if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
-                val currentCamera = mapView?.mapboxMap?.cameraState
-                val isAtDefaultGlobe = currentCamera?.center?.latitude() == 0.0 && currentCamera?.center?.longitude() == 0.0
-                val lastTarget = lastFollowCameraTarget
-                val movedSinceLastCameraUpdate = lastTarget == null ||
-                    TurfMeasurement.distance(lastTarget, displayPoint, TurfConstants.UNIT_METERS) >= 10.0
-
-                if (isAtDefaultGlobe) {
-                    // FIRST LOAD: Instant jump to bus location to avoid "Globe Flash"
+                if (!hasCenteredOnDriver) {
+                    // First valid GPS fix for this driver: instant jump (no
+                    // animation) straight to the tracking zoom/pitch, so the bus
+                    // is visible immediately and Recenter is never required for
+                    // initial positioning. Unlike the old (0,0) check, this always
+                    // fires exactly once regardless of whatever default camera the
+                    // MapView started with.
                     mapView?.mapboxMap?.setCamera(
                         CameraOptions.Builder()
                             .center(displayPoint)
-                            .zoom(17.0)
-                            .pitch(60.0)
+                            .zoom(TRACKING_ZOOM)
+                            .pitch(TRACKING_PITCH)
                             .build()
                     )
                     lastFollowCameraTarget = displayPoint
-                } else if (movedSinceLastCameraUpdate) {
-                    // Do not restart a 1-second camera animation for every Firestore
-                    // snapshot. That creates the visible zoom snap and makes tracking
-                    // lag even when the bus has not actually moved.
-                    mapView?.mapboxMap?.flyTo(
-                        CameraOptions.Builder()
-                            .center(displayPoint)
-                            .zoom(17.0)
-                            .pitch(60.0)
-                            .build(),
-                        MapAnimationOptions.mapAnimationOptions { duration(1000) }
-                    )
-                    lastFollowCameraTarget = displayPoint
+                    hasCenteredOnDriver = true
+                } else if (!isRecenterAnimationInProgress) {
+                    // Skip live-follow nudges while a Recenter transition is still
+                    // running - two camera animations updating at once is what
+                    // caused the reported "zoom in close, then auto-correct" jump.
+                    val lastTarget = lastFollowCameraTarget
+                    val movedSinceLastCameraUpdate = lastTarget == null ||
+                            TurfMeasurement.distance(lastTarget, displayPoint, TurfConstants.UNIT_METERS) >= CAMERA_FOLLOW_MIN_MOVEMENT_METERS
+
+                    if (movedSinceLastCameraUpdate) {
+                        // Move on every meaningful live update, retaining the person's
+                        // current zoom/pitch instead of repeatedly resetting the camera.
+                        mapView?.mapboxMap?.easeTo(
+                            CameraOptions.Builder().center(displayPoint).build(),
+                            MapAnimationOptions.mapAnimationOptions { duration(650) }
+                        )
+                        lastFollowCameraTarget = displayPoint
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -607,6 +723,40 @@ class TrackDriverActivity : AppCompatActivity() {
             }
             uniqueParts
         }.joinToString(", ")
+    }
+
+    /**
+     * Single entry point for moving the camera onto the tracked bus at the
+     * standard tracking zoom/pitch. Used only by the Recenter button. Uses
+     * easeTo() (same animator type as the live-follow updates in updateUI())
+     * instead of the old flyTo() - mixing flyTo's fly-curve animator with
+     * easeTo's linear one on the same camera is what caused the reported
+     * "zooms in very close, then auto-adjusts smaller" jump. The
+     * isRecenterAnimationInProgress flag also stops a live GPS update from
+     * layering a second camera animation on top of this one while it runs;
+     * it's cleared via a plain postDelayed(RECENTER_ANIMATION_DURATION_MS)
+     * rather than an animator-end callback, since MapAnimationOptions'
+     * animatorListener() isn't available in this Mapbox SDK version.
+     */
+    private fun recenterOnDriver(target: Point) {
+        isRecenterAnimationInProgress = true
+        pendingRecenterAnimationReset?.let(recenterAnimationHandler::removeCallbacks)
+        val resetRunnable = Runnable { isRecenterAnimationInProgress = false }
+        pendingRecenterAnimationReset = resetRunnable
+        recenterAnimationHandler.postDelayed(resetRunnable, RECENTER_ANIMATION_DURATION_MS)
+
+        mapView?.mapboxMap?.easeTo(
+            CameraOptions.Builder()
+                .center(target)
+                .zoom(TRACKING_ZOOM)
+                .pitch(TRACKING_PITCH)
+                .build(),
+            MapAnimationOptions.mapAnimationOptions {
+                duration(RECENTER_ANIMATION_DURATION_MS)
+            }
+        )
+        lastFollowCameraTarget = target
+        hasCenteredOnDriver = true
     }
 
     private fun displayPointForDriver(driver: DriverModel): Point {
@@ -999,7 +1149,9 @@ class TrackDriverActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
+        pendingRecenterAnimationReset?.let(recenterAnimationHandler::removeCallbacks)
         mapView?.mapboxMap?.removeOnCameraChangeListener(busModelCameraChangeListener)
+        cancelCompassSubscription?.invoke()
         bitmapCache.clear()
         mapView?.onDestroy()
     }
