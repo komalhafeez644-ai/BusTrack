@@ -3520,9 +3520,17 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 updateDutyUI(true)
 
-                viewModel.currentDriver.value?.driverId?.let { driverId ->
-                    val routeName = assignedRoute?.routeName
+                viewModel.currentDriver.value?.let { driver ->
+                    val driverId = driver.driverId.ifBlank { driver.id }
+                    val routeName = assignedRoute?.routeName ?: driver.route ?: ""
+                    val busNo = driver.assignedBus ?: assignedRoute?.busNo ?: "Bus"
                     FirebaseRepository.updateDriverStatus(driverId, "Active", routeName)
+                    FirebaseRepository.notifyDriverDutyStarted(
+                        driverId = driverId,
+                        driverName = driver.name.ifBlank { "Driver" },
+                        busNo = busNo,
+                        routeName = routeName
+                    )
                 }
 
                 drawerLayout.closeDrawer(GravityCompat.END)

@@ -6,6 +6,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
 
 class AuthRepository {
@@ -160,7 +161,61 @@ class AuthRepository {
             Log.e("AuthRepo", "Firestore sync failed: ${e.message}")
         }
 
-        return if (role == "user" || role == null) "parent" else role
+        val resolvedRole = if (role == "user" || role == null) "parent" else role
+        syncFcmToken(uid, resolvedRole)
+        return resolvedRole
+    }
+
+    /**
+     * Synchronizes the FCM token with Firestore and registers role topic subscriptions.
+     * Ensures token is saved to users/{uid} and drivers/{driverId} (if driver),
+     * and subscribes the user exclusively to role_${role}.
+     */
+    fun syncFcmToken(uid: String? = null, role: String? = null) {
+        val targetUid = uid ?: auth.currentUser?.uid ?: return
+        FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                if (!token.isNullOrBlank()) {
+                    // 1. Save to users/{uid}
+                    db.collection("users").document(targetUid)
+                        .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                        .addOnSuccessListener {
+                            Log.d("AuthRepo", "FCM token synced to users/$targetUid")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.w("AuthRepo", "Failed to update users/$targetUid token: ${e.message}")
+                        }
+
+                    // 2. If user is a driver, also update matching driver doc in drivers collection
+                    val cleanRole = role?.lowercase() ?: "parent"
+                    if (cleanRole == "driver") {
+                        db.collection("drivers").whereEqualTo("uid", targetUid).get()
+                            .addOnSuccessListener { snapshot ->
+                                snapshot.documents.forEach { doc ->
+                                    db.collection("drivers").document(doc.id)
+                                        .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                Log.w("AuthRepo", "Failed to update driver token: ${e.message}")
+                            }
+                    }
+
+                    // 3. Subscribe exclusively to the user's role topic
+                    val allRoles = listOf("admin", "principal", "driver", "parent")
+                    allRoles.forEach { r ->
+                        if (r == cleanRole) {
+                            FirebaseMessaging.getInstance().subscribeToTopic("role_$r")
+                                .addOnSuccessListener { Log.d("AuthRepo", "Subscribed to topic role_$r") }
+                        } else {
+                            FirebaseMessaging.getInstance().unsubscribeFromTopic("role_$r")
+                        }
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w("AuthRepo", "Failed to retrieve FCM token: ${e.message}")
+            }
     }
 
     // REMOVED: createAdminAccount and createPrincipalAccount as they were using ghost UIDs

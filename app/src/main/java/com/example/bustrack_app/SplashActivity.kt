@@ -47,17 +47,23 @@ class SplashActivity : AppCompatActivity() {
 
         val currentUser = Firebase.auth.currentUser
         if (currentUser != null) {
-            // User is logged in, fetch role and go to dashboard
+            // User is logged in, fetch role, sync FCM token, and go to dashboard
             lifecycleScope.launch {
                 try {
-                    val role = AuthRepository().getCurrentUserRole()
+                    val authRepo = AuthRepository()
+                    val role = authRepo.getCurrentUserRole()
+                    authRepo.syncFcmToken(currentUser.uid, role)
+
                     val targetClass = when (role) {
                         "admin" -> ui.admin.AdminDashboardActivity::class.java
                         "principal" -> ui.principal.PrincipalDashboardActivity::class.java
                         "driver" -> ui.driver.DriverDashboardActivity::class.java
                         else -> ui.parent.ParentDashboardActivity::class.java
                     }
-                    startActivity(Intent(this@SplashActivity, targetClass))
+                    val targetIntent = Intent(this@SplashActivity, targetClass)
+                    // Forward any notification routing extras if SplashActivity was launched via notification tap
+                    intent.extras?.let { targetIntent.putExtras(it) }
+                    startActivity(targetIntent)
                     finish()
                 } catch (e: Exception) {
                     // Fallback to Login if role fetch fails

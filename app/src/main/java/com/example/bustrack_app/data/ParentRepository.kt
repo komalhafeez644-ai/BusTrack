@@ -73,6 +73,15 @@ class ParentRepository {
                 .set(request)
                 .await()
 
+            // Notify Admin of new tracking request requiring review
+            FirebaseRepository.sendNotification(
+                recipientRole = "admin",
+                title = "New Tracking Request",
+                message = "Parent $parentName has submitted a tracking request for student ID $studentId.",
+                type = "TRACKING_REQUEST",
+                relatedId = requestId
+            )
+
             Pair(true, null)
         } catch (e: Exception) {
             Log.e("ParentRepository", "Error submitting request: ${e.message}", e)
