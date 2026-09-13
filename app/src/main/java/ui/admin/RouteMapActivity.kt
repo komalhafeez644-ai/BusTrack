@@ -84,8 +84,13 @@ class RouteMapActivity : AppCompatActivity() {
                         val allDrivers = com.example.bustrack_app.data.DriverRepository.driverList.value ?: emptyList()
                         val assignedDriver = allDrivers.find { it.assignedBus == route.busNo }
                         assignedDriver?.let { driver ->
-                            com.example.bustrack_app.data.FirebaseRepository.notifyStopUpdated(driver.uid, route.routeName)
+                            val driverTarget = driver.uid.ifBlank { driver.driverId.ifBlank { driver.id } }
+                            com.example.bustrack_app.data.FirebaseRepository.notifyStopUpdated(driverTarget, route.routeName)
                         }
+                        com.example.bustrack_app.data.FirebaseRepository.notifyParentsOfRouteUpdate(
+                            route.routeName,
+                            "Stops on route ${route.routeName} have been updated. Please verify your pickup and drop sequence."
+                        )
                         
                         Toast.makeText(this, "Route Mapping Updated", Toast.LENGTH_SHORT).show()
                         finish()
