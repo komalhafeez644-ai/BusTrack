@@ -188,6 +188,8 @@ object FirebaseRepository {
         val normalizedDate = record.date.replace("/", "-")
         val normalizedRecord = record.copy(date = normalizedDate)
         val docId = "${record.studentId}_$normalizedDate"
+        // Firestore Android persistence stores this merge locally while offline and
+        // uploads it when connectivity returns. The stable document id is idempotent.
         db.collection("attendance").document(docId).set(normalizedRecord, com.google.firebase.firestore.SetOptions.merge())
             .addOnCompleteListener { onComplete(it.isSuccessful) }
     }
