@@ -21,7 +21,7 @@ class DriverProfileActivity : AppCompatActivity() {
         binding = DriverprofileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        window.statusBarColor = Color.parseColor("#0D1B3E")
+        window.statusBarColor = getColor(R.color.primaryDark)
 
         setupClickListeners()
         observeDriverRepo()

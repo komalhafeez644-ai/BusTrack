@@ -156,6 +156,7 @@ object FirebaseRepository {
         stopArrivalTimes: Map<String, String>,
         stopEtaTimes: Map<String, String>,
         isNavigating: Boolean,
+        tripDirection: String,
         traveledRouteSegments: List<String> = emptyList()
     ) {
         val updates = mutableMapOf<String, Any?>(
@@ -165,7 +166,11 @@ object FirebaseRepository {
             "eta" to eta,
             "speed" to speed,
             "load" to load,
-            "isNavigating" to isNavigating
+            "isNavigating" to isNavigating,
+            // Keep direction in the same atomic live-state write as the route and
+            // stop maps. Tracking clients must never pair return-trip geometry with
+            // an older forward-trip direction.
+            "tripDirection" to tripDirection
         )
         if (isNavigating) {
             updates["currentRoutePolyline"] = currentPolyline

@@ -2,6 +2,12 @@
     <!-- Base application theme. -->
     <style name="Base.Theme.BusTrack_App" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="materialButtonStyle">@style/AppButtonStyle</item>
+        <item name="colorPrimary">@color/primary_blue</item>
+        <item name="colorSecondary">@color/primary_blue</item>
+        <item name="android:statusBarColor">@color/primaryDark</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="AppButtonStyle" parent="Widget.MaterialComponents.Button">
@@ -13,7 +19,10 @@
     <!-- Driver Module Theme Compatibility -->
     <style name="Theme.Bustrack" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary_blue</item>
-        <item name="android:statusBarColor">@color/primary_blue</item>
+        <item name="android:statusBarColor">@color/primaryDark</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="CircleImage">

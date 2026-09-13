@@ -41,7 +41,7 @@ class IntroActivity : AppCompatActivity() {
         tvSkipAction = findViewById(R.id.tvSkipAction)
         loadingIndicator = findViewById(R.id.loadingIndicator)
 
-        window.statusBarColor = Color.parseColor("#051024")
+        window.statusBarColor = getColor(R.color.primaryDark)
 
         val pagerAdapter = IntroSlideAdapter(this)
         viewPager.adapter = pagerAdapter
