@@ -6,6 +6,11 @@ import android.view.LayoutInflater
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import android.graphics.Bitmap
@@ -129,19 +134,26 @@ class RouteMapActivity : AppCompatActivity() {
         tvLat.text = String.format(Locale.US, "%.6f", point.latitude())
         tvLng.text = String.format(Locale.US, "%.6f", point.longitude())
 
-        AlertDialog.Builder(this)
-            .setTitle("Add New Stop")
-            .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
-                val name = etName.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    saveNewStop(name, point)
-                } else {
-                    Toast.makeText(this, "Stop name is required", Toast.LENGTH_SHORT).show()
-                }
+        // The inflated layout is the entire rounded dialog surface. AlertDialog
+        // would add its own square-cornered container around it.
+        val dialog = Dialog(this)
+        dialog.setContentView(dialogView)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.findViewById<View>(R.id.btnCancelStop).setOnClickListener { dialog.dismiss() }
+        dialog.findViewById<View>(R.id.btnSaveStop).setOnClickListener {
+            val name = etName.text.toString().trim()
+            if (name.isEmpty()) {
+                etName.error = "Stop name is required"
+                return@setOnClickListener
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            saveNewStop(name, point)
+            dialog.dismiss()
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.90).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun saveNewStop(name: String, point: Point) {

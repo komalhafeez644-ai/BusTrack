@@ -55,15 +55,97 @@ class AuthRepository {
                 }
             }
 
-            val uid = authResult.user?.uid
+            val user = authResult.user
+            val uid = user?.uid
 
-            if (uid != null) {
-                return getOrSyncRole(uid, cleanEmail)
+            if (uid != null && user != null) {
+                // Refresh/reload the Firebase user to get latest emailVerified state
+                user.reload().await()
+
+                // Resolve user role
+                val role = getOrSyncRole(uid, cleanEmail)
+
+                // Drivers (and Admin/Principal) set their password directly via the secure Firebase email link,
+                // proving email ownership. They do not require a separate verification step.
+                val isExemptFromSeparateVerification = role == "driver" || role == "admin" || role == "principal" || 
+                    cleanEmail == "admin@gmail.com" || cleanEmail == "principal@gmail.com"
+
+                if (!isExemptFromSeparateVerification && !user.isEmailVerified) {
+                    auth.signOut()
+                    return "EMAIL_NOT_VERIFIED:$cleanEmail"
+                }
+
+                return role
             }
             "Authentication failed"
         } catch (e: Exception) {
             Log.e("AuthRepo", "Login Error: ${e.message}")
             e.localizedMessage ?: "Invalid email or password"
+        }
+    }
+
+    /**
+     * Registers a new Parent account.
+     * Immediately triggers sendEmailVerification() and creates Firestore profile without password.
+     */
+    suspend fun register(email: String, password: String): Result<Unit> {
+        val cleanEmail = email.trim().lowercase()
+        return try {
+            val result = auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+            val user = result.user ?: throw Exception("Failed to create user account")
+
+            // Immediately send Firebase verification email
+            user.sendEmailVerification().await()
+
+            // Save user profile in Firestore users/{uid} (no password stored)
+            val userData = mapOf(
+                "uid" to user.uid,
+                "email" to cleanEmail,
+                "role" to "parent",
+                "fullName" to "Parent",
+                "createdAt" to com.google.firebase.Timestamp.now()
+            )
+            db.collection("users").document(user.uid).set(userData).await()
+
+            // Sign out so they cannot access until verified
+            auth.signOut()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Registration Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Resends email verification by briefly authenticating the unverified user.
+     */
+    suspend fun resendVerificationEmail(email: String, password: String): Result<Unit> {
+        val cleanEmail = email.trim().lowercase()
+        return try {
+            val result = auth.signInWithEmailAndPassword(cleanEmail, password).await()
+            val user = result.user ?: throw Exception("Failed to authenticate user")
+            user.sendEmailVerification().await()
+            auth.signOut()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            auth.signOut()
+            Log.e("AuthRepo", "Resend Verification Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Sends password reset email using Firebase Authentication for any registered role.
+     */
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
+        val cleanEmail = email.trim().lowercase()
+        return try {
+            auth.sendPasswordResetEmail(cleanEmail).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Password Reset Error: ${e.message}")
+            Result.failure(e)
         }
     }
 

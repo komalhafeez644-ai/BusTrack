@@ -83,8 +83,6 @@ class AddDriverActivity : AppCompatActivity() {
         val cnic = binding.etCnic.text.toString().trim()
         val phone = binding.etPhone.text.toString().trim()
         val email = binding.etEmail.text.toString().trim()
-        val pass = binding.etPassword.text.toString()
-        val confirmPass = binding.etConfirmPassword.text.toString()
 
         if (empId.isEmpty()) {
             binding.etEmployeeId.error = "Employee ID is required"
@@ -118,40 +116,47 @@ class AddDriverActivity : AppCompatActivity() {
             return false
         }
 
-        if (!FormUtils.isValidPassword(pass)) {
-            binding.etPassword.error = "Password must be at least 8 characters with letters and numbers"
-            return false
-        }
-
-        if (pass != confirmPass) {
-            binding.etConfirmPassword.error = "Passwords do not match"
-            return false
-        }
         return true
     }
 
     private fun checkEmailAndProceed() {
         val email = binding.etEmail.text.toString().trim().lowercase()
+        val empId = binding.etEmployeeId.text.toString().trim()
         binding.btnAddDriver.isEnabled = false
         
         val db = FirebaseFirestore.getInstance()
         
-        // Strictly check if email already exists in users collection
-        db.collection("users")
-            .whereEqualTo("email", email)
-            .get()
-            .addOnSuccessListener { query ->
-                if (!query.isEmpty) {
+        // 1. Check if employee ID already exists
+        db.collection("drivers").document(empId).get()
+            .addOnSuccessListener { empDoc ->
+                if (empDoc.exists()) {
                     binding.btnAddDriver.isEnabled = true
-                    binding.etEmail.error = "This email is already registered"
-                    Toast.makeText(this, "A user with this email already exists!", Toast.LENGTH_LONG).show()
-                } else {
-                    if (selectedImageUri != null) {
-                        uploadAndSave()
-                    } else {
-                        handleAccountCreation("")
-                    }
+                    binding.etEmployeeId.error = "Driver with this Employee ID already exists"
+                    Toast.makeText(this, "Employee ID already exists!", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
                 }
+
+                // 2. Strictly check if email already exists in users collection
+                db.collection("users")
+                    .whereEqualTo("email", email)
+                    .get()
+                    .addOnSuccessListener { query ->
+                        if (!query.isEmpty) {
+                            binding.btnAddDriver.isEnabled = true
+                            binding.etEmail.error = "This email is already registered"
+                            Toast.makeText(this, "A user with this email already exists!", Toast.LENGTH_LONG).show()
+                        } else {
+                            if (selectedImageUri != null) {
+                                uploadAndSave()
+                            } else {
+                                handleAccountCreation("")
+                            }
+                        }
+                    }
+                    .addOnFailureListener {
+                        binding.btnAddDriver.isEnabled = true
+                        Toast.makeText(this, "Verification failed. Check internet.", Toast.LENGTH_SHORT).show()
+                    }
             }
             .addOnFailureListener {
                 binding.btnAddDriver.isEnabled = true
@@ -175,11 +180,10 @@ class AddDriverActivity : AppCompatActivity() {
 
     private fun handleAccountCreation(imageUrl: String) {
         val email = binding.etEmail.text.toString().trim().lowercase()
-        val password = binding.etPassword.text.toString()
         
         lifecycleScope.launch {
             try {
-                // To create a second account WITHOUT logging out the Admin:
+                // Provision account via secondary app so Admin remains logged in
                 val options = FirebaseApp.getInstance().options
                 val secondaryApp = try {
                     FirebaseApp.initializeApp(this@AddDriverActivity, options, "Secondary")
@@ -189,19 +193,25 @@ class AddDriverActivity : AppCompatActivity() {
                 
                 val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
                 
-                // Admin creates driver using createUserWithEmailAndPassword
-                val result = secondaryAuth.createUserWithEmailAndPassword(email, password).await()
-                val uid = result.user?.uid
+                // Admin does NOT create, see, or enter driver password.
+                // Provision account with internal strong temporary password:
+                val tempPassword = java.util.UUID.randomUUID().toString() + "Bt@1"
+                val result = secondaryAuth.createUserWithEmailAndPassword(email, tempPassword).await()
+                val uid = result.user?.uid ?: throw Exception("Failed to get driver UID")
                 
-                if (uid != null) {
-                    saveDriverToCollections(uid, imageUrl)
-                    secondaryAuth.signOut() // Clean up secondary session
-                }
+                // Immediately send Firebase Authentication password-setup link to driver's email
+                secondaryAuth.sendPasswordResetEmail(email).await()
+                
+                // Sign out secondary session cleanly
+                secondaryAuth.signOut()
+                
+                // Save driver profile in Firestore (strictly no password saved)
+                saveDriverToCollections(uid, imageUrl)
             } catch (e: Exception) {
                 binding.btnAddDriver.isEnabled = true
                 val errorMsg = if (e.message?.contains("already in use") == true) 
-                    "This email is already in use in Firebase Auth. Delete it from console first." 
-                    else e.message
+                    "This email is already registered in Firebase Auth." 
+                    else e.localizedMessage ?: "Failed to create driver account"
                 Toast.makeText(this@AddDriverActivity, "Auth Error: $errorMsg", Toast.LENGTH_LONG).show()
             }
         }
@@ -223,7 +233,8 @@ class AddDriverActivity : AppCompatActivity() {
             "email" to email,
             "phone" to phone,
             "role" to "driver",
-            "employeeId" to empId
+            "employeeId" to empId,
+            "createdAt" to com.google.firebase.Timestamp.now()
         )
 
         // 2. Save to 'drivers' collection (for Fleet Management)
@@ -246,7 +257,7 @@ class AddDriverActivity : AppCompatActivity() {
                 db.collection("users").document(uid).set(userData).await()
                 db.collection("drivers").document(empId).set(driverData).await()
                 
-                showSuccessDialog(name, driverData)
+                showSuccessDialog(name, email, driverData)
             } catch (e: Exception) {
                 binding.btnAddDriver.isEnabled = true
                 Toast.makeText(this@AddDriverActivity, "Firestore Error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -254,7 +265,7 @@ class AddDriverActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSuccessDialog(driverName: String, newDriver: DriverModel) {
+    private fun showSuccessDialog(driverName: String, driverEmail: String, newDriver: DriverModel) {
         val dialog = Dialog(this)
         dialog.setContentView(R.layout.layout_success_dialog)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -263,7 +274,7 @@ class AddDriverActivity : AppCompatActivity() {
         val btnDone = dialog.findViewById<Button>(R.id.btnDone)
         val txtMessage = dialog.findViewById<TextView>(R.id.dialogMessage)
 
-        txtMessage.text = "$driverName account created. Driver can now login with their email and provided password."
+        txtMessage.text = "Driver account created for $driverName.\n\nA secure password setup link has been sent to $driverEmail.\nThe driver can open the link to set their password and log in."
 
         btnDone.setOnClickListener {
             dialog.dismiss()

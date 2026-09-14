@@ -154,6 +154,27 @@
             android:name="ui_authentication.ForgotPasswordActivity"
             android:exported="false" />
         <activity
+            android:name="ui_authentication.ResetPasswordActivity"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="bustrackapp-1a6c98c0.firebaseapp.com"
+                    android:pathPrefix="/__/auth/action" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="bustrack"
+                    android:host="reset-password" />
+            </intent-filter>
+        </activity>
+        <activity
             android:name="ui.admin.RouteAnalysisActivity"
             android:exported="false" />
         <activity

@@ -1,79 +1,178 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="20dp">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Stop Name"
-        android:textColor="@color/black"
-        android:textSize="14sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/etStopName"
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:layout_marginTop="8dp"
-        android:background="@android:drawable/editbox_background"
-        android:hint="e.g., Main Gate"
-        android:paddingHorizontal="12dp"
-        android:textColor="@color/black"
-        android:textSize="14sp" />
+    app:cardCornerRadius="28dp"
+    app:cardElevation="8dp"
+    app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:orientation="horizontal">
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp">
 
-        <LinearLayout
-            android:layout_width="0dp"
+        <!-- Icon Badge -->
+        <FrameLayout
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_circle_ligh"
+            android:backgroundTint="#EBF3FF">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:src="@drawable/direction"
+                app:tint="@color/primaryBlue" />
+        </FrameLayout>
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_marginTop="16dp"
+            android:text="Add Bus Stop"
+            android:textColor="@color/primaryDark"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Latitude"
-                android:textSize="12sp"
-                android:textColor="@color/lightGray" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Enter stop name for marked location"
+            android:textColor="@color/lightGray"
+            android:textSize="13sp" />
 
-            <TextView
-                android:id="@+id/tvLatValue"
-                android:layout_width="wrap_content"
+        <!-- Stop Name Input -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilStopName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_google"
+            app:boxBackgroundMode="none"
+            app:hintEnabled="false"
+            app:errorEnabled="true"
+            app:startIconDrawable="@drawable/direction"
+            app:startIconTint="#9E9E9E">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etStopName"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="0.000000"
-                android:textColor="@color/primaryDark"
-                android:textStyle="bold" />
+                android:background="@android:color/transparent"
+                android:hint="e.g., Main Campus Gate"
+                android:inputType="textCapWords"
+                android:paddingVertical="14dp"
+                android:textColor="@color/DarkGrey"
+                android:textColorHint="@color/textColorHint"
+                android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Coordinates Box -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_google"
+            android:backgroundTint="#F8FAFD"
+            android:padding="12dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LATITUDE"
+                    android:textSize="10sp"
+                    android:textColor="@color/textColorHint"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvLatValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="0.000000"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="#E2E8F0"
+                android:layout_marginHorizontal="12dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LONGITUDE"
+                    android:textSize="10sp"
+                    android:textColor="@color/textColorHint"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvLngValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="0.000000"
+                    android:textColor="@color/primaryDark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
 
+        <!-- Action Buttons Row -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Longitude"
-                android:textSize="12sp"
-                android:textColor="@color/lightGray" />
-
-            <TextView
-                android:id="@+id/tvLngValue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0.000000"
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnCancelStop"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="Cancel"
+                android:textAllCaps="false"
                 android:textColor="@color/primaryDark"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/btnSaveStop"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_button"
+                android:text="Save Stop"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
     </LinearLayout>
-
-</LinearLayout>
+</androidx.cardview.widget.CardView>

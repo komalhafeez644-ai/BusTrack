@@ -172,6 +172,11 @@ class DriverDashboardActivity : AppCompatActivity() {
     // brand-new trip (where clearing history is correct) from a route/style update.
     private var navigationUiActive = false
     private var shouldFitCameraToRoute = true
+    // A route can arrive from LiveData before Mapbox has finished loading its
+    // style. Keep the fit request until that style is ready instead of consuming
+    // it against the default globe camera.
+    private var isMapStyleReady = false
+    private var dashboardCameraFitPending = true
     private var currentRouteGeometry: String? = null
     private var traveledRouteGeometry: String? = null
     private var isVoiceEnabled = true
@@ -422,6 +427,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         setupStopsRecyclerView()
 
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+            isMapStyleReady = true
+            dashboardCameraFitPending = true
             mapView?.mapboxMap?.setBounds(
                 CameraBoundsOptions.Builder()
                     .minZoom(3.0)
@@ -1938,9 +1945,25 @@ class DriverDashboardActivity : AppCompatActivity() {
             return
         }
 
+        // The annotations and camera calculation must run against a loaded style.
+        // Otherwise a route observer can consume shouldFitCameraToRoute while the
+        // MapView still has its default world camera, leaving valid route data
+        // visible only after the driver manually zooms.
+        if (!isMapStyleReady) {
+            dashboardCameraFitPending = true
+            return
+        }
+
+        if (dashboardCameraFitPending) {
+            shouldFitCameraToRoute = true
+        }
+
         // Render the locally available route first. Road geometry is a visual
         // refinement and must not make entering the dashboard wait on the network.
         drawStaticSavedRoute(route)
+        if (!shouldFitCameraToRoute) {
+            dashboardCameraFitPending = false
+        }
 
         val loc = currentLocation
         if (loc != null && isCurrentLocationLive) {
@@ -1967,7 +1990,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         val route = assignedRoute ?: return
         val previewGeneration = ++dashboardRoutePreviewGeneration
         shouldFitCameraToRoute = true
+        dashboardCameraFitPending = true
+        if (!isMapStyleReady) return
         drawStaticSavedRoute(route)
+        if (!shouldFitCameraToRoute) {
+            dashboardCameraFitPending = false
+        }
 
         // Replace the immediate saved-path preview with road geometry when it is
         // available, but never make the dashboard wait for that network response.
@@ -2286,7 +2314,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
 
-            RouteRepository.routeList.value?.find { it.routeName == data.currentRoute }?.let { route ->
+            resolveAssignedRoute(data)?.let { route ->
                 val routeChangedWhileNavigating = assignedRoute?.id != route.id && isNavigating
                 if (assignedRoute?.id != route.id) {
                     isNearStart = false
@@ -2668,6 +2696,44 @@ class DriverDashboardActivity : AppCompatActivity() {
             ?.geometry(empty)
         (style.getSource(NAV_TRAVELED_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
             ?.geometry(empty)
+    }
+
+    /** Restores route sources after a style reload without requiring a GPS update. */
+    private fun restoreNavigationRouteGeometry(style: Style) {
+        if (fullNavigationPoints.size < 2) return
+        (style.getSource(NAV_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+            ?.geometry(LineString.fromLngLats(fullNavigationPoints))
+
+        val traveledSegments = currentTraveledSegments()
+        if (traveledSegments.isNotEmpty()) {
+            val traveledGeometry = if (traveledSegments.size == 1) {
+                LineString.fromLngLats(traveledSegments.first())
+            } else {
+                MultiLineString.fromLineStrings(traveledSegments.map { LineString.fromLngLats(it) })
+            }
+            (style.getSource(NAV_TRAVELED_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                ?.geometry(traveledGeometry)
+        }
+    }
+
+    /**
+     * Driver assignments in existing Firestore data may contain a route name,
+     * route code, route document id, or assigned bus number.  The dashboard model
+     * already accepts those forms; restoring the map must use the same matching
+     * rules instead of only comparing the display name.
+     */
+    private fun resolveAssignedRoute(data: com.example.bustrack_app.models.DriverDashboardModel): RouteModel? {
+        val driver = viewModel.currentDriver.value
+        return RouteRepository.routeList.value?.find { route ->
+            route.id == driver?.route ||
+                route.id == data.currentRoute ||
+                route.routeName == driver?.route ||
+                route.routeName == data.currentRoute ||
+                route.routeCode == driver?.route ||
+                route.routeCode == data.currentRoute ||
+                route.busNo == driver?.assignedBus ||
+                route.busNo == data.busNumber
+        }
     }
 
     private fun setupClickListeners() {
@@ -3258,6 +3324,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
                     if (routes.isEmpty()) return
                     val selectedRoute = shortestRoadRoute(routes)
+                    // Keep a local, immediately usable copy before the asynchronous
+                    // RoutesObserver/style callback runs. This is the source used to
+                    // restore the map if navigation starts while GPS is idle.
+                    selectedRoute.directionsRoute.geometry()?.let { geometry ->
+                        fullNavigationPoints = LineString.fromPolyline(geometry, 6).coordinates()
+                    }
                     isNavigating = true
                     nav.setNavigationRoutes(listOf(selectedRoute))
                     updateStopEtasFromNavigationRoute(selectedRoute)
@@ -3290,7 +3362,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                         Toast.makeText(this@DriverDashboardActivity, "Location permission missing - navigation tracking will not update.", Toast.LENGTH_LONG).show()
                     }
 
-                    startFollowingPuck()
                     setNavigationMode(true, showPlaceholderInstruction = false)
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
@@ -3352,6 +3423,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 updateBottomSheetTheme(true)
 
                 if (isNewNavigationSession) mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
+                    isMapStyleReady = true
                     setupNavigationLayers(style)
                     clearNavigationRouteGeometry(style)
 
@@ -3369,6 +3441,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                         fullNavigationPoints = LineString.fromPolyline(navRoute.directionsRoute.geometry()!!, 6).coordinates()
 
                         drawPointsOnMap(fullNavigationPoints)
+                        // A style reload starts with empty GeoJSON sources. The bus
+                        // can be stationary, so do not wait for a fresh GPS callback
+                        // before putting the active route back on the map.
+                        restoreNavigationRouteGeometry(style)
 
                         lastRawPositionForSnap = null
                         currentLocation?.let { loc ->
@@ -3391,8 +3467,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                     viewModel.currentDriver.value?.driverId?.let { driverId ->
                         val arrivalMap = stopArrivalTimes.mapKeys { it.key.toString() }
                         val etaMap = stopEtaTexts.mapKeys { it.key.toString() }
+                        val routePolyline = fullNavigationPoints
+                            .takeIf { it.size >= 2 }
+                            ?.let { LineString.fromLngLats(it).toPolyline(6) }
                         FirebaseRepository.updateDriverRouteGeometry(
-                            driverId, null, null, nextGlobalStopIndex, arrivalMap, true, etaMap
+                            driverId, routePolyline, null, nextGlobalStopIndex, arrivalMap, true, etaMap
                         )
                     }
                 }
@@ -3413,7 +3492,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 traveledRouteGeometry = null
 
                 mapView?.viewport?.idle()
-                mapView?.mapboxMap?.setCamera(CameraOptions.Builder().padding(EdgeInsets(0.0, 0.0, 0.0, 0.0)).build())
+                dashboardCameraFitPending = true
 
                 toolbar.visibility = View.VISIBLE
                 headerBg.visibility = View.VISIBLE
@@ -3424,7 +3503,9 @@ class DriverDashboardActivity : AppCompatActivity() {
                 updateBottomSheetTheme(false)
 
                 if (reloadStyle) {
+                    isMapStyleReady = false
                     mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+                        isMapStyleReady = true
                         recreateAnnotationManagers()
                         setupLocationPuck()
                         mapView?.location?.pulsingEnabled = true

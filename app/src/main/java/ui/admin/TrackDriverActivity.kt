@@ -66,6 +66,9 @@ import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.turf.TurfConstants
 import com.mapbox.turf.TurfMeasurement
 import com.mapbox.turf.TurfMisc
@@ -261,6 +264,21 @@ class TrackDriverActivity : AppCompatActivity() {
                 mapView?.animate()?.alpha(1f)?.setDuration(180)?.start()
                 observeViewModel()
             }
+
+            // A viewer's pan/pinch must win over incoming tracking updates. Without
+            // this, the 650 ms follow animation can restart while the user is
+            // zooming, making the gesture feel stuck or jittery. Recenter is the
+            // explicit way to resume follow.
+            mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
+                override fun onMoveBegin(detector: MoveGestureDetector) {
+                    if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                        currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
+                        isRecenterAnimationInProgress = false
+                    }
+                }
+                override fun onMove(detector: MoveGestureDetector): Boolean = false
+                override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+            })
 
             setupBottomSheet()
             viewModel.setDriverId(driverId)

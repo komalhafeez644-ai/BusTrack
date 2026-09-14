@@ -84,45 +84,10 @@
                     android:orientation="vertical"
                     android:padding="28dp">
 
-                    <!-- Full Name -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Full Name"
-                        android:textColor="@color/labelColor"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilFullName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        app:errorEnabled="true"
-                        android:background="@drawable/bg_google"
-                        app:boxBackgroundMode="none"
-                        app:hintEnabled="false"
-                        app:startIconDrawable="@drawable/ic_person"
-                        app:startIconTint="#9E9E9E">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etFullName"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="@android:color/transparent"
-                            android:hint="John Doe"
-                            android:inputType="textPersonName"
-                            android:paddingVertical="14dp"
-                            android:textColorHint="@color/textColorHint"
-                            android:textColor="@color/DarkGrey"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
                     <!-- Email Address -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
                         android:text="Email Address"
                         android:textColor="@color/labelColor"
                         android:textSize="14sp"
@@ -227,88 +192,31 @@
                             android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Phone Number -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
-                        android:text="Phone Number"
-                        android:textColor="@color/labelColor"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilPhone"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        app:errorEnabled="true"
-                        android:background="@drawable/bg_google"
-                        app:boxBackgroundMode="none"
-                        app:hintEnabled="false"
-                        app:startIconDrawable="@drawable/phone_24"
-                        app:startIconTint="#9E9E9E">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etPhone"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="@android:color/transparent"
-                            android:hint="+92 300 1234567"
-                            android:inputType="phone"
-                            android:paddingVertical="14dp"
-                            android:textColorHint="@color/textColorHint"
-                            android:textColor="@color/DarkGrey"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <!-- Student ID -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
-                        android:text="Student ID"
-                        android:textColor="@color/labelColor"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilRegNumber"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        app:errorEnabled="true"
-                        android:background="@drawable/bg_google"
-                        app:boxBackgroundMode="none"
-                        app:hintEnabled="false"
-                        app:startIconDrawable="@drawable/ic_assignment"
-                        app:startIconTint="#9E9E9E">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etRegNumber"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="@android:color/transparent"
-                            android:hint="e.g. STU-2024-001"
-                            android:inputType="text"
-                            android:paddingVertical="14dp"
-                            android:textColorHint="@color/textColorHint"
-                            android:textColor="@color/DarkGrey"
-                            android:textSize="15sp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
                     <!-- Sign Up Button -->
-                    <androidx.appcompat.widget.AppCompatButton
-                        android:id="@+id/btnCreateAccount"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="60dp"
-                        android:layout_marginTop="32dp"
-                        android:background="@drawable/bg_button"
-                        android:text="Create Account"
-                        android:textAllCaps="false"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="32dp">
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/btnCreateAccount"
+                            android:layout_width="match_parent"
+                            android:layout_height="60dp"
+                            android:background="@drawable/bg_button"
+                            android:text="Create Account"
+                            android:textAllCaps="false"
+                            android:textColor="@color/white"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <ProgressBar
+                            android:id="@+id/signupProgress"
+                            android:layout_width="30dp"
+                            android:layout_height="30dp"
+                            android:layout_gravity="center"
+                            android:indeterminateTint="@color/white"
+                            android:visibility="gone" />
+                    </FrameLayout>
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

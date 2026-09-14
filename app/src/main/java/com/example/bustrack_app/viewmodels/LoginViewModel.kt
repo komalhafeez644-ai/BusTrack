@@ -16,6 +16,7 @@ class LoginViewModel : ViewModel() {
     private val repository = AuthRepository()
 
     val loginState = MutableLiveData<Resource<String>>()
+    val resendState = MutableLiveData<Resource<String>>()
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
@@ -26,6 +27,18 @@ class LoginViewModel : ViewModel() {
                 loginState.value = Resource.Success(result!!)
             } else {
                 loginState.value = Resource.Error(result ?: "Invalid Email or Password")
+            }
+        }
+    }
+
+    fun resendVerificationEmail(email: String, password: String) {
+        viewModelScope.launch {
+            resendState.value = Resource.Loading()
+            val result = repository.resendVerificationEmail(email, password)
+            result.onSuccess {
+                resendState.value = Resource.Success("Verification email has been resent to $email. Please check your inbox.")
+            }.onFailure { error ->
+                resendState.value = Resource.Error(error.localizedMessage ?: "Failed to resend verification email")
             }
         }
     }

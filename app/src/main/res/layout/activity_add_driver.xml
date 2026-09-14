@@ -230,56 +230,6 @@
                             android:inputType="textEmailAddress" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:hint="Password"
-                        android:textColorHint="#666666"
-                        app:hintTextColor="@color/primaryBlue"
-                        app:boxStrokeColor="@color/box_stroke_selector"
-                        app:endIconMode="password_toggle"
-                        app:endIconTint="#8E8E93"
-                        app:startIconDrawable="@drawable/lock"
-                        app:boxCornerRadiusTopStart="12dp"
-                        app:boxCornerRadiusTopEnd="12dp"
-                        app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etPassword"
-                            android:textColor="@color/black"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="textPassword"
-                            android:hint="Min. 8 characters (A-z, 0-9)" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:hint="Confirm Password"
-                        android:textColorHint="#666666"
-                        app:hintTextColor="@color/primaryBlue"
-                        app:boxStrokeColor="@color/box_stroke_selector"
-                        app:endIconMode="password_toggle"
-                        app:endIconTint="#8E8E93"
-                        app:startIconDrawable="@drawable/lock_reset"
-                        app:boxCornerRadiusTopStart="12dp"
-                        app:boxCornerRadiusTopEnd="12dp"
-                        app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etConfirmPassword"
-                            android:textColor="@color/black"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="textPassword"
-                            android:hint="Repeat your password" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"

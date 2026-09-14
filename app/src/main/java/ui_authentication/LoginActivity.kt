@@ -25,6 +25,8 @@ class LoginActivity : AppCompatActivity() {
 
     private val viewModel: LoginViewModel by viewModels()
     private lateinit var googleSignInClient: GoogleSignInClient
+    private var lastEnteredEmail = ""
+    private var lastEnteredPassword = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +52,8 @@ class LoginActivity : AppCompatActivity() {
             ViewUtils.applyClickEffect(it)
             val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString().trim()
+            lastEnteredEmail = email
+            lastEnteredPassword = password
 
             // Reset errors
             tilEmail.error = null
@@ -101,6 +105,7 @@ class LoginActivity : AppCompatActivity() {
         }
 
         observeLogin()
+        observeResendState()
     }
 
     private fun observeLogin() {
@@ -117,6 +122,7 @@ class LoginActivity : AppCompatActivity() {
                 is Resource.Success -> {
                     progressBar.visibility = android.view.View.GONE
                     val role = resource.data
+                    cacheAuthenticatedRole(role)
                     when (role) {
                         "admin" -> {
                             Toast.makeText(this, "Admin Login Successful", Toast.LENGTH_SHORT).show()
@@ -155,9 +161,59 @@ class LoginActivity : AppCompatActivity() {
                     progressBar.visibility = android.view.View.GONE
                     btnLogin.text = getString(R.string.sign_in)
                     btnLogin.isEnabled = true
-                    Toast.makeText(this, resource.message ?: "Login Failed", Toast.LENGTH_SHORT).show()
+
+                    val errorMsg = resource.message ?: "Login Failed"
+                    if (errorMsg.startsWith("EMAIL_NOT_VERIFIED:")) {
+                        val unverifiedEmail = errorMsg.substringAfter("EMAIL_NOT_VERIFIED:")
+                        showEmailNotVerifiedDialog(unverifiedEmail, lastEnteredPassword)
+                    } else {
+                        Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
+    }
+
+    /** Keeps the already-resolved role available when a valid Firebase session is reopened offline. */
+    private fun cacheAuthenticatedRole(role: String) {
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+        getSharedPreferences("AppPrefs", MODE_PRIVATE)
+            .edit()
+            .putString("authenticated_role_$uid", role)
+            .apply()
+    }
+
+    private fun observeResendState() {
+        viewModel.resendState.observe(this) { resource ->
+            when (resource) {
+                is Resource.Loading -> {
+                    Toast.makeText(this, "Sending verification email...", Toast.LENGTH_SHORT).show()
+                }
+                is Resource.Success -> {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Verification Sent")
+                        .setMessage(resource.data ?: "A new verification link has been sent to your email. Please check your inbox.")
+                        .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                        .show()
+                }
+                is Resource.Error -> {
+                    Toast.makeText(this, resource.message ?: "Failed to resend verification email", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showEmailNotVerifiedDialog(email: String, password: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Email Not Verified")
+            .setMessage("Your email address ($email) has not been verified yet.\n\nPlease check your inbox and verify your account to log in.")
+            .setPositiveButton("Resend Verification") { dialog, _ ->
+                dialog.dismiss()
+                viewModel.resendVerificationEmail(email, password)
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 }
