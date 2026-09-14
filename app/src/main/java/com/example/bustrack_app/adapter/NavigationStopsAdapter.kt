@@ -14,13 +14,20 @@ class NavigationStopsAdapter(
     private var stops: List<StopItem>,
     private var currentStopIndex: Int = 0,
     private var activeStopStatus: String = "NEXT",
-    private var isDarkMode: Boolean = false
+    private var isDarkMode: Boolean = false,
+    private var displayNumbers: List<Int> = emptyList()
 ) : RecyclerView.Adapter<NavigationStopsAdapter.ViewHolder>() {
 
-    fun updateStops(newStops: List<StopItem>, currentIndex: Int, status: String = "NEXT") {
+    fun updateStops(
+        newStops: List<StopItem>,
+        currentIndex: Int,
+        status: String = "NEXT",
+        displayNumbers: List<Int> = emptyList()
+    ) {
         this.stops = newStops
         this.currentStopIndex = currentIndex
         this.activeStopStatus = status
+        this.displayNumbers = displayNumbers
         notifyDataSetChanged()
     }
 
@@ -56,7 +63,8 @@ class NavigationStopsAdapter(
                 else -> stop.time // Likely a fixed time like "09:35 AM"
             }
             binding.tvStopTime.text = displayTime
-            binding.tvStopIndex.text = (position + 1).toString()
+            binding.tvStopIndex.text = displayNumbers.getOrNull(position)?.toString()
+                ?: (position + 1).toString()
 
             // Apply Theme Colors
             val primaryColor = if (isDarkMode) Color.WHITE else Color.parseColor("#0F172A")

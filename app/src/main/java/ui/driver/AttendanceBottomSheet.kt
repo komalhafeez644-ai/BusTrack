@@ -92,15 +92,15 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        FirebaseRepository.fetchStudentsByStop(routeName, stopName) { fetchedStudents ->
-            if (!isAdded) return@fetchStudentsByStop
+        val onStudentsLoaded: (List<StudentModel>) -> Unit = studentsLoaded@{ fetchedStudents ->
+            if (!isAdded) return@studentsLoaded
 
             students = fetchedStudents
 
             if (students.isEmpty()) {
                 recyclerView.visibility = View.GONE
                 tvNoStudents.visibility = View.VISIBLE
-                return@fetchStudentsByStop
+                return@studentsLoaded
             }
 
             recyclerView.visibility = View.VISIBLE
@@ -127,6 +127,8 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 recyclerView.adapter = adapter
             }
         }
+
+        FirebaseRepository.fetchStudentsByStop(routeName, stopName, onStudentsLoaded)
     }
 
     private fun saveAllAttendance() {

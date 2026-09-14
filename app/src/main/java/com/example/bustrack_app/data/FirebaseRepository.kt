@@ -156,6 +156,7 @@ object FirebaseRepository {
         stopArrivalTimes: Map<String, String>,
         stopEtaTimes: Map<String, String>,
         isNavigating: Boolean,
+        tripDirection: String,
         traveledRouteSegments: List<String> = emptyList()
     ) {
         val updates = mutableMapOf<String, Any?>(
@@ -165,7 +166,11 @@ object FirebaseRepository {
             "eta" to eta,
             "speed" to speed,
             "load" to load,
-            "isNavigating" to isNavigating
+            "isNavigating" to isNavigating,
+            // Keep direction in the same atomic live-state write as the route and
+            // stop maps. Tracking clients must never pair return-trip geometry with
+            // an older forward-trip direction.
+            "tripDirection" to tripDirection
         )
         if (isNavigating) {
             updates["currentRoutePolyline"] = currentPolyline
@@ -183,6 +188,8 @@ object FirebaseRepository {
         val normalizedDate = record.date.replace("/", "-")
         val normalizedRecord = record.copy(date = normalizedDate)
         val docId = "${record.studentId}_$normalizedDate"
+        // Firestore Android persistence stores this merge locally while offline and
+        // uploads it when connectivity returns. The stable document id is idempotent.
         db.collection("attendance").document(docId).set(normalizedRecord, com.google.firebase.firestore.SetOptions.merge())
             .addOnCompleteListener { onComplete(it.isSuccessful) }
     }
@@ -487,19 +494,30 @@ object FirebaseRepository {
 
     /**
      * Attendance-related notification: tells a student's approved parent(s)
-     * when their child is marked Absent. Includes deduplication by studentId + date.
+     * when their child boards the bus (Present) or is marked Absent.
+     * Includes deduplication by studentId + date + period.
      */
     fun notifyParentsOfAttendance(studentId: String, studentName: String, status: String, date: String, isMorning: Boolean) {
-        if (!status.equals("Absent", true)) return
+        val isPresent = status.equals("Present", true) || status.contains(":")
+        val isAbsent = status.equals("Absent", true)
+        if (!isPresent && !isAbsent) return
 
         val period = if (isMorning) "Morning" else "Evening"
-        val notificationId = "ABSENT_${studentId}_${date.replace("/", "-")}_${period.uppercase()}"
+        val notifPrefix = if (isPresent) "BOARDED" else "ABSENT"
+        val notificationId = "${notifPrefix}_${studentId}_${date.replace("/", "-")}_${period.uppercase()}"
+
+        val notifTitle = if (isPresent) "Child Boarded Bus" else "Attendance Update: Absent"
+        val notifMessage = if (isPresent) {
+            "Your child, $studentName, has boarded the bus for $period trip on $date."
+        } else {
+            "Your child, $studentName, was marked absent for $period pickup on $date."
+        }
 
         // Check for duplicate notification before sending
         db.collection("notifications").document(notificationId).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
-                    android.util.Log.d("NotifDebug", "Skipping duplicate absent notification for $studentId on $date")
+                    android.util.Log.d("NotifDebug", "Skipping duplicate attendance notification ($notifPrefix) for $studentId on $date")
                     return@addOnSuccessListener
                 }
 
@@ -512,22 +530,106 @@ object FirebaseRepository {
                         if (requests.isEmpty()) {
                             android.util.Log.d("NotifDebug", "No approved tracking request found for student $studentId")
                         }
-                        requests.forEach { req ->
+                        val parentIds = requests.map { it.parentId }.distinct()
+                        parentIds.forEach { pid ->
                             sendNotification(
                                 id = notificationId,
-                                recipientId = req.parentId,
-                                title = "Attendance Update: Absent",
-                                message = "Your child, $studentName, was marked absent for $period pickup on $date.",
+                                recipientId = pid,
+                                title = notifTitle,
+                                message = notifMessage,
                                 type = "ATTENDANCE",
                                 relatedId = studentId
                             ) { success ->
-                                android.util.Log.d("NotifDebug", "Absent notification for $studentName sent: $success")
+                                android.util.Log.d("NotifDebug", "Attendance ($notifPrefix) notification for $studentName sent: $success")
                             }
                         }
                     }
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("NotifDebug", "Error checking for duplicate absent notif: ${e.message}")
+                android.util.Log.e("NotifDebug", "Error checking for duplicate attendance notif: ${e.message}")
+            }
+    }
+
+    /**
+     * Driver On Duty event:
+     * - Notifies Admin and Principal via role broadcast that driver/bus is on duty.
+     * - Strictly notifies ONLY approved parents connected to that driver's assigned route.
+     * - Deduplicates by date and driver/route to avoid duplicate alerts on activity recreation.
+     */
+    fun notifyDriverDutyStarted(driverId: String, driverName: String, busNo: String, routeName: String) {
+        if (routeName.isBlank()) return
+        val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+
+        // 1. Notify Admin (Role broadcast)
+        val adminNotifId = "DUTY_ADMIN_${driverId}_${routeName.replace(" ", "_")}_$today"
+        sendNotification(
+            id = adminNotifId,
+            recipientRole = "admin",
+            title = "Bus On Duty: $busNo",
+            message = "Driver $driverName (Bus $busNo, Route: $routeName) is now On Duty and navigation is active.",
+            type = NotificationModel.TYPE_TRIP_STARTED,
+            relatedId = routeName
+        )
+
+        // 2. Notify Principal (Role broadcast)
+        val principalNotifId = "DUTY_PRINCIPAL_${driverId}_${routeName.replace(" ", "_")}_$today"
+        sendNotification(
+            id = principalNotifId,
+            recipientRole = "principal",
+            title = "Bus On Duty: $busNo",
+            message = "Bus $busNo on Route $routeName (Driver: $driverName) has gone on duty.",
+            type = NotificationModel.TYPE_TRIP_STARTED,
+            relatedId = routeName
+        )
+
+        // 3. Notify ONLY approved parents connected to this assigned route
+        db.collection("trackingRequests")
+            .whereEqualTo("assignedTrackingRoute", routeName)
+            .whereEqualTo("status", "APPROVED")
+            .whereEqualTo("trackingEnabled", true)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val requests = snapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
+                val parentIds = requests.map { it.parentId }.distinct()
+                parentIds.forEach { parentId ->
+                    val parentNotifId = "DUTY_PARENT_${parentId}_${routeName.replace(" ", "_")}_$today"
+                    sendNotification(
+                        id = parentNotifId,
+                        recipientId = parentId,
+                        title = "Bus Started Journey",
+                        message = "Bus $busNo on route $routeName is now on duty and has started its journey.",
+                        type = NotificationModel.TYPE_TRIP_STARTED,
+                        relatedId = routeName
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NotifDebug", "Failed to query parents for on duty route $routeName: ${e.message}")
+            }
+    }
+
+    /**
+     * Route update notification to parents assigned to that specific route.
+     */
+    fun notifyParentsOfRouteUpdate(routeName: String, updateMessage: String) {
+        if (routeName.isBlank()) return
+        db.collection("trackingRequests")
+            .whereEqualTo("assignedTrackingRoute", routeName)
+            .whereEqualTo("status", "APPROVED")
+            .whereEqualTo("trackingEnabled", true)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val requests = snapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
+                val parentIds = requests.map { it.parentId }.distinct()
+                parentIds.forEach { parentId ->
+                    sendNotification(
+                        recipientId = parentId,
+                        title = "Route Update: $routeName",
+                        message = updateMessage,
+                        type = NotificationModel.TYPE_ROUTE_UPDATE,
+                        relatedId = routeName
+                    )
+                }
             }
     }
 

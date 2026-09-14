@@ -548,7 +548,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             val intent = Intent(this, PrivacyPolicyActivityActivity::class.java)
-            intent.putExtra("FROM_USER", "admin")
+            intent.putExtra("FROM_USER", "principal")
             startActivity(intent)
             drawerLayout.closeDrawer(GravityCompat.END)
         }

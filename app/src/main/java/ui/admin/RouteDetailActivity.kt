@@ -70,8 +70,13 @@ class RouteDetailActivity : AppCompatActivity() {
                         val allDrivers = com.example.bustrack_app.data.DriverRepository.driverList.value ?: emptyList()
                         val assignedDriver = allDrivers.find { it.assignedBus == route.busNo }
                         assignedDriver?.let { driver ->
-                            FirebaseRepository.notifyRouteUpdated(driver.uid, route.routeName)
+                            val driverTarget = driver.uid.ifBlank { driver.driverId.ifBlank { driver.id } }
+                            FirebaseRepository.notifyRouteUpdated(driverTarget, route.routeName)
                         }
+                        FirebaseRepository.notifyParentsOfRouteUpdate(
+                            route.routeName,
+                            "Your child's assigned route (${route.routeName}) has been updated by administration. Please review the updated stop details."
+                        )
 
                         Toast.makeText(this, "Changes saved to Cloud", Toast.LENGTH_SHORT).show()
                         finish()

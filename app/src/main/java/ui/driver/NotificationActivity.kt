@@ -32,7 +32,7 @@ class NotificationActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.drivernotifications)
 
-        window.statusBarColor = Color.parseColor("#051024")
+        window.statusBarColor = getColor(R.color.primaryDark)
 
         rvNotifications = findViewById(R.id.rvNotifications)
         rvNotifications.layoutManager = LinearLayoutManager(this)

@@ -17,7 +17,7 @@ class DriverAlertDetailActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driver_alert_detail)
 
-        window.statusBarColor = Color.parseColor("#051024")
+        window.statusBarColor = getColor(R.color.primaryDark)
 
         val btnBack = findViewById<ImageView>(R.id.btnBack)
         val btnContactAdmin = findViewById<MaterialButton>(R.id.btnContactAdmin)

@@ -22,8 +22,8 @@ class ProfileActivity : AppCompatActivity() {
         binding = ActivityProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        window.statusBarColor = Color.parseColor("#F8FAFC")
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        window.statusBarColor = getColor(R.color.primaryDark)
+        window.decorView.systemUiVisibility = 0
 
         setupObservers()
         setupClickListeners()

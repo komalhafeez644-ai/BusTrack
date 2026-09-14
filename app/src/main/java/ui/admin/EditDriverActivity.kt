@@ -207,15 +207,16 @@ class EditDriverActivity : AppCompatActivity() {
             syncDriverToBusAndRoute(finalBus, driver.assignedBus, updatedDriver.name)
 
             // Send Notifications based on assignment changes
+            val targetDriverId = updatedDriver.uid.ifBlank { updatedDriver.driverId.ifBlank { updatedDriver.id } }
             if (driver.assignedBus == null && finalBus != null) {
                 // New Assignment
-                FirebaseRepository.notifyNewTripAssigned(updatedDriver.uid, finalRouteValue ?: "Assigned Route", finalBus)
+                FirebaseRepository.notifyNewTripAssigned(targetDriverId, finalRouteValue ?: "Assigned Route", finalBus)
             } else if (driver.assignedBus != null && finalBus == null) {
                 // Cancellation
-                FirebaseRepository.notifyTripCancelled(updatedDriver.uid, driver.route ?: "Previous Route")
+                FirebaseRepository.notifyTripCancelled(targetDriverId, driver.route ?: "Previous Route")
             } else if (driver.assignedBus != null && finalBus != null && (driver.assignedBus != finalBus || driver.route != finalRouteValue)) {
                 // Update
-                FirebaseRepository.notifyTripUpdated(updatedDriver.uid, finalRouteValue ?: "Assigned Route")
+                FirebaseRepository.notifyTripUpdated(targetDriverId, finalRouteValue ?: "Assigned Route")
             }
 
             // 2. Save to Firestore via FirebaseRepository

@@ -25,44 +25,85 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     private fun updateTokenInFirestore(token: String) {
         val uid = Firebase.auth.currentUser?.uid
         if (uid != null) {
-            Firebase.firestore.collection("users").document(uid)
-                .update("fcmToken", token)
+            val db = Firebase.firestore
+            // 1. Update in users collection
+            db.collection("users").document(uid)
+                .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+
+            // 2. Also check and update drivers collection if this user is a driver
+            db.collection("drivers").whereEqualTo("uid", uid).get()
+                .addOnSuccessListener { snapshot ->
+                    snapshot.documents.forEach { doc ->
+                        db.collection("drivers").document(doc.id)
+                            .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                    }
+                }
         }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        
+
         val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "BusTrack Update"
         val message = remoteMessage.notification?.body ?: remoteMessage.data["message"] ?: ""
-        
-        sendNotification(title, message)
+        val type = remoteMessage.data["type"] ?: "GENERAL"
+        val relatedId = remoteMessage.data["relatedId"] ?: ""
+        val notificationId = remoteMessage.data["notificationId"] ?: ""
+        val recipientRole = remoteMessage.data["recipientRole"] ?: ""
+
+        sendNotification(title, message, type, relatedId, notificationId, recipientRole)
     }
 
-    private fun sendNotification(title: String, messageBody: String) {
-        val intent = Intent(this, SplashActivity::class.java)
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+    private fun sendNotification(
+        title: String,
+        messageBody: String,
+        type: String,
+        relatedId: String,
+        notificationId: String,
+        recipientRole: String
+    ) {
+        val intent = Intent(this, SplashActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra("NOTIFICATION_ID", notificationId)
+            putExtra("NOTIFICATION_TYPE", type)
+            putExtra("RELATED_ID", relatedId)
+            putExtra("RECIPIENT_ROLE", recipientRole)
+        }
+
+        val notifIntId = if (notificationId.isNotBlank()) notificationId.hashCode() else System.currentTimeMillis().toInt()
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            notifIntId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val channelId = "bus_track_notifications"
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "BusTrack Notifications",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Real-time notifications for bus tracking, duty status, trip updates, and student attendance"
+                enableLights(true)
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(messageBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(messageBody))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
 
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId,
-                "BusTrack Notifications",
-                NotificationManager.IMPORTANCE_HIGH)
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
+        notificationManager.notify(notifIntId, notificationBuilder.build())
     }
 }

@@ -3,6 +3,7 @@ package ui.admin
 import android.graphics.Color
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityAlertDetailBinding
 
 class AlertDetailActivity : AppCompatActivity() {
@@ -15,7 +16,7 @@ class AlertDetailActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Status bar constraints mapping (Aapka favorite primaryDark color)
-        window.statusBarColor = Color.parseColor("#051024")
+        window.statusBarColor = getColor(R.color.primaryDark)
         binding.btnBack.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
             finish()

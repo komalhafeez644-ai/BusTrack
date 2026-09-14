@@ -35,7 +35,7 @@ class TransportAlertsActivity : AppCompatActivity() {
         binding = ActivityTransportAlertsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        window.statusBarColor = Color.parseColor("#051024")
+        window.statusBarColor = getColor(R.color.primaryDark)
 
         // BACK BUTTON
         binding.btnBack.setOnClickListener {
