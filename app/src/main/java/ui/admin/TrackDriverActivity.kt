@@ -20,6 +20,7 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
@@ -71,6 +72,9 @@ import com.mapbox.turf.TurfMisc
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 class TrackDriverActivity : AppCompatActivity() {
@@ -103,6 +107,11 @@ class TrackDriverActivity : AppCompatActivity() {
     private var previousPoint: Point? = null
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
+    private var lastGeocodedLocation: android.location.Location? = null
+    private var lastResolvedAddress: String? = null
+    private var lastResolvedLocationLabel = "Bus"
+    private var geocodeGeneration = 0L
+    private val GEOCODE_MIN_DISTANCE_METERS = 50f
 
     // ROOT-CAUSE FIX (globe flash on Track Driver + Recenter zoom jump):
     // The old code guessed whether the camera was "still at the globe" by
@@ -246,6 +255,10 @@ class TrackDriverActivity : AppCompatActivity() {
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)?.let { style.addImage("stop-icon", it) }
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest_grey)?.let { style.addImage("stop-icon-grey", it) }
 
+                // A styled map is useful immediately. Do not keep it hidden until
+                // a later driver/route snapshot has completed its own work.
+                mapView?.visibility = View.VISIBLE
+                mapView?.animate()?.alpha(1f)?.setDuration(180)?.start()
                 observeViewModel()
             }
 
@@ -491,45 +504,13 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvRouteSheet)?.text = driver.route ?: "Route"
                 it.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver.name
 
-                var locationName = ""
-                val geocoder = Geocoder(this@TrackDriverActivity, Locale.getDefault())
-                try {
-                    val addresses = geocoder.getFromLocation(driver.latitude, driver.longitude, 1)
-                    if (!addresses.isNullOrEmpty()) {
-                        val addr = addresses[0]
-                        val feature = addr.featureName
-                        val street = addr.thoroughfare
-                        val subLocality = addr.subLocality
-                        val locality = addr.locality
-
-                        val cleanLocation = when {
-                            street != null && subLocality != null -> "$street, $subLocality"
-                            street != null -> street
-                            feature != null && feature.contains("+").not() -> feature
-                            subLocality != null -> subLocality
-                            locality != null -> locality
-                            else -> "Near Route"
-                        }
-
-                        locationName = cleanLocation
-                        val fullAddress = addr.getAddressLine(0)
-                        val cleanedAddress = fullAddress.replace(Regex("[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}"), "")
-                            .replace(Regex(",\\s*,"), ",")
-                            .trim()
-                            .removePrefix(",")
-                            .removeSuffix(",")
-                            .trim()
-                            .let(::normalizeDisplayAddress)
-
-                        it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = cleanedAddress
-                    } else {
-                        locationName = "Moving"
-                        it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = "Location: ${String.format("%.4f", driver.latitude)}, ${String.format("%.4f", driver.longitude)}"
-                    }
-                } catch (e: Exception) {
-                    locationName = "Moving"
-                    it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = "Location: ${String.format("%.4f", driver.latitude)}, ${String.format("%.4f", driver.longitude)}"
-                }
+                // Reverse geocoding is asynchronous and cached below. Calling
+                // Geocoder.getFromLocation() on every Firestore update blocked the
+                // map thread and let stale address results overwrite newer ones.
+                val locationName = lastResolvedLocationLabel
+                it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text =
+                    lastResolvedAddress ?: "Finding current address..."
+                requestAddressIfNeeded(driver)
 
                 // Update Live Stats in Bottom Sheet
                 // The top card is the remaining duration to the first upcoming stop.
@@ -545,6 +526,9 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvEtaSheet)?.text = etaValue
                 it.findViewById<TextView>(R.id.tvSpeedSheet)?.text = "${driver.speed.toInt()} km/h"
                 it.findViewById<TextView>(R.id.tvLoadSheet)?.text = driver.load ?: "0/0"
+                it.findViewById<TextView>(R.id.tvUpcomingLabel)?.text = if (
+                    driver.tripDirection.equals("RETURN", ignoreCase = true)
+                ) "Return Trip Stops" else "Upcoming Stops"
 
                 if (driver.latitude == 0.0 || driver.longitude == 0.0) return@let
                 val targetPoint = displayPointForDriver(driver)
@@ -709,6 +693,56 @@ class TrackDriverActivity : AppCompatActivity() {
         }
     }
 
+    /** One cached, latest-only address pipeline for all trip directions. */
+    private fun requestAddressIfNeeded(driver: DriverModel) {
+        if (driver.latitude == 0.0 || driver.longitude == 0.0) return
+        val location = android.location.Location("track-driver").apply {
+            latitude = driver.latitude
+            longitude = driver.longitude
+        }
+        if (lastGeocodedLocation?.distanceTo(location)?.let { it < GEOCODE_MIN_DISTANCE_METERS } == true) return
+
+        lastGeocodedLocation = android.location.Location(location)
+        val generation = ++geocodeGeneration
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                Geocoder(this@TrackDriverActivity, Locale.getDefault())
+                    .getFromLocation(location.latitude, location.longitude, 1)
+                    ?.firstOrNull()
+            }.getOrNull()
+
+            val address = result?.getAddressLine(0)
+                ?.replace(Regex("[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}"), "")
+                ?.replace(Regex(",\\s*,"), ",")
+                ?.trim()
+                ?.removePrefix(",")
+                ?.removeSuffix(",")
+                ?.trim()
+                ?.let(::normalizeDisplayAddress)
+            val label = result?.let { resolved ->
+                val feature = resolved.featureName
+                when {
+                    resolved.thoroughfare != null && resolved.subLocality != null ->
+                        "${resolved.thoroughfare}, ${resolved.subLocality}"
+                    resolved.thoroughfare != null -> resolved.thoroughfare
+                    !feature.isNullOrBlank() && !feature.contains("+") -> feature
+                    resolved.subLocality != null -> resolved.subLocality
+                    resolved.locality != null -> resolved.locality
+                    else -> "Near Route"
+                }
+            } ?: "Bus"
+
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed || generation != geocodeGeneration) return@withContext
+                lastResolvedAddress = address ?: "Location unavailable"
+                lastResolvedLocationLabel = label
+                findViewById<FrameLayout>(R.id.bottomSheet)
+                    ?.findViewById<TextView>(R.id.tvCurrentLocSheet)
+                    ?.text = lastResolvedAddress
+            }
+        }
+    }
+
     private fun normalizeDisplayAddress(address: String): String {
         val parts = address.split(',')
             .map(String::trim)
@@ -869,7 +903,12 @@ class TrackDriverActivity : AppCompatActivity() {
             -1
         }
 
-        stopsAdapter.updateStops(stops, liveArrivedIndex)
+        val stopNumbers = if (driver.tripDirection.equals("RETURN", ignoreCase = true)) {
+            (stops.size downTo 1).toList()
+        } else {
+            emptyList()
+        }
+        stopsAdapter.updateStops(stops, liveArrivedIndex, displayNumbers = stopNumbers)
     }
 
     private fun drawInitialRoute(route: RouteModel) {

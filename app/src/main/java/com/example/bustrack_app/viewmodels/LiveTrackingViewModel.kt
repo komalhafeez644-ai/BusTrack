@@ -25,6 +25,7 @@ class LiveTrackingViewModel : ViewModel() {
 
     private var allowedRoutes = mutableSetOf<String>()
     private var isParentMode = false
+    private var trackingListenerStarted = false
     private val lastLocations = mutableMapOf<String, Pair<Location, Long>>()
 
     private var allRoutes = listOf<RouteModel>()
@@ -58,6 +59,11 @@ class LiveTrackingViewModel : ViewModel() {
     }
 
     private fun startTracking() {
+        // fetchDrivers installs a Firestore snapshot listener. Filtering changes are
+        // read by that same callback, so starting another listener here duplicates
+        // every marker/camera update and makes initial loading feel delayed.
+        if (trackingListenerStarted) return
+        trackingListenerStarted = true
         FirebaseRepository.fetchDrivers { allDrivers ->
             // If in parent mode but no route is assigned
             if (isParentMode && allowedRoutes.isEmpty()) {
@@ -97,12 +103,9 @@ class LiveTrackingViewModel : ViewModel() {
                 }
             }
 
-            // Process dynamic values for each active driver
-            active.forEach { driver ->
-                calculateSpeed(driver)
-                calculateETA(driver)
-                calculateLoad(driver)
-            }
+            // These fields are computed by DriverDashboard's navigation session and
+            // stored with the live location. Keeping that single authority makes the
+            // overview and Track Driver show the exact same ETA, speed and load.
 
             _activeDrivers.value = active
 

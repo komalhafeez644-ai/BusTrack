@@ -225,6 +225,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var lastGeocodeTime = 0L
     private var lastGeocodeLocation: Location? = null
     private var lastResolvedAddress: String? = null
+    private var addressGeocodeGeneration = 0L
     private val GEOCODE_MIN_INTERVAL_MS = 15000L
     private val GEOCODE_MIN_DISTANCE_METERS = 50f
 
@@ -274,6 +275,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val REROUTE_SETTLE_GRACE_MS = 5000L
     private var voiceSessionId = 0L
     private var activeFallbackUtteranceId: String? = null
+    private data class ReturnStopDeviation(val origin: Location, val distanceToStopMeters: Float)
+    private val returnStopDeviations = mutableMapOf<Int, ReturnStopDeviation>()
+    private val RETURN_SKIP_MIN_MOVEMENT_METERS = 60f
+    private val RETURN_SKIP_DISTANCE_INCREASE_METERS = 35f
 
     private var isNorthUp = false
     private var isUserTriggeredChange = true
@@ -323,6 +328,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Each dashboard preview is asynchronous.  Only the newest request may redraw
     // the route/camera after a recreation, route refresh, or style reload.
     private var dashboardRoutePreviewGeneration = 0L
+    private var lastDashboardPreviewRouteId: String? = null
+    private var lastDashboardPreviewOrigin: Location? = null
+    private val DASHBOARD_PREVIEW_MIN_MOVEMENT_METERS = 50f
 
     companion object {
         // Publish the live bus position and route split together at a cadence that
@@ -788,7 +796,31 @@ class DriverDashboardActivity : AppCompatActivity() {
         navPoints.add(currentPoint)
 
         val maxVisitedIdx = activeArrivalTimes().keys.maxOrNull() ?: -1
-        val targetStopIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
+        var targetStopIndex = Math.max(nextGlobalStopIndex, maxVisitedIdx + 1)
+
+        // A first deviation is a normal road-network reroute. If the driver then
+        // moves meaningfully farther from the same return stop, it has effectively
+        // been skipped; advance once rather than continually pulling the bus back.
+        if (isReverseTripActive) {
+            val targetStop = activeStops().getOrNull(targetStopIndex)
+            if (targetStop != null && stateOf(targetStopIndex) == StopState.UPCOMING) {
+                val distance = FloatArray(1)
+                Location.distanceBetween(loc.latitude, loc.longitude, targetStop.latitude, targetStop.longitude, distance)
+                val previousDeviation = returnStopDeviations[targetStopIndex]
+                if (previousDeviation != null &&
+                    previousDeviation.origin.distanceTo(loc) >= RETURN_SKIP_MIN_MOVEMENT_METERS &&
+                    distance[0] >= previousDeviation.distanceToStopMeters + RETURN_SKIP_DISTANCE_INCREASE_METERS
+                ) {
+                    transitionToSkipped(targetStopIndex)
+                    returnStopDeviations.remove(targetStopIndex)
+                    targetStopIndex += 1
+                    nextGlobalStopIndex = targetStopIndex
+                    updateUpcomingStopsUI()
+                } else if (previousDeviation == null) {
+                    returnStopDeviations[targetStopIndex] = ReturnStopDeviation(Location(loc), distance[0])
+                }
+            }
+        }
 
         val remainingStops = activeStops().mapIndexed { index, stop -> index to stop }
             .filter { (index, stop) -> index >= targetStopIndex && stateOf(index) == StopState.UPCOMING && stop.latitude != 0.0 && stop.longitude != 0.0 }
@@ -1029,6 +1061,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (now - lastGeocodeTime < GEOCODE_MIN_INTERVAL_MS || moved < GEOCODE_MIN_DISTANCE_METERS) return
         lastGeocodeTime = now
         lastGeocodeLocation = Location(location)
+        val generation = ++addressGeocodeGeneration
 
         lifecycleScope.launch(Dispatchers.IO) {
             val address = try {
@@ -1042,6 +1075,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
             if (!address.isNullOrBlank()) {
                 withContext(Dispatchers.Main) {
+                    if (generation != addressGeocodeGeneration || isFinishing || isDestroyed) return@withContext
                     lastResolvedAddress = address
                     binding.bottomSummaryCard.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text = address
                 }
@@ -1796,10 +1830,10 @@ class DriverDashboardActivity : AppCompatActivity() {
      */
     private fun updateBusHeading(location: Location, previous: Location?, movedMeters: Float) {
         val measured = when {
-            location.hasBearing() && location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE ->
-                location.bearing.toDouble()
             previous != null && movedMeters >= MIN_MOVING_PUCK_UPDATE_METERS ->
                 previous.bearingTo(location).toDouble()
+            location.hasBearing() && location.hasSpeed() && location.speed >= MIN_SPEED_FOR_BEARING_UPDATE ->
+                location.bearing.toDouble()
             else -> null
         } ?: return
 
@@ -1899,19 +1933,29 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun updateMapDisplay() {
         val route = assignedRoute ?: return
-        val previewGeneration = ++dashboardRoutePreviewGeneration
 
         if (isNavigating) {
             return
         }
 
+        // Render the locally available route first. Road geometry is a visual
+        // refinement and must not make entering the dashboard wait on the network.
+        drawStaticSavedRoute(route)
+
         val loc = currentLocation
         if (loc != null && isCurrentLocationLive) {
+            val needsRoadPreview = lastDashboardPreviewRouteId != route.id ||
+                (lastDashboardPreviewOrigin?.distanceTo(loc) ?: Float.MAX_VALUE) >=
+                    DASHBOARD_PREVIEW_MIN_MOVEMENT_METERS
+            if (!needsRoadPreview) return
+
+            lastDashboardPreviewRouteId = route.id
+            lastDashboardPreviewOrigin = Location(loc)
+            val previewGeneration = ++dashboardRoutePreviewGeneration
             fetchDynamicRoutePreview(route, loc, previewGeneration)
             return
         }
 
-        drawStaticSavedRoute(route)
     }
 
     /**
@@ -2319,7 +2363,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             .map(String::trim)
             .filter(String::isNotEmpty)
             .fold(mutableListOf<String>()) { parts, part ->
-                if (parts.lastOrNull()?.equals(part, ignoreCase = true) != true) parts.add(part)
+                if (parts.none { it.equals(part, ignoreCase = true) }) parts.add(part)
                 parts
             }
             .joinToString(", ")
@@ -2396,7 +2440,23 @@ class DriverDashboardActivity : AppCompatActivity() {
             // on the entire route.  On loops, parallel roads and U-turns the global
             // nearest point can belong to an old/future section. Combining that point
             // with a different local vertex was the source of the visible chord/loop.
-            val projection = projectOntoForwardRoute(currentPos, maxForwardRouteDistance) ?: return
+            val projection = projectOntoForwardRoute(currentPos, maxForwardRouteDistance)
+            if (projection == null) {
+                // On a real return-road deviation there may be no forward segment
+                // compatible with the current heading. Treat that as off-route
+                // instead of silently returning and leaving the old route active.
+                if (isNavigating) {
+                    val now = System.currentTimeMillis()
+                    val isSettlingAfterReroute = now - lastRerouteCompletedTimeMs < REROUTE_SETTLE_GRACE_MS
+                    if (!isSettlingAfterReroute && !isRerouteInFlight &&
+                        now - lastOffRouteRerouteTimeMs > MIN_OFFROUTE_REROUTE_GAP_MS
+                    ) {
+                        lastOffRouteRerouteTimeMs = now
+                        triggerReroute()
+                    }
+                }
+                return
+            }
             val snappedP = projection.point
             val actualDistanceToRoute = projection.distanceMeters
             val nearestRouteIndex = projection.segmentIndex
@@ -2816,6 +2876,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         isCurrentlyAtStop = false
         departureCandidateIndex = -1
         departureConfirmCount = 0
+        returnStopDeviations.clear()
         attendancePromptedStops.clear()
         sourceArrivalRecordedForCurrentTrip = false
         currentNavigationEtaText = null
@@ -2883,6 +2944,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         isCurrentlyAtStop = false
         departureCandidateIndex = -1
         departureConfirmCount = 0
+        returnStopDeviations.clear()
         sourceArrivalRecordedForCurrentTrip = false
         currentNavigationEtaText = null
         clearTraveledRouteHistory()
@@ -2939,7 +3001,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             else -> route.routeName
         }
         sheet.findViewById<TextView>(R.id.tvUpcomingLabel)?.text = when {
-            isReverseTripActive && isViewingReverseTrip -> "Reverse Trip Stops"
+            isReverseTripActive && isViewingReverseTrip -> "Return Trip Stops"
             isReverseTripActive -> "Forward Trip Stops"
             else -> "Upcoming Stops"
         }
@@ -2980,7 +3042,12 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         val liveArrivedIndexForSheet = if (isViewingReverseTrip && isCurrentlyAtStop && lastArrivedStopIndex != -1) lastArrivedStopIndex else -1
-        stopsAdapter.updateStops(stops, liveArrivedIndexForSheet)
+        val stopNumbers = if (isReverseTripActive && isViewingReverseTrip) {
+            reverseForwardStopIndexes.map { it + 1 }
+        } else {
+            emptyList()
+        }
+        stopsAdapter.updateStops(stops, liveArrivedIndexForSheet, displayNumbers = stopNumbers)
     }
 
     private fun startFollowingPuck() {
@@ -2988,11 +3055,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         isCameraFollowingBus = true
         lastCameraFollowLocation = null
         binding.btnRecenter.visibility = View.GONE
-        if (isNorthUp) {
-            followPuckNorthUp()
-        } else {
-            followPuckHeadingUp()
-        }
+        // A viewport follow transition and the GPS-driven easeTo below must never
+        // begin together: competing camera animators caused the forward-start jump.
+        // Forward and return now both enter this one explicit follow path.
+        mapView?.viewport?.idle()
         currentLocation?.let(::followLiveBusCamera)
         lastAppliedBusScale = -1f
         updateBusModelScaleForZoom()

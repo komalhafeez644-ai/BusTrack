@@ -67,6 +67,8 @@ class LiveTrackingActivity : AppCompatActivity() {
     private var unavailableDialog: android.app.Dialog? = null
     private var isUnavailablePopupDismissed = false
     private var cancelCompassSubscription: (() -> Unit)? = null
+    private var isMapStyleReady = false
+    private var pendingDrivers: List<DriverModel> = emptyList()
 
     private val BUS_SOURCE_ID = "bus-source"
     private val BUS_MODEL_LAYER_ID = "bus-model-layer"
@@ -87,7 +89,11 @@ class LiveTrackingActivity : AppCompatActivity() {
         }
 
         mapView = findViewById(R.id.mapView)
+        // Start observing immediately. The latest snapshot is retained until the
+        // style is ready, rather than waiting for a second Firestore update.
+        observeViewModel()
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
+            isMapStyleReady = true
             style.addStyleModel(BUS_MODEL_ID, "asset://bus.glb")
 
             val annotationApi = mapView?.annotations
@@ -147,7 +153,7 @@ class LiveTrackingActivity : AppCompatActivity() {
             }
             cancelCompassSubscription = { compassSubscription?.cancel() }
 
-            observeViewModel()
+            if (pendingDrivers.isNotEmpty()) updateMarkers(pendingDrivers)
         }
 
         setupUI()
@@ -278,15 +284,16 @@ class LiveTrackingActivity : AppCompatActivity() {
 
     private fun observeViewModel() {
         viewModel.activeDrivers.observe(this) { drivers ->
+            pendingDrivers = drivers
             if (drivers.isEmpty()) {
                 findViewById<View>(R.id.driverCard).visibility = View.GONE
-                showUnavailableDialog()
+                if (isMapStyleReady) showUnavailableDialog()
             } else {
                 unavailableDialog?.dismiss()
                 unavailableDialog = null
                 isUnavailablePopupDismissed = false
             }
-            updateMarkers(drivers)
+            if (isMapStyleReady) updateMarkers(drivers)
         }
 
         viewModel.selectedDriver.observe(this) { driver ->
