@@ -233,6 +233,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
             mapView = findViewById(R.id.mapView)
             mapView?.visibility = View.INVISIBLE
+            mapView?.alpha = 0f
             mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
                 pointAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
 
@@ -638,7 +639,11 @@ class TrackDriverActivity : AppCompatActivity() {
 
                     if (!isFirstDriverMapFrameReady) {
                         isFirstDriverMapFrameReady = true
+                        // The camera is already focused before this point. Fade the
+                        // first valid map frame in instead of abruptly swapping the
+                        // default globe frame for the tracking frame.
                         mapView?.visibility = View.VISIBLE
+                        mapView?.animate()?.alpha(1f)?.setDuration(220)?.start()
                     }
                 }
             }

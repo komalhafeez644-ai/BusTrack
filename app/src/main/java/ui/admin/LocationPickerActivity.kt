@@ -54,29 +54,6 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
 
-/**
- * MAJOR FIX (this rewrite): the Mapbox Search SDK (mapbox-search-android) kept causing
- * version-mismatch compile/runtime problems in this project - its SearchEngineSettings
- * constructor signature did not match what the docs for other versions showed, and even
- * after correcting that, a boundingBox query silently returned zero results. Rather than
- * keep guessing at this specific SDK version's exact behavior under exam-day time
- * pressure, this now calls Mapbox's plain Search Box REST API directly over
- * HttpURLConnection - the same simple, dependency-free, version-proof pattern already
- * used for the chatbot in this project (see ChatbotRepository.kt). This removes ALL
- * dependency on the Search SDK's Kotlin API surface, so there is nothing left to
- * mismatch: it's just a URL and a JSON response, which is Mapbox's own documented public
- * API and does not change between SDK versions.
- *
- * FOLLOW-UP FIX: Geocoding v6's /forward and /reverse endpoints no longer return POI
- * data (landmarks, stations, businesses, etc.) - Mapbox removed POIs from the Geocoding
- * API and now only serves them via the separate Search Box API. That's why a query like
- * "railway" matched nothing relevant. Both search and reverse-geocode below now call
- * the Search Box API's /forward and /reverse endpoints instead
- * (https://docs.mapbox.com/api/search/search-box/), which cover addresses, places, AND
- * POIs in one response - same GeoJSON FeatureCollection shape as before, so the parsing
- * code barely changes. auto_complete=true is also set so partial words typed so far
- * (e.g. "railway r") are matched fuzzily instead of requiring a complete token.
- */
 class LocationPickerActivity : AppCompatActivity() {
 
     companion object {

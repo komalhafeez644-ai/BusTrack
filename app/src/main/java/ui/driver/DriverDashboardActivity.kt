@@ -290,8 +290,11 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Keep the existing Driver Dashboard camera/framing. This small model-only
     // increase makes the bus easier to see on Re-centre without borrowing the
     // Track Driver camera or changing route/map behaviour.
-    private val MIN_BUS_MODEL_SCALE = 2.6f
-    private val MAX_BUS_MODEL_SCALE = 3.25f
+    // Applied directly to Mapbox's rendered location-model layer. This is large
+    // enough to be visibly different from the original puck while retaining the
+    // same bounded zoom compensation below.
+    private val MIN_BUS_MODEL_SCALE = 4.0f
+    private val MAX_BUS_MODEL_SCALE = 5.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
@@ -304,6 +307,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0f
     private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0f
+    private val DRIVER_RECENTER_ZOOM = 19.5
     private val DUTY_AUTO_OFF_GRACE_PERIOD_MS = 10 * 60 * 1000L
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -1776,7 +1780,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .center(target)
                 .bearing(if (isNorthUp) 0.0 else lastValidBearing)
                 .pitch(if (isNorthUp) 45.0 else 65.0)
-                .zoom(if (isNorthUp) 17.5 else 19.0)
+                .zoom(if (isNorthUp) 17.5 else DRIVER_RECENTER_ZOOM)
                 // Keep the bus slightly below centre, but safely above the
                 // bottom sheet. This is framing only; zoom and dashboard UI stay unchanged.
                 .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
@@ -2998,7 +3002,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         mapView?.viewport?.transitionTo(
             mapView?.viewport?.makeFollowPuckViewportState(
                 FollowPuckViewportStateOptions.Builder()
-                    .zoom(19.0)
+                    .zoom(DRIVER_RECENTER_ZOOM)
                     .pitch(65.0)
                     .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
                     .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
