@@ -121,7 +121,7 @@ class LoginActivity : AppCompatActivity() {
                 }
                 is Resource.Success -> {
                     progressBar.visibility = android.view.View.GONE
-                    val role = resource.data
+                    val role = resource.data ?: "parent"
                     cacheAuthenticatedRole(role)
                     when (role) {
                         "admin" -> {
