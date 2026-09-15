@@ -87,7 +87,15 @@ object FirebaseRepository {
             "longitude" to lng,
             "lastUpdated" to System.currentTimeMillis()
         )
-        db.collection("drivers").document(driverId).update(updates)
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = "LOC_LATEST_$driverId",
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_LOCATION_LATEST,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
+        )
     }
 
     fun updateDriverStats(driverId: String, eta: String, speed: Double, load: String) {
@@ -96,7 +104,15 @@ object FirebaseRepository {
             "speed" to speed,
             "load" to load
         )
-        db.collection("drivers").document(driverId).update(updates)
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = "LOC_LATEST_$driverId",
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_LOCATION_LATEST,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
+        )
     }
 
     fun updateDriverStatus(driverId: String, status: String, route: String? = null) {
@@ -105,12 +121,32 @@ object FirebaseRepository {
             "lastUpdated" to System.currentTimeMillis()
         )
         route?.let { updates["route"] = it }
-        db.collection("drivers").document(driverId).update(updates)
+        val syncId = "DUTY_${driverId}_STATUS"
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_DUTY_STATUS,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
+        )
     }
 
     fun updateDriverTripDirection(driverId: String, tripDirection: String) {
-        db.collection("drivers").document(driverId).update(
-            mapOf("tripDirection" to tripDirection, "lastUpdated" to System.currentTimeMillis())
+        val updates = mapOf(
+            "tripDirection" to tripDirection,
+            "lastUpdated" to System.currentTimeMillis()
+        )
+        val syncId = "DIRECTION_$driverId"
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_DUTY_STATUS,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
         )
     }
 
@@ -123,7 +159,15 @@ object FirebaseRepository {
         updates["stopEtaTimes"] = stopEtaTimes
         updates["traveledRouteSegments"] = traveledRouteSegments
         updates["isNavigating"] = isNavigating
-        db.collection("drivers").document(driverId).update(updates)
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = "LOC_LATEST_$driverId",
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_LOCATION_LATEST,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
+        )
     }
 
     /**
@@ -157,7 +201,10 @@ object FirebaseRepository {
         stopEtaTimes: Map<String, String>,
         isNavigating: Boolean,
         tripDirection: String,
-        traveledRouteSegments: List<String> = emptyList()
+        traveledRouteSegments: List<String> = emptyList(),
+        activeTripId: String? = null,
+        activeRouteId: String? = null,
+        activeRouteName: String? = null
     ) {
         val updates = mutableMapOf<String, Any?>(
             "latitude" to lat,
@@ -172,6 +219,10 @@ object FirebaseRepository {
             // an older forward-trip direction.
             "tripDirection" to tripDirection
         )
+        activeTripId?.let { updates["activeTripId"] = it }
+        activeRouteId?.let { updates["activeRouteId"] = it }
+        activeRouteName?.let { updates["activeRouteName"] = it }
+
         if (isNavigating) {
             updates["currentRoutePolyline"] = currentPolyline
             updates["traveledPolyline"] = traveledPolyline
@@ -179,8 +230,21 @@ object FirebaseRepository {
             updates["nextStopIndex"] = nextStopIndex
             updates["stopArrivalTimes"] = stopArrivalTimes
             updates["stopEtaTimes"] = stopEtaTimes
+        } else {
+            updates["activeTripId"] = ""
         }
-        db.collection("drivers").document(driverId).update(updates)
+
+        // Use conflation so offline GPS ticks overwrite locally and only 1 write occurs on reconnection
+        val syncId = "LOC_LATEST_$driverId"
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_LOCATION_LATEST,
+            targetCollection = "drivers",
+            targetDocumentId = driverId,
+            updates = updates,
+            isConflated = true,
+            immediateSync = true
+        )
     }
 
     // --- ATTENDANCE ---
@@ -188,16 +252,44 @@ object FirebaseRepository {
         val normalizedDate = record.date.replace("/", "-")
         val normalizedRecord = record.copy(date = normalizedDate)
         val docId = "${record.studentId}_$normalizedDate"
-        // Firestore Android persistence stores this merge locally while offline and
-        // uploads it when connectivity returns. The stable document id is idempotent.
-        db.collection("attendance").document(docId).set(normalizedRecord, com.google.firebase.firestore.SetOptions.merge())
-            .addOnCompleteListener { onComplete(it.isSuccessful) }
+        val syncId = "ATT_${record.studentId}_$normalizedDate"
+
+        val dataMap = mapOf(
+            "studentId" to normalizedRecord.studentId,
+            "studentName" to normalizedRecord.studentName,
+            "route" to normalizedRecord.route,
+            "stop" to normalizedRecord.stop,
+            "morningPickup" to normalizedRecord.morningPickup,
+            "morningDrop" to normalizedRecord.morningDrop,
+            "eveningPickup" to normalizedRecord.eveningPickup,
+            "eveningDrop" to normalizedRecord.eveningDrop,
+            "date" to normalizedRecord.date
+        )
+
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_ATTENDANCE,
+            targetCollection = "attendance",
+            targetDocumentId = docId,
+            data = dataMap,
+            immediateSync = true,
+            onComplete = onComplete
+        )
     }
 
     fun updateAttendanceField(studentId: String, date: String, field: String, value: String) {
         val normalizedDate = date.replace("/", "-")
         val docId = "${studentId}_$normalizedDate"
-        db.collection("attendance").document(docId).update(field, value)
+        val syncId = "ATT_FIELD_${studentId}_${normalizedDate}_$field"
+
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueUpdate(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_ATTENDANCE,
+            targetCollection = "attendance",
+            targetDocumentId = docId,
+            updates = mapOf(field to value),
+            immediateSync = true
+        )
     }
 
     fun fetchAttendance(onResult: (List<AttendanceRecordModel>) -> Unit): ListenerRegistration {
@@ -377,6 +469,8 @@ object FirebaseRepository {
 
     /**
      * Sends a real structured Driver Alert / Issue Report to Admin.
+     * Uses a stable, idempotent [alertId] (generated once when triggered) to prevent duplicate
+     * Firestore alert documents across automatic sync retries.
      */
     fun sendDriverAlert(
         driverId: String,
@@ -392,10 +486,11 @@ object FirebaseRepository {
         locationAddress: String = "",
         tripDirection: String = "FORWARD",
         tripStatus: String = "IDLE",
+        alertId: String = java.util.UUID.randomUUID().toString(),
         onComplete: (Boolean) -> Unit = {}
     ) {
-        val docRef = db.collection("notifications").document()
-        val notifId = docRef.id
+        val notifId = alertId
+        val syncId = "ALERT_$notifId"
 
         val effectiveTitle = if (alertType.equals("Other", ignoreCase = true)) {
             "🚨 Driver Alert: Driver Reported Issue"
@@ -451,12 +546,18 @@ object FirebaseRepository {
                 "type" to NotificationModel.TYPE_DRIVER_ALERT,
                 "relatedId" to notifId,
                 "isRead" to false,
-                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                "timestamp" to com.google.firebase.Timestamp.now()
             )
 
-            docRef.set(data, com.google.firebase.firestore.SetOptions.merge())
-                .addOnSuccessListener { onComplete(true) }
-                .addOnFailureListener { onComplete(false) }
+            com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
+                syncId = syncId,
+                actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_DRIVER_ALERT,
+                targetCollection = "notifications",
+                targetDocumentId = notifId,
+                data = data,
+                immediateSync = true,
+                onComplete = onComplete
+            )
         }
 
         // If phone is already supplied, save directly
@@ -549,7 +650,7 @@ object FirebaseRepository {
 
         queryActions.forEach { action ->
             action { foundPhone ->
-                synchronized(docRef) {
+                synchronized(notifId) {
                     if (phoneResolved) return@synchronized
                     if (foundPhone.trim().isNotBlank()) {
                         phoneResolved = true
@@ -572,9 +673,14 @@ object FirebaseRepository {
         }
         db.collection("notifications").document(notificationId).get()
             .addOnSuccessListener { snapshot ->
-                val notif = snapshot.toObject<NotificationModel>()?.let {
-                    if (it.id.isNotBlank()) it else it.copy(id = snapshot.id)
-                }
+                val notif = if (snapshot != null && snapshot.exists()) {
+                    try {
+                        NotificationModel.fromDocument(snapshot)
+                    } catch (e: Exception) {
+                        android.util.Log.e("FirebaseRepo", "Error parsing notification $notificationId: ${e.message}", e)
+                        null
+                    }
+                } else null
                 onResult(notif)
             }
             .addOnFailureListener {
@@ -585,7 +691,7 @@ object FirebaseRepository {
     /**
      * Sends a notification to either a specific user (recipientId) or an entire role
      * (recipientRole, e.g. "admin"/"driver"/"parent"/"principal") - pass exactly one.
-     * If an [id] is provided, it uses it for deduplication.
+     * Uses deterministic sync ID and SetOptions.merge() for deduplication and retry safety.
      */
     fun sendNotification(
         id: String? = null,
@@ -601,11 +707,11 @@ object FirebaseRepository {
             onComplete(false)
             return
         }
-        val docRef = if (id != null) db.collection("notifications").document(id)
-        else db.collection("notifications").document()
+        val notifId = if (!id.isNullOrBlank()) id else java.util.UUID.randomUUID().toString()
+        val syncId = "NOTIF_$notifId"
 
         val data = hashMapOf(
-            "id" to docRef.id,
+            "id" to notifId,
             "recipientId" to (recipientId ?: ""),
             "recipientRole" to (recipientRole ?: ""),
             "title" to title,
@@ -613,11 +719,18 @@ object FirebaseRepository {
             "type" to type,
             "relatedId" to relatedId,
             "isRead" to false,
-            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            "timestamp" to com.google.firebase.Timestamp.now()
         )
-        docRef.set(data, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
+            syncId = syncId,
+            actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_NOTIFICATION,
+            targetCollection = "notifications",
+            targetDocumentId = notifId,
+            data = data,
+            immediateSync = true,
+            onComplete = onComplete
+        )
     }
 
     /**
@@ -638,10 +751,17 @@ object FirebaseRepository {
 
         val reg1 = db.collection("notifications")
             .whereEqualTo("recipientId", uid)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("FirebaseRepo", "Error listening to personal notifications: ${error.message}", error)
+                    return@addSnapshotListener
+                }
                 personal = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject<NotificationModel>()?.let {
-                        if (it.id.isNotBlank()) it else it.copy(id = doc.id)
+                    try {
+                        NotificationModel.fromDocument(doc)
+                    } catch (e: Exception) {
+                        android.util.Log.e("FirebaseRepo", "Error parsing personal notif doc ${doc.id}: ${e.message}", e)
+                        null
                     }
                 } ?: emptyList()
                 emit()
@@ -649,10 +769,17 @@ object FirebaseRepository {
 
         val reg2 = db.collection("notifications")
             .whereEqualTo("recipientRole", role)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("FirebaseRepo", "Error listening to role notifications: ${error.message}", error)
+                    return@addSnapshotListener
+                }
                 roleBroadcast = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject<NotificationModel>()?.let {
-                        if (it.id.isNotBlank()) it else it.copy(id = doc.id)
+                    try {
+                        NotificationModel.fromDocument(doc)
+                    } catch (e: Exception) {
+                        android.util.Log.e("FirebaseRepo", "Error parsing role notif doc ${doc.id}: ${e.message}", e)
+                        null
                     }
                 } ?: emptyList()
                 emit()

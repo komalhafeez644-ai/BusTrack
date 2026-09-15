@@ -17,6 +17,8 @@ mapboxSearch = "2.2.0"
 mapboxMaps = "11.4.0"
 mapboxNavigation = "3.4.0"
 mapboxVoice = "3.4.0"
+room = "2.6.1"
+work = "2.9.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -48,7 +50,13 @@ mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapb
 mapbox-navigation = { group = "com.mapbox.navigationcore", name = "android", version.ref = "mapboxNavigation" }
 mapbox-voice = { group = "com.mapbox.navigationcore", name = "voice", version.ref = "mapboxVoice" }
 
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

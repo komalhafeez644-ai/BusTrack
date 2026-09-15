@@ -19,6 +19,11 @@ class MyApp : Application() {
         config["upload_preset"] = "bus_track_images"
 
         MediaManager.init(this, config)
+
+        // Initialize Offline Sync Engine
+        com.example.bustrack_app.sync.SyncQueueManager.init(this)
+        com.example.bustrack_app.sync.network.NetworkMonitor.startMonitoring(this)
+        com.example.bustrack_app.sync.worker.SyncRetryWorker.schedule(this)
     }
 
     private fun createNotificationChannel() {
