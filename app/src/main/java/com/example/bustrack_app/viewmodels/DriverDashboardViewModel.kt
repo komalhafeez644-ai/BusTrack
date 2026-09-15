@@ -50,13 +50,18 @@ class DriverDashboardViewModel : ViewModel() {
     }
 
     private fun combineData() {
-        val email = FirebaseAuth.getInstance().currentUser?.email?.trim()?.lowercase() ?: return
+        val currentUser = FirebaseAuth.getInstance().currentUser ?: return
+        val email = currentUser.email?.trim()?.lowercase() ?: ""
+        val uid = currentUser.uid
         val drivers = DriverRepository.driverList.value ?: emptyList()
         val buses = BusRepository.busList.value ?: emptyList()
         val routes = RouteRepository.routeList.value ?: emptyList()
         val students = StudentRepository.studentList.value ?: emptyList()
 
-        val driver = drivers.find { it.email.trim().lowercase() == email } ?: return
+        val driver = drivers.find { 
+            (email.isNotEmpty() && it.email.trim().lowercase() == email) ||
+            (uid.isNotEmpty() && (it.uid == uid || it.driverId == uid || it.id == uid))
+        } ?: return
         _currentDriver.value = driver
         val bus = buses.find { it.busNumber == driver.assignedBus }
         val route = routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus }

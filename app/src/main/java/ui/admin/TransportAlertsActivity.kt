@@ -49,6 +49,7 @@ class TransportAlertsActivity : AppCompatActivity() {
                 com.example.bustrack_app.data.FirebaseRepository.markNotificationRead(alert.id)
             }
             val intent = Intent(this, AlertDetailActivity::class.java)
+            intent.putExtra("NOTIFICATION_ID", alert.id)
             intent.putExtra("ALERT_TITLE", alert.title)
             intent.putExtra("ALERT_SUBTITLE", alert.subtitle)
             intent.putExtra("ALERT_TYPE", alert.type)

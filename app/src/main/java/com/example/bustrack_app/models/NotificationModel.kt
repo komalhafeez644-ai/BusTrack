@@ -1,6 +1,5 @@
 package com.example.bustrack_app.models
 
-import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
@@ -14,7 +13,6 @@ import java.util.Date
  * them personally as well as ones broadcast to their role.
  */
 data class NotificationModel(
-    @DocumentId
     val id: String = "",
     val recipientId: String = "",   // specific user's uid, empty if role-targeted
     val recipientRole: String = "", // "admin" | "driver" | "parent" | "principal", empty if user-targeted
@@ -24,12 +22,27 @@ data class NotificationModel(
     @ServerTimestamp
     val timestamp: Date? = null,
     val isRead: Boolean = false,
-    val relatedId: String = ""      // optional: requestId / studentId / route, for future deep-linking
+    val relatedId: String = "",      // optional: requestId / studentId / route, for future deep-linking
+    val senderId: String = "",
+    val senderRole: String = "",     // "driver", "admin", etc.
+    val driverName: String = "",
+    val driverEmail: String = "",
+    val driverPhone: String = "",
+    val busNumber: String = "",
+    val routeName: String = "",
+    val alertType: String = "",      // "Road Block", "Heavy Traffic", "Accident", "Bus Breakdown", "Fuel Issue", "Bad Weather", "Student Emergency", "Police Check", "Wrong Route", "Other"
+    val description: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val locationAddress: String = "",
+    val tripDirection: String = "",  // "FORWARD", "RETURN"
+    val tripStatus: String = ""      // "NAVIGATING", "ON_DUTY", "IDLE"
 ) {
     companion object {
         const val TYPE_GENERAL = "GENERAL"
         const val TYPE_IMPORTANT = "IMPORTANT"
         const val TYPE_EMERGENCY = "EMERGENCY"
+        const val TYPE_DRIVER_ALERT = "DRIVER_ALERT"
         const val TYPE_ADMIN_BROADCAST = "ADMIN_BROADCAST"
         const val TYPE_ATTENDANCE = "ATTENDANCE"
         const val TYPE_ATTENDANCE_REQUIRED = "ATTENDANCE_REQUIRED"

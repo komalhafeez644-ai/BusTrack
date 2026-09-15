@@ -552,7 +552,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:gravity="center"
-                            android:text="manage\nBusses"
+                            android:text="Manage\nBuses"
                             android:textColor="#333333"
                             android:textSize="10sp" />
                     </LinearLayout>

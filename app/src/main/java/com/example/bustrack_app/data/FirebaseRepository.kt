@@ -376,6 +376,213 @@ object FirebaseRepository {
     }
 
     /**
+     * Sends a real structured Driver Alert / Issue Report to Admin.
+     */
+    fun sendDriverAlert(
+        driverId: String,
+        driverName: String,
+        driverEmail: String = "",
+        driverPhone: String = "",
+        busNumber: String = "",
+        routeName: String = "",
+        alertType: String,
+        customDescription: String = "",
+        latitude: Double = 0.0,
+        longitude: Double = 0.0,
+        locationAddress: String = "",
+        tripDirection: String = "FORWARD",
+        tripStatus: String = "IDLE",
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        val docRef = db.collection("notifications").document()
+        val notifId = docRef.id
+
+        val effectiveTitle = if (alertType.equals("Other", ignoreCase = true)) {
+            "🚨 Driver Alert: Driver Reported Issue"
+        } else {
+            "🚨 Driver Alert: $alertType"
+        }
+
+        val effectiveDesc = if (customDescription.isNotBlank()) {
+            customDescription
+        } else {
+            when (alertType) {
+                "Road Block" -> "Road is blocked/closed. Alternate route required."
+                "Heavy Traffic" -> "Heavy traffic causing significant delay on route."
+                "Accident" -> "Accident reported on route or vehicle involved."
+                "Bus Breakdown" -> "Bus has experienced a mechanical breakdown / technical fault."
+                "Fuel Issue" -> "Fuel level critical or fuel issue encountered."
+                "Bad Weather" -> "Severe weather conditions (heavy rain/fog/storm) causing hazard."
+                "Student Emergency" -> "Student emergency requiring immediate medical/administrative help."
+                "Police Check" -> "Police / security checkpoint causing delay."
+                "Wrong Route" -> "Route road is blocked or inaccessible."
+                else -> "Driver reported an issue."
+            }
+        }
+
+        val locPart = if (locationAddress.isNotBlank()) " near $locationAddress" else ""
+        val busPart = if (busNumber.isNotBlank()) " for Bus $busNumber" else ""
+        val routePart = if (routeName.isNotBlank()) " on Route $routeName" else ""
+        val driverPart = if (driverName.isNotBlank()) " by Driver $driverName" else ""
+
+        val conciseMessage = "$alertType reported$driverPart$busPart$routePart$locPart. $effectiveDesc"
+
+        fun saveWithPhone(resolvedPhone: String) {
+            val data = hashMapOf(
+                "id" to notifId,
+                "recipientId" to "",
+                "recipientRole" to "admin",
+                "senderId" to driverId,
+                "senderRole" to "driver",
+                "driverName" to driverName,
+                "driverEmail" to driverEmail,
+                "driverPhone" to resolvedPhone.trim(),
+                "busNumber" to busNumber,
+                "routeName" to routeName,
+                "alertType" to alertType,
+                "title" to effectiveTitle,
+                "message" to conciseMessage,
+                "description" to effectiveDesc,
+                "latitude" to latitude,
+                "longitude" to longitude,
+                "locationAddress" to locationAddress,
+                "tripDirection" to tripDirection,
+                "tripStatus" to tripStatus,
+                "type" to NotificationModel.TYPE_DRIVER_ALERT,
+                "relatedId" to notifId,
+                "isRead" to false,
+                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+
+            docRef.set(data, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener { onComplete(true) }
+                .addOnFailureListener { onComplete(false) }
+        }
+
+        // If phone is already supplied, save directly
+        if (driverPhone.trim().isNotBlank()) {
+            saveWithPhone(driverPhone.trim())
+            return
+        }
+
+        // 1. Check local DriverRepository cache
+        val cachedDriver = DriverRepository.driverList.value?.find {
+            (driverId.isNotBlank() && (it.driverId == driverId || it.id == driverId || it.uid == driverId)) ||
+            (driverEmail.isNotBlank() && it.email.trim().equals(driverEmail.trim(), ignoreCase = true)) ||
+            (busNumber.isNotBlank() && it.assignedBus.equals(busNumber, ignoreCase = true)) ||
+            (driverName.isNotBlank() && it.name.trim().equals(driverName.trim(), ignoreCase = true))
+        }
+        val cachedPhone = cachedDriver?.phone?.trim() ?: ""
+        if (cachedPhone.isNotBlank()) {
+            saveWithPhone(cachedPhone)
+            return
+        }
+
+        // 2. Query Firestore asynchronously (users & drivers collections)
+        val queryActions = mutableListOf<((String) -> Unit) -> Unit>()
+
+        if (driverId.isNotBlank()) {
+            queryActions.add { callback ->
+                db.collection("users").document(driverId).get()
+                    .addOnSuccessListener { doc ->
+                        val phone = doc.getString("phone") ?: doc.getString("contactNumber") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+            queryActions.add { callback ->
+                db.collection("drivers").document(driverId).get()
+                    .addOnSuccessListener { doc ->
+                        val phone = doc.getString("phone") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+            queryActions.add { callback ->
+                db.collection("drivers").whereEqualTo("uid", driverId).limit(1).get()
+                    .addOnSuccessListener { snapshot ->
+                        val phone = snapshot.documents.firstOrNull()?.getString("phone") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+        }
+
+        if (driverEmail.isNotBlank()) {
+            queryActions.add { callback ->
+                db.collection("users").whereEqualTo("email", driverEmail.trim().lowercase()).limit(1).get()
+                    .addOnSuccessListener { snapshot ->
+                        val phone = snapshot.documents.firstOrNull()?.getString("phone") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+            queryActions.add { callback ->
+                db.collection("drivers").whereEqualTo("email", driverEmail.trim().lowercase()).limit(1).get()
+                    .addOnSuccessListener { snapshot ->
+                        val phone = snapshot.documents.firstOrNull()?.getString("phone") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+        }
+
+        if (busNumber.isNotBlank()) {
+            queryActions.add { callback ->
+                db.collection("drivers").whereEqualTo("assignedBus", busNumber).limit(1).get()
+                    .addOnSuccessListener { snapshot ->
+                        val phone = snapshot.documents.firstOrNull()?.getString("phone") ?: ""
+                        callback(phone)
+                    }
+                    .addOnFailureListener { callback("") }
+            }
+        }
+
+        if (queryActions.isEmpty()) {
+            saveWithPhone("")
+            return
+        }
+
+        var phoneResolved = false
+        var completedCount = 0
+        val totalQueries = queryActions.size
+
+        queryActions.forEach { action ->
+            action { foundPhone ->
+                synchronized(docRef) {
+                    if (phoneResolved) return@synchronized
+                    if (foundPhone.trim().isNotBlank()) {
+                        phoneResolved = true
+                        saveWithPhone(foundPhone.trim())
+                        return@synchronized
+                    }
+                    completedCount++
+                    if (completedCount >= totalQueries && !phoneResolved) {
+                        saveWithPhone("")
+                    }
+                }
+            }
+        }
+    }
+
+    fun getNotificationById(notificationId: String, onResult: (NotificationModel?) -> Unit) {
+        if (notificationId.isBlank()) {
+            onResult(null)
+            return
+        }
+        db.collection("notifications").document(notificationId).get()
+            .addOnSuccessListener { snapshot ->
+                val notif = snapshot.toObject<NotificationModel>()?.let {
+                    if (it.id.isNotBlank()) it else it.copy(id = snapshot.id)
+                }
+                onResult(notif)
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+
+    /**
      * Sends a notification to either a specific user (recipientId) or an entire role
      * (recipientRole, e.g. "admin"/"driver"/"parent"/"principal") - pass exactly one.
      * If an [id] is provided, it uses it for deduplication.
@@ -398,6 +605,7 @@ object FirebaseRepository {
         else db.collection("notifications").document()
 
         val data = hashMapOf(
+            "id" to docRef.id,
             "recipientId" to (recipientId ?: ""),
             "recipientRole" to (recipientRole ?: ""),
             "title" to title,
@@ -431,14 +639,22 @@ object FirebaseRepository {
         val reg1 = db.collection("notifications")
             .whereEqualTo("recipientId", uid)
             .addSnapshotListener { snapshot, _ ->
-                personal = snapshot?.documents?.mapNotNull { it.toObject<NotificationModel>() } ?: emptyList()
+                personal = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject<NotificationModel>()?.let {
+                        if (it.id.isNotBlank()) it else it.copy(id = doc.id)
+                    }
+                } ?: emptyList()
                 emit()
             }
 
         val reg2 = db.collection("notifications")
             .whereEqualTo("recipientRole", role)
             .addSnapshotListener { snapshot, _ ->
-                roleBroadcast = snapshot?.documents?.mapNotNull { it.toObject<NotificationModel>() } ?: emptyList()
+                roleBroadcast = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject<NotificationModel>()?.let {
+                        if (it.id.isNotBlank()) it else it.copy(id = doc.id)
+                    }
+                } ?: emptyList()
                 emit()
             }
 

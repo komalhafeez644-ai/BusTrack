@@ -51,10 +51,24 @@ class AlertsViewModel : ViewModel() {
     val unseenCount: LiveData<Int> get() = _unseenCount
 
     private fun com.example.bustrack_app.models.NotificationModel.toTransportAlert(): TransportAlert {
-        val (tag, icon) = when (this.type) {
-            "TRACKING_REQUEST" -> "IMPORTANT" to android.R.drawable.stat_sys_warning
-            "ATTENDANCE" -> "CRITICAL" to android.R.drawable.stat_notify_error
-            "BROADCAST" -> "GENERAL" to android.R.drawable.ic_menu_manage
+        val (tag, icon) = when {
+            this.type == com.example.bustrack_app.models.NotificationModel.TYPE_DRIVER_ALERT || this.alertType.isNotBlank() -> {
+                when (this.alertType) {
+                    "Accident", "Bus Breakdown", "Student Emergency" ->
+                        "CRITICAL" to R.drawable.notification_active
+                    "Road Block", "Heavy Traffic", "Fuel Issue", "Bad Weather", "Police Check", "Wrong Route" ->
+                        "IMPORTANT" to R.drawable.notification_active
+                    else ->
+                        "GENERAL" to R.drawable.notification_active
+                }
+            }
+            this.type == "TRACKING_REQUEST" -> "IMPORTANT" to android.R.drawable.stat_sys_warning
+            this.type == "ATTENDANCE" || this.type == com.example.bustrack_app.models.NotificationModel.TYPE_EMERGENCY ->
+                "CRITICAL" to android.R.drawable.stat_notify_error
+            this.type == com.example.bustrack_app.models.NotificationModel.TYPE_IMPORTANT ->
+                "IMPORTANT" to android.R.drawable.stat_sys_warning
+            this.type == "BROADCAST" || this.type == com.example.bustrack_app.models.NotificationModel.TYPE_ADMIN_BROADCAST ->
+                "GENERAL" to android.R.drawable.ic_menu_manage
             else -> "GENERAL" to android.R.drawable.ic_dialog_info
         }
         val subtitleWithTime = "${this.message}\n${FormUtils.timeAgo(this.timestamp)}"
