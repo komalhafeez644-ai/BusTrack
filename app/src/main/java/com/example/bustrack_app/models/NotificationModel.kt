@@ -1,6 +1,5 @@
 package com.example.bustrack_app.models
 
-import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
@@ -14,7 +13,6 @@ import java.util.Date
  * them personally as well as ones broadcast to their role.
  */
 data class NotificationModel(
-    @DocumentId
     val id: String = "",
     val recipientId: String = "",   // specific user's uid, empty if role-targeted
     val recipientRole: String = "", // "admin" | "driver" | "parent" | "principal", empty if user-targeted

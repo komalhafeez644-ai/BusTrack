@@ -3114,24 +3114,38 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         val driver = viewModel.currentDriver.value
         val user = FirebaseAuth.getInstance().currentUser
+        val userEmail = user?.email?.trim()?.lowercase() ?: ""
+        val userUid = user?.uid ?: ""
 
-        val driverId = driver?.driverId?.ifEmpty { null } ?: user?.uid ?: ""
-        val driverName = driver?.name?.ifEmpty { null } ?: user?.displayName ?: "Driver"
-        val driverEmail = driver?.email?.ifEmpty { null } ?: user?.email ?: ""
         val cachedDriver = DriverRepository.driverList.value?.find {
-            (user?.email != null && it.email.trim().equals(user.email?.trim(), ignoreCase = true)) ||
-            (user?.uid != null && (it.uid == user.uid || it.driverId == user.uid || it.id == user.uid))
+            (userEmail.isNotEmpty() && it.email.trim().equals(userEmail, ignoreCase = true)) ||
+            (userUid.isNotEmpty() && (it.uid == userUid || it.driverId == userUid || it.id == userUid)) ||
+            (driver != null && (it.driverId == driver.driverId || it.id == driver.id || it.uid == driver.uid))
         }
-        val driverPhone = driver?.phone?.ifEmpty { null } ?: cachedDriver?.phone ?: ""
+
+        val driverId = driver?.driverId?.ifEmpty { null }
+            ?: cachedDriver?.driverId?.ifEmpty { null }
+            ?: cachedDriver?.id?.ifEmpty { null }
+            ?: userUid
+        val driverName = driver?.name?.ifEmpty { null }
+            ?: cachedDriver?.name?.ifEmpty { null }
+            ?: user?.displayName
+            ?: "Driver"
+        val driverEmail = driver?.email?.ifEmpty { null }
+            ?: cachedDriver?.email?.ifEmpty { null }
+            ?: userEmail
+        val driverPhone = driver?.phone?.trim()?.ifEmpty { null }
+            ?: cachedDriver?.phone?.trim()
+            ?: ""
         val busNumber = viewModel.dashboardData.value?.busNumber?.ifEmpty { null }
             ?: driver?.assignedBus
             ?: cachedDriver?.assignedBus
-            ?: binding.tvBusNumberInfo.text.toString()
+            ?: binding.tvBusNumberInfo.text.toString().trim()
         val routeName = assignedRoute?.routeName?.ifEmpty { null }
             ?: viewModel.dashboardData.value?.currentRoute
             ?: driver?.route
             ?: cachedDriver?.route
-            ?: binding.tvRouteNameInfo.text.toString()
+            ?: binding.tvRouteNameInfo.text.toString().trim()
 
         val lat = currentLocation?.latitude ?: 0.0
         val lng = currentLocation?.longitude ?: 0.0
