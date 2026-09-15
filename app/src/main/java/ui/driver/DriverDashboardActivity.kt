@@ -3102,6 +3102,68 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private var isSubmittingAlert = false
+
+    private fun submitDriverAlert(
+        alertType: String,
+        customDescription: String = "",
+        onFinished: () -> Unit = {}
+    ) {
+        if (isSubmittingAlert) return
+        isSubmittingAlert = true
+
+        val driver = viewModel.currentDriver.value
+        val user = FirebaseAuth.getInstance().currentUser
+
+        val driverId = driver?.driverId?.ifEmpty { null } ?: user?.uid ?: ""
+        val driverName = driver?.name?.ifEmpty { null } ?: user?.displayName ?: "Driver"
+        val driverEmail = driver?.email?.ifEmpty { null } ?: user?.email ?: ""
+        val cachedDriver = DriverRepository.driverList.value?.find {
+            (user?.email != null && it.email.trim().equals(user.email?.trim(), ignoreCase = true)) ||
+            (user?.uid != null && (it.uid == user.uid || it.driverId == user.uid || it.id == user.uid))
+        }
+        val driverPhone = driver?.phone?.ifEmpty { null } ?: cachedDriver?.phone ?: ""
+        val busNumber = viewModel.dashboardData.value?.busNumber?.ifEmpty { null }
+            ?: driver?.assignedBus
+            ?: cachedDriver?.assignedBus
+            ?: binding.tvBusNumberInfo.text.toString()
+        val routeName = assignedRoute?.routeName?.ifEmpty { null }
+            ?: viewModel.dashboardData.value?.currentRoute
+            ?: driver?.route
+            ?: cachedDriver?.route
+            ?: binding.tvRouteNameInfo.text.toString()
+
+        val lat = currentLocation?.latitude ?: 0.0
+        val lng = currentLocation?.longitude ?: 0.0
+        val address = lastResolvedAddress ?: ""
+        val direction = if (isReverseTripActive) "RETURN" else "FORWARD"
+        val tripStatus = if (isNavigating) "NAVIGATING" else if (isDutyEnabled) "ON_DUTY" else "IDLE"
+
+        FirebaseRepository.sendDriverAlert(
+            driverId = driverId,
+            driverName = driverName,
+            driverEmail = driverEmail,
+            driverPhone = driverPhone,
+            busNumber = busNumber,
+            routeName = routeName,
+            alertType = alertType,
+            customDescription = customDescription,
+            latitude = lat,
+            longitude = lng,
+            locationAddress = address,
+            tripDirection = direction,
+            tripStatus = tripStatus
+        ) { success ->
+            isSubmittingAlert = false
+            onFinished()
+            if (success) {
+                Toast.makeText(this@DriverDashboardActivity, "Alert sent to Admin successfully", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this@DriverDashboardActivity, "Unable to send alert. Please try again.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun showAlertsBottomSheet() {
         val dialog = BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_driver_alerts, null)
@@ -3123,12 +3185,13 @@ class DriverDashboardActivity : AppCompatActivity() {
         val rvAlerts = view.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvAlerts)
         rvAlerts.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
         rvAlerts.adapter = DriverAlertsAdapter(alerts) { option ->
-            if (option.title == "Other") {
+            dialog.dismiss()
+            if (option.title.equals("Other", ignoreCase = true)) {
                 showOtherAlertContent()
             } else {
-                Toast.makeText(this, "Reported: ${option.title}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Sending alert: ${option.title}...", Toast.LENGTH_SHORT).show()
+                submitDriverAlert(option.title)
             }
-            dialog.dismiss()
         }
 
         dialog.show()
@@ -3137,21 +3200,29 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun showOtherAlertContent() {
         val dialog = Dialog(this)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(R.layout.dialog_driver_live_tracking)
+        dialog.setContentView(R.layout.dialog_driver_custom_alert)
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-        val tvTitle = dialog.findViewById<TextView>(R.id.tvDialogTitle)
-        val tvDesc = dialog.findViewById<TextView>(R.id.tvDialogDescription)
-        val btnSend = dialog.findViewById<MaterialButton>(R.id.btnEnableTracking)
-        val btnCancel = dialog.findViewById<MaterialButton>(R.id.btnCancelTracking)
-
-        tvTitle?.text = "Other Issue"
-        tvDesc?.text = "Please describe the issue you are facing."
-        btnSend?.text = "Send Report"
+        val etDesc = dialog.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etCustomDescription)
+        val tilDesc = dialog.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.tilDescription)
+        val btnSend = dialog.findViewById<MaterialButton>(R.id.btnSubmitReport)
+        val btnCancel = dialog.findViewById<MaterialButton>(R.id.btnCancelCustomAlert)
+        val progressBar = dialog.findViewById<android.widget.ProgressBar>(R.id.progressBarCustomAlert)
 
         btnSend?.setOnClickListener {
-            Toast.makeText(this, "Custom report sent to Admin", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
+            val text = etDesc?.text?.toString()?.trim() ?: ""
+            if (text.isEmpty()) {
+                tilDesc?.error = "Please enter an issue description"
+                return@setOnClickListener
+            }
+            tilDesc?.error = null
+            btnSend.isEnabled = false
+            btnCancel?.isEnabled = false
+            progressBar?.visibility = View.VISIBLE
+
+            submitDriverAlert("Other", text) {
+                dialog.dismiss()
+            }
         }
 
         btnCancel?.setOnClickListener { dialog.dismiss() }
