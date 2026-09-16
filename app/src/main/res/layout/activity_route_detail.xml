@@ -165,8 +165,9 @@
                                     android:id="@+id/ivDriverProfile"
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent"
-                                    android:src="@drawable/driver_image_one"
-                                    android:scaleType="centerCrop"
+                                    android:src="@drawable/ic_driver"
+                                    android:padding="8dp"
+                                    android:scaleType="centerInside"
                                     android:contentDescription="Driver Image" />
                             </com.google.android.material.card.MaterialCardView>
 

@@ -55,6 +55,23 @@ class AdminDashboardActivity : AppCompatActivity() {
                 tvBadge?.visibility = View.GONE
             }
         }
+
+        // Observe Buses for Active/Total count
+        com.example.bustrack_app.data.BusRepository.busList.observe(this) { buses ->
+            val totalBuses = buses.size
+            val activeBuses = buses.count { it.status.uppercase() == "ACTIVE" }
+            findViewById<TextView>(R.id.tvActiveBusesCount)?.text = "$activeBuses / $totalBuses"
+        }
+
+        // Observe Students for total count
+        com.example.bustrack_app.data.StudentRepository.studentList.observe(this) { students ->
+            findViewById<TextView>(R.id.tvTotalStudentsCount)?.text = students.size.toString()
+        }
+
+        // Observe Routes for total count
+        com.example.bustrack_app.data.RouteRepository.routeList.observe(this) { routes ->
+            findViewById<TextView>(R.id.tvTotalRoutesCount)?.text = routes.size.toString()
+        }
     }
 
     private fun observeProfileData() {

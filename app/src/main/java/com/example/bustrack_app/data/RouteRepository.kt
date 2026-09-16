@@ -42,15 +42,43 @@ object RouteRepository {
     }
 
     fun updateRoute(updatedRoute: RouteModel, onComplete: (Boolean) -> Unit = {}) {
-        routesCollection.document(updatedRoute.id).set(updatedRoute)
-            .addOnSuccessListener {
-                Log.d("RouteRepository", "Route successfully updated in Firestore!")
-                onComplete(true)
+        if (updatedRoute.status == "Disabled") {
+            // 1. Release assigned bus
+            if (updatedRoute.busNo.isNotEmpty()) {
+                BusRepository.getBusByNumber(updatedRoute.busNo)?.let { bus ->
+                    BusRepository.updateBusDetails(updatedRoute.busNo, bus.copy(routeName = null))
+                }
             }
-            .addOnFailureListener { e ->
-                Log.e("RouteRepository", "Error updating route", e)
-                onComplete(false)
+
+            // 2. Release assigned driver
+            if (updatedRoute.driverName.isNotEmpty()) {
+                DriverRepository.driverList.value?.find { it.name == updatedRoute.driverName }?.let { driver ->
+                    DriverRepository.updateDriver(driver.copy(assignedBus = null, route = null))
+                }
             }
+
+            // Clear assignments in the route model itself
+            val finalRoute = updatedRoute.copy(busNo = "", driverName = "")
+            routesCollection.document(finalRoute.id).set(finalRoute)
+                .addOnSuccessListener {
+                    Log.d("RouteRepository", "Route successfully disabled and unassigned in Firestore!")
+                    onComplete(true)
+                }
+                .addOnFailureListener { e ->
+                    Log.e("RouteRepository", "Error disabling route", e)
+                    onComplete(false)
+                }
+        } else {
+            routesCollection.document(updatedRoute.id).set(updatedRoute)
+                .addOnSuccessListener {
+                    Log.d("RouteRepository", "Route successfully updated in Firestore!")
+                    onComplete(true)
+                }
+                .addOnFailureListener { e ->
+                    Log.e("RouteRepository", "Error updating route", e)
+                    onComplete(false)
+                }
+        }
     }
 
     fun deleteRoute(routeId: String, onComplete: (Boolean) -> Unit = {}) {

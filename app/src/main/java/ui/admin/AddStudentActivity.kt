@@ -107,7 +107,14 @@ class AddStudentActivity : AppCompatActivity() {
 
         binding.btnPickStudentImage.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            pickImageLauncher.launch("image/*")
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImageLauncher.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    binding.imgStudentUpload.setImageResource(R.drawable.ic_person)
+                    binding.imgStudentUpload.setPadding(20, 20, 20, 20)
+                }
+            )
         }
 
         binding.btnSelectOnMap.setOnClickListener {

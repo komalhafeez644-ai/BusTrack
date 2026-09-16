@@ -82,6 +82,9 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/parent_name_label"
+            app:placeholderText="Enter Parent Name"
+            app:placeholderTextColor="#D1D1D6"
+            app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -108,6 +111,9 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/cnic_label"
+            app:placeholderText="XXXXX-XXXXXXX-X"
+            app:placeholderTextColor="#D1D1D6"
+            app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -135,6 +141,9 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/phone_label"
+            app:placeholderText="03XX-XXXXXXX"
+            app:placeholderTextColor="#D1D1D6"
+            app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -149,7 +158,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="number"
-                android:maxLength="11"
+                android:maxLength="12"
                 android:textColor="@color/text_primary"
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>
@@ -162,6 +171,9 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/child_name_label"
+            app:placeholderText="Child Name"
+            app:placeholderTextColor="#D1D1D6"
+            app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -188,6 +200,9 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/student_id_label"
+            app:placeholderText="ABC-123"
+            app:placeholderTextColor="#D1D1D6"
+            app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
@@ -195,15 +210,14 @@
             app:boxStrokeColor="@color/box_stroke_selector"
             app:hintTextColor="@color/primary_blue"
             app:startIconDrawable="@drawable/badge"
-            app:startIconTint="@color/text_secondary"
-            app:helperText="Example: GCW-ABC">
+            app:startIconTint="@color/text_secondary">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etStudentId"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textCapCharacters"
-                android:maxLength="7"
+                android:maxLength="8"
                 android:textColor="@color/text_primary"
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>

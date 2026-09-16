@@ -28,5 +28,6 @@ data class RouteModel(
     var description: String = "",
     var startPoint: String = "",
     var endPoint: String = "",
-    var pathPoints: MutableList<LatLngModel> = mutableListOf()
+    var pathPoints: MutableList<LatLngModel> = mutableListOf(),
+    val createdAt: Long = 0L // Order by creation time
 ) : Serializable

@@ -110,7 +110,15 @@ class EditDriverActivity : AppCompatActivity() {
 
         binding.btnChangePhoto.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            pickImageLauncher.launch("image/*")
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImageLauncher.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    driverData = driverData?.copy(profileImageUrl = "")
+                    binding.imgDriverAvatar.setImageResource(R.drawable.ic_person)
+                    binding.imgDriverAvatar.setPadding(20, 20, 20, 20)
+                }
+            )
         }
 
         binding.etDriverId.setOnFocusChangeListener { _, hasFocus ->

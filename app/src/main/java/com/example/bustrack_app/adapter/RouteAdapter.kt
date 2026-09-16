@@ -53,18 +53,28 @@ class RouteAdapter(
                 val targetState = !isCurrentlyActive
 
                 showCustomConfirmDialog(
-                    title = if (targetState) "Activate Route?" else "Deactivate Route?",
+                    title = if (targetState) "Activate Route?" else "Disable Route?",
                     message = if (targetState) {
                         "Are you sure you want to activate ${route.routeName}? This route will become available for bus assignments."
                     } else {
-                        "Are you sure you want to deactivate ${route.routeName}? It will be hidden from new assignments."
+                        "Are you sure you want to disable ${route.routeName}? It will release assigned bus and driver."
                     },
                     iconRes = if (targetState) R.drawable.alt_route else R.drawable.warning,
-                    confirmText = if (targetState) "Activate" else "Deactivate",
+                    confirmText = if (targetState) "Activate" else "Disable",
                     onConfirm = {
-                        route.status = if (targetState) "ACTIVE" else "INACTIVE"
-                        binding.switchRouteStatus.isChecked = targetState
-                        Toast.makeText(itemView.context, "Route ${if (targetState) "Activated" else "Deactivated"}", Toast.LENGTH_SHORT).show()
+                        val targetStatus = if (targetState) "ACTIVE" else "Disabled"
+                        val updatedRoute = route.copy(status = targetStatus)
+                        
+                        com.example.bustrack_app.data.RouteRepository.updateRoute(updatedRoute) { success ->
+                            if (success) {
+                                route.status = targetStatus
+                                binding.switchRouteStatus.isChecked = targetState
+                                Toast.makeText(itemView.context, "Route ${if (targetState) "Activated" else "Disabled"}", Toast.LENGTH_SHORT).show()
+                            } else {
+                                binding.switchRouteStatus.isChecked = isCurrentlyActive
+                                Toast.makeText(itemView.context, "Failed to update route status", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     },
                     onCancel = {
                         binding.switchRouteStatus.isChecked = isCurrentlyActive

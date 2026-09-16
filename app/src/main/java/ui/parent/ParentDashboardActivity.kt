@@ -524,8 +524,8 @@ class ParentDashboardActivity : AppCompatActivity() {
 
         // RESTORE FORMATTING RULES
         FormUtils.setupCnicFormatting(etCnic)
+        FormUtils.setupPhoneFormatting(etPhone)
         FormUtils.setupStudentIdFormatting(etStudentId)
-        etPhone.filters = arrayOf(android.text.InputFilter.LengthFilter(11))
 
         etParentName.addTextChangedListener(object : TextWatcher {
             private var isUpdating = false
@@ -552,11 +552,13 @@ class ParentDashboardActivity : AppCompatActivity() {
             val cleanCnic = etCnic.text.toString().replace("-", "")
             if (cleanCnic.length != 13) { tilCnic.error = "Enter 13 digit CNIC"; isValid = false } else tilCnic.error = null
 
-            if (etPhone.text.isNullOrEmpty() || etPhone.text?.length != 11) { tilPhone.error = "Enter 11 digit number"; isValid = false } else tilPhone.error = null
+            val cleanPhone = etPhone.text.toString().replace("-", "")
+            if (cleanPhone.length != 11 || !cleanPhone.startsWith("03")) { tilPhone.error = "Invalid format: 03XX-XXXXXXX"; isValid = false } else tilPhone.error = null
+            
             if (etChildName.text.isNullOrEmpty()) { tilChildName.error = "Required"; isValid = false } else tilChildName.error = null
 
             val studentId = etStudentId.text.toString()
-            if (studentId.isEmpty() || !studentId.contains("-") || studentId.length < 5) { tilStudentId.error = "Format: GCW-XXX"; isValid = false } else tilStudentId.error = null
+            if (studentId.length < 5 || !studentId.contains("-")) { tilStudentId.error = "Format: ABC-123"; isValid = false } else tilStudentId.error = null
 
             if (actvRelationship.text.isNullOrEmpty()) { tilRelationship.error = "Required"; isValid = false } else tilRelationship.error = null
 

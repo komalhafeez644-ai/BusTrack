@@ -26,7 +26,7 @@ class RouteViewModel : ViewModel() {
         val fullList = RouteRepository.routeList.value ?: listOf()
         val studentList = StudentRepository.studentList.value ?: listOf()
         
-        // Enrich routes with actual counts
+        // Enrich routes with actual counts and sort by creation order
         val enrichedList = fullList.map { route ->
             val actualStops = route.stopsList.size
             val actualStudents = studentList.count { it.route == route.routeName }
@@ -35,7 +35,7 @@ class RouteViewModel : ViewModel() {
                 stopsCount = actualStops,
                 studentsCount = actualStudents
             )
-        }
+        }.sortedBy { it.createdAt }
 
         if (query.isEmpty()) {
             _filteredRoutes.value = enrichedList

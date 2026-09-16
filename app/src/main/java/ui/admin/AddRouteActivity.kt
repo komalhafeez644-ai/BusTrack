@@ -88,7 +88,8 @@ class AddRouteActivity : AppCompatActivity() {
             endPoint = end,
             status = "ACTIVE",
             pathPoints = drawnPath,
-            stopsList = mutableListOf()
+            stopsList = mutableListOf(),
+            createdAt = System.currentTimeMillis()
         )
 
         // Standardized save via Firestore Repository

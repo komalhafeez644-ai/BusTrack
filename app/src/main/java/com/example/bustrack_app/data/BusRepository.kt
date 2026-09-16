@@ -45,12 +45,12 @@ object BusRepository {
             val driverName = assignedRoute?.driverName ?: bus.driverName
             
             // Status logic: 
-            // 1. If status is INACTIVE, keep it INACTIVE
+            // 1. If status is INACTIVE or Disabled, keep it as is
             // 2. If no route name at all -> UNASSIGNED
             // 3. If has route but status was UNASSIGNED -> ACTIVE (First time assignment)
             // 4. Otherwise keep current status
             val newStatus = when {
-                bus.status == "INACTIVE" -> "INACTIVE"
+                bus.status == "INACTIVE" || bus.status == "Disabled" -> bus.status
                 routeName.isNullOrEmpty() -> "UNASSIGNED"
                 bus.status == "UNASSIGNED" -> "ACTIVE"
                 else -> bus.status

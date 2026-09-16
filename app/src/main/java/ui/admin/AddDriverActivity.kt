@@ -67,7 +67,14 @@ class AddDriverActivity : AppCompatActivity() {
 
         binding.btnPickImage.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            pickImageLauncher.launch("image/*")
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImageLauncher.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    binding.imgUpload.setImageResource(R.drawable.ic_person)
+                    binding.imgUpload.setPadding(20, 20, 20, 20) // Add some padding for placeholder
+                }
+            )
         }
     }
 

@@ -11,7 +11,7 @@ object StudentRepository {
     private val db = FirebaseFirestore.getInstance()
     private val studentsCollection = db.collection("students")
 
-    private val _studentList = MutableLiveData<List<StudentModel>>()
+    private val _studentList = MutableLiveData<List<StudentModel>>(emptyList())
     val studentList: LiveData<List<StudentModel>> get() = _studentList
 
     init {

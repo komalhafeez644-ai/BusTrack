@@ -50,11 +50,7 @@ class DriverAdapter(
             if (driver.profileImageUrl.isNotEmpty()) {
                 itemBinding.imgDriver.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE
-                Glide.with(itemBinding.root.context)
-                    .load(driver.profileImageUrl)
-                    .placeholder(R.drawable.ic_person)
-                    .error(R.drawable.ic_person)
-                    .into(itemBinding.imgDriver)
+                utils.ImageUtils.loadProfileImage(itemBinding.root.context, driver.profileImageUrl, itemBinding.imgDriver)
             } else if (driver.profileImage != 0) {
                 itemBinding.imgDriver.visibility = View.VISIBLE
                 itemBinding.txtAvatar.visibility = View.GONE

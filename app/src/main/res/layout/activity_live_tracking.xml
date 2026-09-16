@@ -115,57 +115,6 @@
 
     </androidx.cardview.widget.CardView>
 
-    <!-- Map Controls (Vertical) -->
-    <LinearLayout
-        android:id="@+id/mapControls"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:layout_marginEnd="20dp"
-        android:orientation="vertical"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/searchContainer">
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/compassCard"
-            android:layout_width="45dp"
-            android:layout_height="45dp"
-            app:cardCornerRadius="22.5dp"
-            android:backgroundTint="@color/white"
-            app:cardElevation="4dp"
-            android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:id="@+id/ivCompass"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="8dp"
-                android:src="@drawable/ic_nav_stops"
-                android:scaleType="centerInside"
-                app:tint="@color/text_dark_navy"
-                android:contentDescription="Compass" />
-        </androidx.cardview.widget.CardView>
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/myLocationCard"
-            android:layout_width="45dp"
-            android:layout_height="45dp"
-            android:layout_marginTop="12dp"
-            app:cardCornerRadius="22.5dp"
-            android:backgroundTint="@color/white"
-            app:cardElevation="4dp"
-            android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="10dp"
-                android:src="@drawable/buslocation"
-                android:contentDescription="Focus on Bus" />
-        </androidx.cardview.widget.CardView>
-
-    </LinearLayout>
-
     <!-- Bottom Driver Info Card -->
     <androidx.cardview.widget.CardView
         android:id="@+id/driverCard"
@@ -337,20 +286,6 @@
 
         </LinearLayout>
     </androidx.cardview.widget.CardView>
-
-    <!-- FAB Megaphone -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAlert"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:src="@drawable/notifications"
-        app:backgroundTint="@color/text_dark_navy"
-        app:layout_constraintBottom_toBottomOf="@id/driverCard"
-        app:layout_constraintEnd_toEndOf="@id/driverCard"
-        app:tint="@color/white"
-        android:contentDescription="Alert megaphone" />
 
     <include
         android:id="@+id/bottomNavInclude"

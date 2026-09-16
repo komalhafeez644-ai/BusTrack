@@ -30,6 +30,7 @@ class EditParentProfileActivity : AppCompatActivity() {
     private val viewModel: ProfileViewModel by viewModels()
     private var selectedImageUri: Uri? = null
     private var cameraImageUri: Uri? = null
+    private var isImageRemoved = false
 
     // Photo selection contract
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -117,18 +118,32 @@ class EditParentProfileActivity : AppCompatActivity() {
 
         binding.btnUpdatePhoto.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            showImageSourceDialog()
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImage.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    isImageRemoved = true
+                    binding.imgProfile.setImageResource(R.drawable.ic_person)
+                    binding.imgProfile.setPadding(20, 20, 20, 20)
+                }
+            )
         }
     }
 
     private fun showImageSourceDialog() {
-        val options = arrayOf("Take Photo", "Choose from Gallery")
+        val options = arrayOf("Take Photo", "Choose from Gallery", "No Photo / Keep Empty")
         AlertDialog.Builder(this)
             .setTitle("Select Profile Photo")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> checkCameraPermission()
                     1 -> pickImage.launch("image/*")
+                    2 -> {
+                        selectedImageUri = null
+                        isImageRemoved = true
+                        binding.imgProfile.setImageResource(R.drawable.ic_person)
+                        binding.imgProfile.setPadding(20, 20, 20, 20)
+                    }
                 }
             }
             .show()
@@ -192,6 +207,9 @@ class EditParentProfileActivity : AppCompatActivity() {
                 }
             }
         } else {
+            if (isImageRemoved) {
+                userData["profileImageUrl"] = ""
+            }
             updateFirestore(userData)
         }
     }

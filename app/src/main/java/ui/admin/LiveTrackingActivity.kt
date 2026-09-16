@@ -66,7 +66,6 @@ class LiveTrackingActivity : AppCompatActivity() {
     private lateinit var searchAdapter: BusSearchAdapter
     private var unavailableDialog: android.app.Dialog? = null
     private var isUnavailablePopupDismissed = false
-    private var cancelCompassSubscription: (() -> Unit)? = null
     private var isMapStyleReady = false
     private var pendingDrivers: List<DriverModel> = emptyList()
 
@@ -145,13 +144,6 @@ class LiveTrackingActivity : AppCompatActivity() {
                 }
                 false
             }
-
-            // Sync Compass UI with map rotation
-            val compassSubscription = mapView?.mapboxMap?.subscribeCameraChanged {
-                val bearing = mapView?.mapboxMap?.cameraState?.bearing?.toFloat() ?: 0f
-                findViewById<ImageView>(R.id.ivCompass)?.rotation = -bearing
-            }
-            cancelCompassSubscription = { compassSubscription?.cancel() }
 
             if (pendingDrivers.isNotEmpty()) updateMarkers(pendingDrivers)
         }
@@ -242,34 +234,6 @@ class LiveTrackingActivity : AppCompatActivity() {
             } else if (findViewById<EditText>(R.id.etSearchBus).isFocused) {
                 searchAdapter.updateData(drivers)
                 cardSuggestions.visibility = if (drivers.isNotEmpty()) View.VISIBLE else View.GONE
-            }
-        }
-
-        // Map Controls
-        findViewById<View>(R.id.mapControls)?.let { controls ->
-            controls.findViewById<View>(R.id.compassCard)?.setOnClickListener {
-                // Reset map rotation to North. easeTo (not flyTo) so a rotation
-                // reset can never collide with focusOnDriver()/focusOnAllDrivers()'s
-                // own easeTo() camera transitions - see the flyTo->easeTo note on
-                // focusOnAllDrivers() below for why mixing animator types here
-                // causes visible camera jumps.
-                mapView?.mapboxMap?.easeTo(CameraOptions.Builder().bearing(0.0).build())
-            }
-
-            controls.findViewById<View>(R.id.myLocationCard)?.setOnClickListener {
-                isUserInteracting = false
-                val drivers = viewModel.activeDrivers.value
-                if (!drivers.isNullOrEmpty()) {
-                    val selected = viewModel.selectedDriver.value
-                    if (selected != null) {
-                        focusOnDriver(selected)
-                    } else {
-                        if (drivers.size == 1) focusOnDriver(drivers[0]) else focusOnAllDrivers(drivers)
-                    }
-                } else {
-                    val defaultPoint = Point.fromLngLat(73.0478, 33.5977)
-                    mapView?.mapboxMap?.flyTo(CameraOptions.Builder().center(defaultPoint).zoom(15.0).build())
-                }
             }
         }
 
@@ -518,7 +482,6 @@ class LiveTrackingActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        cancelCompassSubscription?.invoke()
         bitmapCache.clear()
         mapView?.onDestroy()
     }

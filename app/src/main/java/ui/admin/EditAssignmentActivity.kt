@@ -116,9 +116,12 @@ class EditAssignmentActivity : AppCompatActivity() {
     }
 
     private fun setupDropdowns() {
-        // Route Selection Dropdown Data from Global Repository
+        val applicationData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+        
+        // Route Selection Dropdown Data from Global Repository - Filter only ACTIVE routes
         val globalRoutes = com.example.bustrack_app.data.RouteRepository.routeList.value ?: listOf()
-        val routeStrings = globalRoutes.map { it.routeName }.toTypedArray()
+        val routeStrings = globalRoutes.filter { it.status == "ACTIVE" || it.routeName == applicationData?.bestRoute }
+            .map { it.routeName }.toTypedArray()
         
         val routeAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, routeStrings)
         binding.spinnerRoute.setAdapter(routeAdapter)

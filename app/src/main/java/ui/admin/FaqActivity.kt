@@ -38,12 +38,6 @@ class FaqActivity : AppCompatActivity() {
 
         recyclerView.adapter = FaqAdapter(faqList)
 
-        // Task 6: Help & Support Chatbot - reuses this existing "Contact Support" button
-        // instead of adding new UI. btnApiDocs is left as-is (unrelated to this task).
-        findViewById<View>(R.id.btnSupport)?.setOnClickListener {
-            startActivity(Intent(this, ui.chatbot.ChatbotActivity::class.java))
-        }
-
         findViewById<View>(R.id.btnMenu).setOnClickListener {
             handleBackToDashboard()
         }

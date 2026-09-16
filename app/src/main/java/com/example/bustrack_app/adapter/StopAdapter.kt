@@ -30,7 +30,8 @@ class StopAdapter(
         fun bind(stop: StopItem) {
             binding.tvStopNumber.text = stop.id
             binding.tvStopName.text = stop.stopName
-            binding.tvStopTime.text = stop.time
+            // Fix #2: Remove ETA text/value from the Stop Sequence on Route Detail screen
+            binding.tvStopTime.visibility = android.view.View.GONE
         }
     }
 }

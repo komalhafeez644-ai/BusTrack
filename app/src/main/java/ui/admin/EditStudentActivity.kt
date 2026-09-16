@@ -157,7 +157,10 @@ class EditStudentActivity : AppCompatActivity() {
 
     private fun setupRouteAndStopSpinners() {
         val routes = RouteRepository.routeList.value ?: listOf()
-        val routeNames = routes.map { it.routeName }.toMutableList()
+        // Only show ACTIVE routes for selection
+        val routeNames = routes.filter { it.status == "ACTIVE" || it.routeName == studentData?.route }
+            .map { it.routeName }.toMutableList()
+
         if (!routeNames.contains("None")) {
             routeNames.add(0, "None")
         }
@@ -211,7 +214,15 @@ class EditStudentActivity : AppCompatActivity() {
 
         btnChangeImage.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            pickImageLauncher.launch("image/*")
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImageLauncher.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    studentData = studentData?.copy(profileImageUrl = "")
+                    imgStudentEdit.setImageResource(R.drawable.ic_person)
+                    imgStudentEdit.setPadding(20, 20, 20, 20)
+                }
+            )
         }
 
         btnSelectOnMap.setOnClickListener {

@@ -70,4 +70,18 @@
     <style name="TransparentBottomSheetStyle" parent="Widget.MaterialComponents.BottomSheet.Modal">
         <item name="android:background">@android:color/transparent</item>
     </style>
+
+    <style name="PopupMenuStyle" parent="Widget.MaterialComponents.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_popup_grey</item>
+    </style>
+
+    <style name="PopupMenuTheme" parent="Theme.MaterialComponents.Light">
+        <item name="popupMenuStyle">@style/PopupMenuStyle</item>
+        <item name="android:textColorPrimary">#1C1C1E</item>
+    </style>
+
+    <style name="SubtleHintTextAppearance" parent="TextAppearance.AppCompat">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">#D1D1D6</item>
+    </style>
 </resources>

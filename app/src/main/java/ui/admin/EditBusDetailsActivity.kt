@@ -130,8 +130,13 @@ class EditBusDetailsActivity : AppCompatActivity() {
 
     private fun setupRouteDropdown(currentRoute: String) {
         val routes = RouteRepository.routeList.value ?: listOf()
-        val routeNames = routes.map { it.routeName }.toMutableList()
-        routeNames.add(0, "None")
+        // Only show ACTIVE routes for selection
+        val routeNames = routes.filter { it.status == "ACTIVE" || it.routeName == currentRoute }
+            .map { it.routeName }.toMutableList()
+        
+        if (!routeNames.contains("None")) {
+            routeNames.add(0, "None")
+        }
 
         val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, routeNames)
         binding.menuEditRoute.setAdapter(adapter)

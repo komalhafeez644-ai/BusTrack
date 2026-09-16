@@ -38,6 +38,8 @@ import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
+import com.mapbox.turf.TurfConstants
+import com.mapbox.turf.TurfMeasurement
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -158,10 +160,9 @@ class RouteMapActivity : AppCompatActivity() {
 
     private fun saveNewStop(name: String, point: Point) {
         val route = currentRoute ?: return
-        val nextId = String.format(Locale.getDefault(), "%02d", route.stopsList.size + 1)
         
         val newStop = StopItem(
-            id = nextId,
+            id = "", // Temp
             stopName = name,
             time = "ETA: --",
             latitude = point.latitude(),
@@ -169,6 +170,34 @@ class RouteMapActivity : AppCompatActivity() {
         )
         
         route.stopsList.add(newStop)
+
+        // 1. RE-SEQUENCE STOPS GEOGRAPHICALLY ALONG THE ROUTE PATH
+        if (route.pathPoints.isNotEmpty()) {
+            val path = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
+            
+            route.stopsList.sortBy { stop ->
+                val stopPoint = Point.fromLngLat(stop.longitude, stop.latitude)
+                var minDistance = Double.MAX_VALUE
+                var closestIndex = 0
+                
+                path.forEachIndexed { index, pathPoint ->
+                    val dist = TurfMeasurement.distance(stopPoint, pathPoint, TurfConstants.UNIT_METERS)
+                    if (dist < minDistance) {
+                        minDistance = dist
+                        closestIndex = index
+                    }
+                }
+                closestIndex
+            }
+        }
+
+        // 2. Renumber IDs based on sorted order (01, 02, 03...)
+        val resequenced = route.stopsList.mapIndexed { index, stop ->
+            stop.copy(id = String.format(Locale.US, "%02d", index + 1))
+        }
+        route.stopsList.clear()
+        route.stopsList.addAll(resequenced)
+
         updateMapUI()
     }
 
@@ -231,6 +260,14 @@ class RouteMapActivity : AppCompatActivity() {
             val stop = currentRoute?.stopsList?.find { it.stopName == name }
             stop?.let {
                 currentRoute?.stopsList?.remove(it)
+                
+                // Re-sequence IDs after removal to ensure continuous numbering
+                val resequenced = currentRoute?.stopsList?.mapIndexed { index, s ->
+                    s.copy(id = String.format(Locale.US, "%02d", index + 1))
+                }
+                currentRoute?.stopsList?.clear()
+                if (resequenced != null) currentRoute?.stopsList?.addAll(resequenced)
+
                 Toast.makeText(this, "Stop removed", Toast.LENGTH_SHORT).show()
                 updateMapUI()
             }

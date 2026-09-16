@@ -122,7 +122,8 @@ class BroadcastNotificationActivity : AppCompatActivity() {
 
     private fun setupSelectionData(isParents: Boolean, isGroup: Boolean = false) {
         val data: Map<String, String> = if (isGroup) {
-            routeListCache.associate { it.routeName to it.routeName }
+            // Only show ACTIVE routes for selection
+            routeListCache.filter { it.status == "ACTIVE" }.associate { it.routeName to it.routeName }
         } else if (isParents) {
             // One entry per approved tracking request - display parent name, value is their uid.
             approvedParentRequests.associate { "${it.parentName} (Student ${it.studentId})" to it.parentId }

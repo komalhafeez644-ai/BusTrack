@@ -21,6 +21,7 @@ class EditAdminProfileActivity : AppCompatActivity() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private var selectedImageUri: Uri? = null
+    private var isImageRemoved = false
 
     // Gallery Picker
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -81,7 +82,15 @@ class EditAdminProfileActivity : AppCompatActivity() {
 
         binding.imgCamera.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            pickImage.launch("image/*")
+            utils.ImageUtils.showPhotoOptionsDialog(this, it,
+                onGallerySelected = { pickImage.launch("image/*") },
+                onNoPhotoSelected = {
+                    selectedImageUri = null
+                    isImageRemoved = true
+                    binding.imgProfile.setImageResource(R.drawable.ic_person)
+                    binding.imgProfile.setPadding(20, 20, 20, 20)
+                }
+            )
         }
 
         binding.btnSave.setOnClickListener {
@@ -95,7 +104,7 @@ class EditAdminProfileActivity : AppCompatActivity() {
             if (selectedImageUri != null) {
                 uploadAndSave()
             } else {
-                saveDataToFirestore(null)
+                saveDataToFirestore(if (isImageRemoved) "" else null)
             }
         }
 

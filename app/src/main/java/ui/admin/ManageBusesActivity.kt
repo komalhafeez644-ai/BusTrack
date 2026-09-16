@@ -149,7 +149,8 @@ class ManageBusesActivity : AppCompatActivity() {
         bottomSheetDialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         val routes = RouteRepository.routeList.value ?: listOf()
-        val routeNames = routes.map { it.routeName }.toMutableList()
+        // Only show ACTIVE routes for selection
+        val routeNames = routes.filter { it.status == "ACTIVE" }.map { it.routeName }.toMutableList()
         routeNames.add(0, "None")
 
         val routeAdapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, routeNames)
