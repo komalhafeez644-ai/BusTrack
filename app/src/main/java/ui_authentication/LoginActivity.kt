@@ -122,7 +122,9 @@ class LoginActivity : AppCompatActivity() {
                 is Resource.Success -> {
                     progressBar.visibility = android.view.View.GONE
                     val role = resource.data
-                    cacheAuthenticatedRole(role)
+                    if (role != null) {
+                        cacheAuthenticatedRole(role)
+                    }
                     when (role) {
                         "admin" -> {
                             Toast.makeText(this, "Admin Login Successful", Toast.LENGTH_SHORT).show()
@@ -175,7 +177,8 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /** Keeps the already-resolved role available when a valid Firebase session is reopened offline. */
-    private fun cacheAuthenticatedRole(role: String) {
+    private fun cacheAuthenticatedRole(role: String?) {
+        if (role.isNullOrBlank()) return
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
         getSharedPreferences("AppPrefs", MODE_PRIVATE)
             .edit()

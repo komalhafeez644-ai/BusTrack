@@ -127,15 +127,72 @@ object FormUtils {
                 }
 
                 if (s.toString() != formatted.toString()) {
-                    val selection = editText.selectionStart
-                    val hyphensBefore = s.toString().substring(0, selection.coerceAtMost(s.length)).count { it == '-' }
-                    
                     editText.setText(formatted.toString())
-                    
-                    val hyphensAfter = formatted.toString().substring(0, formatted.length.coerceAtMost(selection)).count { it == '-' }
-                    val newSelection = (selection + (hyphensAfter - hyphensBefore)).coerceIn(0, formatted.length)
-                    
-                    editText.setSelection(formatted.length) // Simplified for now, usually sufficient for auto-formatting
+                    editText.setSelection(formatted.length)
+                }
+
+                isUpdating = false
+            }
+        })
+    }
+
+    /**
+     * Formats Employee ID as ABC-123
+     */
+    fun setupEmployeeIdFormatting(editText: EditText) {
+        editText.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s.isNullOrEmpty()) return
+                isUpdating = true
+
+                var str = s.toString().replace("-", "").uppercase()
+                val formatted = StringBuilder()
+
+                for (i in str.indices) {
+                    formatted.append(str[i])
+                    if (i == 2 && str.length > 3) {
+                        formatted.append("-")
+                    }
+                }
+
+                if (s.toString() != formatted.toString()) {
+                    editText.setText(formatted.toString())
+                    editText.setSelection(formatted.length)
+                }
+
+                isUpdating = false
+            }
+        })
+    }
+
+    /**
+     * Formats Phone as 0000-0000000
+     */
+    fun setupPhoneFormatting(editText: EditText) {
+        editText.addTextChangedListener(object : TextWatcher {
+            private var isUpdating = false
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (isUpdating || s.isNullOrEmpty()) return
+                isUpdating = true
+
+                val str = s.toString().replace("-", "")
+                val formatted = StringBuilder()
+
+                for (i in str.indices) {
+                    formatted.append(str[i])
+                    if (i == 3 && str.length > 4) {
+                        formatted.append("-")
+                    }
+                }
+
+                if (s.toString() != formatted.toString()) {
+                    editText.setText(formatted.toString())
+                    editText.setSelection(formatted.length)
                 }
 
                 isUpdating = false
@@ -148,7 +205,8 @@ object FormUtils {
     }
 
     fun isValidPhone(phone: String): Boolean {
-        return phone.length == 11 && phone.startsWith("03")
+        val cleanPhone = phone.replace("-", "")
+        return cleanPhone.length == 11 && cleanPhone.startsWith("03")
     }
 
     /**

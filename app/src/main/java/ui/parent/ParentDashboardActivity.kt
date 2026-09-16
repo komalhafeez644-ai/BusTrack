@@ -75,6 +75,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     private val parentRepository = ParentRepository()
     private var statusDialog: Dialog? = null
     private var unavailableDialog: Dialog? = null
+    private var infoBottomSheetDialog: BottomSheetDialog? = null
     private var isUnavailablePopupDismissed = false
     private val studentListeners = mutableMapOf<String, ListenerRegistration>()
     private val approvedStudents = mutableMapOf<String, StudentModel>()
@@ -121,6 +122,7 @@ class ParentDashboardActivity : AppCompatActivity() {
 
     private fun observeTrackingStatus() {
         parentRepository.listenToAllTrackingRequests { requests ->
+            if (isFinishing || isDestroyed) return@listenToAllTrackingRequests
             if (requests.isEmpty()) {
                 // No request yet, show info sheet after delay for new users
                 statusDialog?.dismiss()
@@ -129,6 +131,7 @@ class ParentDashboardActivity : AppCompatActivity() {
                 studentListeners.clear()
 
                 mapView?.postDelayed({
+                    if (isFinishing || isDestroyed) return@postDelayed
                     if (requests.isEmpty()) showParentInfoBottomSheet()
                 }, 2000)
 
@@ -205,6 +208,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun showUnavailableDialog(type: String) {
+        if (isFinishing || isDestroyed) return
         if (unavailableDialog?.isShowing == true || isUnavailablePopupDismissed) return
 
         unavailableDialog = Dialog(this)
@@ -241,7 +245,9 @@ class ParentDashboardActivity : AppCompatActivity() {
         val width = (resources.displayMetrics.widthPixels * 0.90).toInt()
         unavailableDialog?.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-        unavailableDialog?.show()
+        if (!isFinishing && !isDestroyed) {
+            unavailableDialog?.show()
+        }
     }
 
     private fun updateMapMarkers(drivers: List<DriverModel>) {
@@ -440,6 +446,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun showBlockingStatusDialog(type: String) {
+        if (isFinishing || isDestroyed) return
         if (statusDialog == null) {
             statusDialog = Dialog(this)
             statusDialog?.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -479,11 +486,15 @@ class ParentDashboardActivity : AppCompatActivity() {
                 ivIcon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#FF9800"))
             }
         }
-        if (statusDialog?.isShowing == false) statusDialog?.show()
+        if (!isFinishing && !isDestroyed && statusDialog?.isShowing == false) statusDialog?.show()
     }
 
     private fun showParentInfoBottomSheet() {
+        if (isFinishing || isDestroyed) return
+        if (infoBottomSheetDialog?.isShowing == true) return
+
         val bottomSheetDialog = BottomSheetDialog(this, R.style.TransparentBottomSheetDialog)
+        infoBottomSheetDialog = bottomSheetDialog
         val view = layoutInflater.inflate(R.layout.layout_parent_info_bottom_sheet, null)
         bottomSheetDialog.setContentView(view)
         bottomSheetDialog.setCancelable(false)
@@ -561,7 +572,17 @@ class ParentDashboardActivity : AppCompatActivity() {
                 }
             }
         }
-        bottomSheetDialog.show()
+
+        view.findViewById<View>(R.id.tvBackToLogin).setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            Firebase.auth.signOut()
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+        }
+
+        if (!isFinishing && !isDestroyed) {
+            bottomSheetDialog.show()
+        }
     }
 
     private fun setupDrawerListeners() {
@@ -622,6 +643,12 @@ class ParentDashboardActivity : AppCompatActivity() {
     override fun onStop() { super.onStop(); mapView?.onStop() }
     override fun onDestroy() {
         super.onDestroy()
+        statusDialog?.dismiss()
+        statusDialog = null
+        unavailableDialog?.dismiss()
+        unavailableDialog = null
+        infoBottomSheetDialog?.dismiss()
+        infoBottomSheetDialog = null
         studentListeners.values.forEach { it.remove() }
         studentListeners.clear()
         mapView?.onDestroy()

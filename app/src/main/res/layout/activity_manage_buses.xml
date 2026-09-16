@@ -82,6 +82,7 @@
         android:elevation="2dp"
         android:paddingHorizontal="16dp"
         android:textSize="14sp"
+        android:textColor="#000000"
         app:layout_constraintTop_toBottomOf="@id/layoutIndicatorHeader" />
 
     <androidx.recyclerview.widget.RecyclerView

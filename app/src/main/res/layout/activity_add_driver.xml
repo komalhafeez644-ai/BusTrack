@@ -122,6 +122,8 @@
                         android:hint="Employee ID"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:placeholderText="e.g. EMP-123"
+                        app:placeholderTextColor="#D1D1D6"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/badge"
                         app:boxCornerRadiusTopStart="12dp"
@@ -133,8 +135,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:maxLength="10"
-                            android:hint="e.g. EMP-123" />
+                            android:maxLength="10" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -145,6 +146,8 @@
                         android:hint="Full Name"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:placeholderText="e.g. Ali Khan"
+                        app:placeholderTextColor="#D1D1D6"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/ic_person"
                         app:boxCornerRadiusTopStart="12dp"
@@ -156,8 +159,7 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:maxLength="50"
-                            android:hint="e.g. Ali Khan" />
+                            android:maxLength="50" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -168,6 +170,8 @@
                         android:hint="CNIC Number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:placeholderText="00000-0000000-0"
+                        app:placeholderTextColor="#D1D1D6"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/id_card"
                         app:boxCornerRadiusTopStart="12dp"
@@ -180,7 +184,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:maxLength="15"
-                            android:hint="00000-0000000-0" />
+                            android:inputType="number" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -191,6 +195,8 @@
                         android:hint="Contact Number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:placeholderText="e.g. 03001234567"
+                        app:placeholderTextColor="#D1D1D6"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/phone_24"
                         app:boxCornerRadiusTopStart="12dp"
@@ -203,7 +209,6 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:maxLength="11"
-                            android:hint="e.g. 03001234567"
                             android:inputType="phone" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -215,6 +220,8 @@
                         android:hint="Email Address"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
+                        app:placeholderText="e.g. driver@example.com"
+                        app:placeholderTextColor="#D1D1D6"
                         app:boxStrokeColor="@color/box_stroke_selector"
                         app:startIconDrawable="@drawable/ic_mail"
                         app:boxCornerRadiusTopStart="12dp"
@@ -226,7 +233,6 @@
                             android:textColor="@color/black"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="e.g. driver@example.com"
                             android:inputType="textEmailAddress" />
                     </com.google.android.material.textfield.TextInputLayout>
 

@@ -45,10 +45,12 @@ object BusRepository {
             val driverName = assignedRoute?.driverName ?: bus.driverName
             
             // Status logic: 
-            // 1. If no route name at all -> UNASSIGNED
-            // 2. If has route but status was UNASSIGNED -> ACTIVE (First time assignment)
-            // 3. Otherwise keep current status (respects INACTIVE toggle)
+            // 1. If status is INACTIVE, keep it INACTIVE
+            // 2. If no route name at all -> UNASSIGNED
+            // 3. If has route but status was UNASSIGNED -> ACTIVE (First time assignment)
+            // 4. Otherwise keep current status
             val newStatus = when {
+                bus.status == "INACTIVE" -> "INACTIVE"
                 routeName.isNullOrEmpty() -> "UNASSIGNED"
                 bus.status == "UNASSIGNED" -> "ACTIVE"
                 else -> bus.status
@@ -67,9 +69,37 @@ object BusRepository {
     }
 
     fun updateBusDetails(originalNumber: String, updatedBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
-        busesCollection.document(originalNumber).set(updatedBus)
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+        if (updatedBus.status == "INACTIVE") {
+            // Business Logic for INACTIVE status
+            val currentBus = _busList.value?.find { it.busNumber == originalNumber }
+            
+            currentBus?.let { bus ->
+                // 1. Release Driver: Hassan becomes available for another active bus
+                bus.driverName?.let { dName ->
+                    DriverRepository.driverList.value?.find { it.name == dName }?.let { driver ->
+                        DriverRepository.updateDriver(driver.copy(assignedBus = null, route = null))
+                    }
+                }
+                
+                // 2. Release Route: Route becomes available for another active bus
+                bus.routeName?.let { rName ->
+                    RouteRepository.routeList.value?.find { it.routeName == rName }?.let { route ->
+                        RouteRepository.updateRoute(route.copy(busNo = "", driverName = ""))
+                    }
+                }
+            }
+            
+            // Clear assignments in the document itself to ensure consistency
+            val finalBus = updatedBus.copy(driverName = null, routeName = null)
+            busesCollection.document(originalNumber).set(finalBus)
+                .addOnSuccessListener { onComplete(true) }
+                .addOnFailureListener { onComplete(false) }
+        } else {
+            // For ACTIVE or other statuses, proceed with standard update
+            busesCollection.document(originalNumber).set(updatedBus)
+                .addOnSuccessListener { onComplete(true) }
+                .addOnFailureListener { onComplete(false) }
+        }
     }
 
     fun deleteBus(busNumber: String, onComplete: (Boolean) -> Unit = {}) {

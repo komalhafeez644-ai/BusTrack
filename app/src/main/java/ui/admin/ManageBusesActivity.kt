@@ -2,6 +2,8 @@ package ui.admin
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ArrayAdapter
@@ -44,6 +46,7 @@ class ManageBusesActivity : AppCompatActivity() {
 
         setupRecyclerViewList()
         observeViewModelStreams()
+        setupSearchFilter()
 
         binding.btnFloatingAddBus.setOnClickListener {
             showAddNewBusBottomSheet()
@@ -109,8 +112,32 @@ class ManageBusesActivity : AppCompatActivity() {
             temporaryBusList.clear()
             temporaryBusList.addAll(standardList)
             binding.tvTotalMetricCounter.text = temporaryBusList.size.toString()
-            busAdapter.updateData(temporaryBusList)
+            
+            val query = binding.etSearchInputBus.text.toString().trim()
+            if (query.isEmpty()) {
+                busAdapter.updateData(temporaryBusList)
+            } else {
+                filterBuses(query)
+            }
         }
+    }
+
+    private fun setupSearchFilter() {
+        binding.etSearchInputBus.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterBuses(s?.toString() ?: "")
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+
+    private fun filterBuses(query: String) {
+        val filteredList = temporaryBusList.filter {
+            it.busNumber.contains(query, ignoreCase = true) ||
+                    (it.driverName?.contains(query, ignoreCase = true) == true)
+        }
+        busAdapter.updateData(filteredList)
     }
 
     private fun showAddNewBusBottomSheet() {

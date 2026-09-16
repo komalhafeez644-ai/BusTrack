@@ -15,8 +15,9 @@ class MyApp : Application() {
         createNotificationChannel()
 
         val config = HashMap<String, String>()
-        config["cloud_name"] = "vomxnqzr"
-        config["upload_preset"] = "bus_track_images"
+        config["cloud_name"] = "zhi36daa"
+        config["api_key"] = "579148119496887"
+        config["upload_preset"] = "BusTrack"
 
         MediaManager.init(this, config)
     }

@@ -84,13 +84,12 @@ class LiveTrackingViewModel : ViewModel() {
             val currentTime = System.currentTimeMillis()
             val active = filteredDrivers.filter {
                 val isOnDuty = it.status.equals("Active", true) || it.status.equals("ACTIVE", true) || it.status.equals("On Duty", true)
+                val hasAssignedBus = !it.assignedBus.isNullOrEmpty()
 
                 // Bus track-able hone ke liye sirf On Duty hona chahiye + valid, recent
-                // location - navigation start hona zaroori nahi hai. On Duty aur
-                // Navigation do independent states hain: driver route par khada bhi ho
-                // (bina navigation ke), tab bhi uski live location Parent/Principal/Admin
-                // ko dikhni chahiye.
-                isOnDuty && it.latitude != 0.0 && it.longitude != 0.0
+                // location + assigned bus zaroori hai. On Duty aur
+                // Navigation do independent states hain.
+                isOnDuty && hasAssignedBus && it.latitude != 0.0 && it.longitude != 0.0
                         && (currentTime - it.lastUpdated) < 1800000 // 30 mins window for emulator/testing
             }
 

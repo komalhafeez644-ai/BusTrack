@@ -72,7 +72,7 @@ class AddDriverActivity : AppCompatActivity() {
     }
 
     private fun setupFormFormatting() {
-        FormUtils.setupUppercaseInput(binding.etEmployeeId)
+        FormUtils.setupEmployeeIdFormatting(binding.etEmployeeId)
         FormUtils.setupTitleCaseInput(binding.etFullName)
         FormUtils.setupCnicFormatting(binding.etCnic)
     }

@@ -52,20 +52,50 @@ class AddStudentActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupGradeSpinner()
+        setupSemesterSpinner()
         setupFormFormatting()
         setupClickListeners()
     }
 
     private fun setupFormFormatting() {
-        FormUtils.setupUppercaseInput(binding.etEmployeeId)
+        FormUtils.setupStudentIdFormatting(binding.etEmployeeId)
         FormUtils.setupTitleCaseInput(binding.etFullName)
         FormUtils.setupTitleCaseInput(binding.etParentName)
+        FormUtils.setupPhoneFormatting(binding.etEmergencyContact)
     }
 
     private fun setupGradeSpinner() {
-        val grades = arrayOf("Grade 9", "Grade 10", "Grade 11", "Grade 12", "BS IT 7th semester")
+        val grades = arrayOf(
+            "11th",
+            "12th",
+            "BS English",
+            "BS Urdu",
+            "BS Islamic Studies",
+            "BS Economics",
+            "BS Mathematics",
+            "BS Botany",
+            "BS Information Technology (IT)",
+            "BS Applied Psychology",
+            "BS Political Science",
+            "BBA (Bachelor of Business Administration)"
+        )
         val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, grades)
         binding.spinnerGrade.setAdapter(adapter)
+    }
+
+    private fun setupSemesterSpinner() {
+        val semesters = arrayOf(
+            "1st SEM",
+            "2nd SEM",
+            "3rd SEM",
+            "4th SEM",
+            "5th SEM",
+            "6th SEM",
+            "7th SEM",
+            "8th SEM"
+        )
+        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, semesters)
+        binding.etSection.setAdapter(adapter)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -132,12 +162,8 @@ class AddStudentActivity : AppCompatActivity() {
             binding.etEmployeeId.error = "ID required"
             return false
         }
-        if (id.length > 10) {
-            binding.etEmployeeId.error = "ID too long (max 10)"
-            return false
-        }
         if (!FormUtils.isValidPhone(phone)) {
-            binding.etEmergencyContact.error = "Invalid contact (11 digits)"
+            binding.etEmergencyContact.error = "Invalid contact (03XX-XXXXXXX)"
             return false
         }
         return true
@@ -167,10 +193,14 @@ class AddStudentActivity : AppCompatActivity() {
     }
 
     private fun saveStudent(imageUrl: String, onComplete: (StudentModel) -> Unit) {
+        val gradeVal = binding.spinnerGrade.text.toString()
+        val semVal = binding.etSection.text.toString()
+        val combinedGrade = if (semVal.isNotEmpty() && semVal != "Select Sem") "$gradeVal $semVal" else gradeVal
+
         val student = StudentModel(
             id = binding.etEmployeeId.text.toString().trim(),
             name = binding.etFullName.text.toString().trim(),
-            grade = binding.spinnerGrade.text.toString(),
+            grade = combinedGrade,
             location = binding.etPickupAddress.text.toString().trim(),
             route = null,
             busNo = null,
