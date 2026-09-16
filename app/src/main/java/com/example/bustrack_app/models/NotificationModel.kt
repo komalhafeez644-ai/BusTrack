@@ -1,6 +1,9 @@
 package com.example.bustrack_app.models
 
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ServerTimestamp
+import java.io.Serializable
 import java.util.Date
 
 /**
@@ -37,7 +40,7 @@ data class NotificationModel(
     val locationAddress: String = "",
     val tripDirection: String = "",  // "FORWARD", "RETURN"
     val tripStatus: String = ""      // "NAVIGATING", "ON_DUTY", "IDLE"
-) {
+) : Serializable {
     companion object {
         const val TYPE_GENERAL = "GENERAL"
         const val TYPE_IMPORTANT = "IMPORTANT"
@@ -54,5 +57,59 @@ data class NotificationModel(
         const val TYPE_NAV_READY = "NAV_READY"
         const val TYPE_TRIP_REMINDER = "TRIP_REMINDER"
         const val TYPE_TRIP_STARTED = "TRIP_STARTED"
+
+        /**
+         * Robust parser that safely handles Firestore Timestamp, Date, Long, Double, Int, Float,
+         * or String representations of timestamp without crashing deserialization.
+         */
+        fun parseDate(raw: Any?): Date? {
+            return when (raw) {
+                is Timestamp -> raw.toDate()
+                is Date -> raw
+                is Number -> {
+                    val millis = raw.toLong()
+                    if (millis > 0L) Date(millis) else null
+                }
+                is String -> {
+                    raw.toLongOrNull()?.let { Date(it) } ?: try {
+                        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).parse(raw)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                else -> null
+            }
+        }
+
+        fun fromDocument(doc: DocumentSnapshot): NotificationModel {
+            val docId = doc.id
+            val parsedDate = parseDate(doc.get("timestamp"))
+
+            return NotificationModel(
+                id = doc.getString("id")?.takeIf { it.isNotBlank() } ?: docId,
+                recipientId = doc.getString("recipientId") ?: "",
+                recipientRole = doc.getString("recipientRole") ?: "",
+                title = doc.getString("title") ?: "",
+                message = doc.getString("message") ?: "",
+                type = doc.getString("type") ?: TYPE_GENERAL,
+                timestamp = parsedDate,
+                isRead = doc.getBoolean("isRead") ?: false,
+                relatedId = doc.getString("relatedId") ?: "",
+                senderId = doc.getString("senderId") ?: "",
+                senderRole = doc.getString("senderRole") ?: "",
+                driverName = doc.getString("driverName") ?: "",
+                driverEmail = doc.getString("driverEmail") ?: "",
+                driverPhone = doc.getString("driverPhone") ?: "",
+                busNumber = doc.getString("busNumber") ?: "",
+                routeName = doc.getString("routeName") ?: "",
+                alertType = doc.getString("alertType") ?: "",
+                description = doc.getString("description") ?: "",
+                latitude = doc.getDouble("latitude") ?: 0.0,
+                longitude = doc.getDouble("longitude") ?: 0.0,
+                locationAddress = doc.getString("locationAddress") ?: "",
+                tripDirection = doc.getString("tripDirection") ?: "",
+                tripStatus = doc.getString("tripStatus") ?: ""
+            )
+        }
     }
 }
