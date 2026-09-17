@@ -20,6 +20,9 @@ class MyApp : Application() {
         config["upload_preset"] = "BusTrack"
 
         MediaManager.init(this, config)
+
+        com.example.bustrack_app.sync.SyncQueueManager.init(this)
+        com.example.bustrack_app.sync.network.NetworkMonitor.startMonitoring(this)
     }
 
     private fun createNotificationChannel() {

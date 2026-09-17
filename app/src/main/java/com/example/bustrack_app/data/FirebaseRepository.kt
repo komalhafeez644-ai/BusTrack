@@ -204,12 +204,19 @@ object FirebaseRepository {
         traveledRouteSegments: List<String> = emptyList(),
         activeTripId: String? = null,
         activeRouteId: String? = null,
-        activeRouteName: String? = null
+        activeRouteName: String? = null,
+        accuracy: Float = 0f,
+        locationTimestamp: Long = 0L,
+        locationStatus: String = "LIVE"
     ) {
+        val now = System.currentTimeMillis()
         val updates = mutableMapOf<String, Any?>(
             "latitude" to lat,
             "longitude" to lng,
-            "lastUpdated" to System.currentTimeMillis(),
+            "lastUpdated" to now,
+            "locationTimestamp" to (if (locationTimestamp > 0L) locationTimestamp else now),
+            "accuracy" to accuracy,
+            "locationStatus" to locationStatus,
             "eta" to eta,
             "speed" to speed,
             "load" to load,

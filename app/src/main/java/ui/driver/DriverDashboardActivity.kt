@@ -396,12 +396,35 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val MAX_PLAUSIBLE_PUCK_SPEED_MPS = 55.0
     private val STALE_CACHED_LOCATION_MAX_AGE_MS = 5000L
 
+    enum class LocationReliabilityState {
+        NORMAL_LIVE,
+        GPS_UNAVAILABLE,
+        GPS_ACCURACY_LOW,
+        LOCATION_STALE,
+        INTERNET_UNAVAILABLE_GPS_OK
+    }
+
+    private var currentReliabilityState: LocationReliabilityState = LocationReliabilityState.NORMAL_LIVE
+    private var lastFreshLocationTimestamp: Long = 0L
+    private val LOW_ACCURACY_THRESHOLD_METERS = 30f
+    private val UNACCEPTABLE_ACCURACY_THRESHOLD_METERS = 65f
+    private val STALE_LOCATION_TIMEOUT_MS = 10000L
+    private val staleLocationHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var staleLocationRunnable: Runnable? = null
+    private var isInternetConnected: Boolean = true
+
+    private val networkListener: (Boolean) -> Unit = { online ->
+        isInternetConnected = online
+        onNetworkStatusChanged(online)
+    }
+
     private val locationSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
             startLocationUpdates()
         } else {
+            updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
             Toast.makeText(this, "GPS must be enabled to use this app", Toast.LENGTH_LONG).show()
         }
     }
@@ -1633,6 +1656,110 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun isGpsProviderEnabled(): Boolean {
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        return locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
+    }
+
+    private fun updateLocationReliabilityStatus(state: LocationReliabilityState) {
+        currentReliabilityState = state
+        val banner = binding.layoutLocationReliabilityBanner
+        val icon = banner.findViewById<ImageView>(R.id.ivReliabilityIcon)
+        val text = banner.findViewById<TextView>(R.id.tvReliabilityStatus)
+
+        when (state) {
+            LocationReliabilityState.GPS_UNAVAILABLE -> {
+                banner.visibility = View.VISIBLE
+                banner.setBackgroundColor(Color.parseColor("#EF4444")) // Red
+                icon.setImageResource(R.drawable.ic_gps_fixed_white)
+                text.text = "Unable to get your current location."
+            }
+            LocationReliabilityState.GPS_ACCURACY_LOW -> {
+                banner.visibility = View.VISIBLE
+                banner.setBackgroundColor(Color.parseColor("#F59E0B")) // Amber
+                icon.setImageResource(R.drawable.ic_gps_fixed_white)
+                text.text = "Location accuracy is low."
+            }
+            LocationReliabilityState.LOCATION_STALE -> {
+                banner.visibility = View.VISIBLE
+                banner.setBackgroundColor(Color.parseColor("#EF4444")) // Red
+                icon.setImageResource(R.drawable.ic_gps_fixed_white)
+                text.text = "Location update unavailable. Checking GPS..."
+            }
+            LocationReliabilityState.INTERNET_UNAVAILABLE_GPS_OK -> {
+                banner.visibility = View.VISIBLE
+                banner.setBackgroundColor(Color.parseColor("#3B82F6")) // Blue
+                icon.setImageResource(R.drawable.ic_wifi_off_white)
+                text.text = "Internet unavailable. GPS tracking continues."
+            }
+            LocationReliabilityState.NORMAL_LIVE -> {
+                banner.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun onNetworkStatusChanged(online: Boolean) {
+        if (!isDutyEnabled) return
+
+        if (!online) {
+            val now = System.currentTimeMillis()
+            val isGpsFresh = lastFreshLocationTimestamp > 0L && (now - lastFreshLocationTimestamp) < STALE_LOCATION_TIMEOUT_MS
+            if (isGpsFresh) {
+                updateLocationReliabilityStatus(LocationReliabilityState.INTERNET_UNAVAILABLE_GPS_OK)
+            }
+        } else {
+            if (currentReliabilityState == LocationReliabilityState.INTERNET_UNAVAILABLE_GPS_OK) {
+                val now = System.currentTimeMillis()
+                val isGpsFresh = lastFreshLocationTimestamp > 0L && (now - lastFreshLocationTimestamp) < STALE_LOCATION_TIMEOUT_MS
+                if (isGpsFresh) {
+                    val acc = currentLocation?.accuracy ?: 0f
+                    if (acc > LOW_ACCURACY_THRESHOLD_METERS) {
+                        updateLocationReliabilityStatus(LocationReliabilityState.GPS_ACCURACY_LOW)
+                    } else {
+                        updateLocationReliabilityStatus(LocationReliabilityState.NORMAL_LIVE)
+                    }
+                }
+            }
+            com.example.bustrack_app.sync.SyncQueueManager.processQueue()
+            currentLocation?.let { syncTrackingDataToFirestore(it, force = true) }
+        }
+    }
+
+    private fun startStaleLocationWatchdog() {
+        stopStaleLocationWatchdog()
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!isDutyEnabled) return
+                if (!isGpsProviderEnabled()) {
+                    isCurrentLocationLive = false
+                    updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
+                    staleLocationHandler.postDelayed(this, 2000L)
+                    return
+                }
+                val now = System.currentTimeMillis()
+                if (lastFreshLocationTimestamp > 0L) {
+                    val age = now - lastFreshLocationTimestamp
+                    if (age >= STALE_LOCATION_TIMEOUT_MS) {
+                        isCurrentLocationLive = false
+                        updateLocationReliabilityStatus(LocationReliabilityState.LOCATION_STALE)
+                    }
+                } else {
+                    isCurrentLocationLive = false
+                    updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
+                }
+                staleLocationHandler.postDelayed(this, 2000L)
+            }
+        }
+        staleLocationRunnable = runnable
+        staleLocationHandler.postDelayed(runnable, 2000L)
+    }
+
+    private fun stopStaleLocationWatchdog() {
+        staleLocationRunnable?.let { staleLocationHandler.removeCallbacks(it) }
+        staleLocationRunnable = null
+    }
+
     private fun checkLocationSettings() {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
             .build()
@@ -1649,6 +1776,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         task.addOnFailureListener { exception ->
+            updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
             if (exception is ResolvableApiException) {
                 try {
                     val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution).build()
@@ -1726,6 +1854,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             return
         }
 
+        if (!isGpsProviderEnabled()) {
+            updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
+        }
+
         try {
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 if (location != null) {
@@ -1735,16 +1867,32 @@ class DriverDashboardActivity : AppCompatActivity() {
                     if (cacheAgeMs > STALE_CACHED_LOCATION_MAX_AGE_MS) return@addOnSuccessListener
                     if (location.elapsedRealtimeNanos <= lastAcceptedLocationElapsedNanos) return@addOnSuccessListener
                     lastAcceptedLocationElapsedNanos = location.elapsedRealtimeNanos
-                    val wasLive = isCurrentLocationLive
-                    currentLocation = Location(location)
-                    isCurrentLocationLive = true
-                    feedRawLocationToPuck(location)
-                    if (!wasLive) {
-                        // A newly opened dashboard must retain its pending full-route
-                        // fit even when the first saved/live GPS fix arrives.
-                        updateMapDisplay()
+
+                    val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
+                    if (accuracy <= UNACCEPTABLE_ACCURACY_THRESHOLD_METERS) {
+                        lastFreshLocationTimestamp = System.currentTimeMillis()
+                        val wasLive = isCurrentLocationLive
+                        currentLocation = Location(location)
+                        isCurrentLocationLive = (accuracy <= LOW_ACCURACY_THRESHOLD_METERS)
+                        feedRawLocationToPuck(location)
+
+                        if (accuracy > LOW_ACCURACY_THRESHOLD_METERS) {
+                            updateLocationReliabilityStatus(LocationReliabilityState.GPS_ACCURACY_LOW)
+                        } else if (!isInternetConnected) {
+                            updateLocationReliabilityStatus(LocationReliabilityState.INTERNET_UNAVAILABLE_GPS_OK)
+                        } else {
+                            updateLocationReliabilityStatus(LocationReliabilityState.NORMAL_LIVE)
+                        }
+
+                        if (!wasLive && isCurrentLocationLive) {
+                            // A newly opened dashboard must retain its pending full-route
+                            // fit even when the first saved/live GPS fix arrives.
+                            updateMapDisplay()
+                        }
                     }
                 }
+            }.addOnFailureListener {
+                updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
             }
 
             locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
@@ -1772,16 +1920,31 @@ class DriverDashboardActivity : AppCompatActivity() {
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback!!, mainLooper)
         } catch (e: SecurityException) {
             Log.e("LocationDebug", "SecurityException in startLocationUpdates: ${e.message}", e)
+            updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
         }
     }
 
     /** Single coordinated route-state path. Raw Fused GPS is authoritative. */
     private fun handleLocationUpdate(location: Location) {
         if (!isDutyEnabled) return
+        val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
+        if (accuracy > UNACCEPTABLE_ACCURACY_THRESHOLD_METERS) {
+            return
+        }
+
+        lastFreshLocationTimestamp = System.currentTimeMillis()
         val wasLive = isCurrentLocationLive
         currentRawLocation = Location(location)
         currentLocation = Location(location)
-        isCurrentLocationLive = true
+        isCurrentLocationLive = (accuracy <= LOW_ACCURACY_THRESHOLD_METERS)
+
+        if (accuracy > LOW_ACCURACY_THRESHOLD_METERS) {
+            updateLocationReliabilityStatus(LocationReliabilityState.GPS_ACCURACY_LOW)
+        } else if (!isInternetConnected) {
+            updateLocationReliabilityStatus(LocationReliabilityState.INTERNET_UNAVAILABLE_GPS_OK)
+        } else {
+            updateLocationReliabilityStatus(LocationReliabilityState.NORMAL_LIVE)
+        }
 
         // The newest Fused GPS fix is the single visual-puck authority, both before
         // and during navigation. Mapbox matcher callbacks no longer animate it.
@@ -1796,7 +1959,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isNavigating) {
             checkGeofenceAndStopStatus(location)
             updateNavigationRouteProgress(Point.fromLngLat(location.longitude, location.latitude))
-        } else if (!wasLive) {
+        } else if (!wasLive && isCurrentLocationLive) {
             // Keep the full-route fit requested by a fresh dashboard or by ending
             // navigation; a first GPS fix must not restore a prior zoomed camera.
             updateMapDisplay()
@@ -1902,6 +2065,13 @@ class DriverDashboardActivity : AppCompatActivity() {
             val arrivalMap = activeArrivalTimes().mapKeys { it.key.toString() }
             val etaMap = activeEtaTexts().mapKeys { it.key.toString() }
             val traveledSegments = currentTraveledSegments().map { LineString.fromLngLats(it).toPolyline(6) }
+
+            val locStatus = when {
+                !isCurrentLocationLive && (System.currentTimeMillis() - lastFreshLocationTimestamp >= STALE_LOCATION_TIMEOUT_MS) -> "STALE"
+                currentReliabilityState == LocationReliabilityState.GPS_ACCURACY_LOW -> "LOW_ACCURACY"
+                else -> "LIVE"
+            }
+
             FirebaseRepository.updateDriverLiveState(
                 driverId = driverId,
                 lat = location.latitude,
@@ -1919,7 +2089,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 traveledRouteSegments = traveledSegments,
                 activeTripId = if (isNavigating) currentActiveTripId else "",
                 activeRouteId = if (isNavigating) assignedRoute?.id else "",
-                activeRouteName = if (isNavigating) assignedRoute?.routeName else ""
+                activeRouteName = if (isNavigating) assignedRoute?.routeName else "",
+                accuracy = if (location.hasAccuracy()) location.accuracy else 0f,
+                locationTimestamp = if (lastFreshLocationTimestamp > 0L) lastFreshLocationTimestamp else now,
+                locationStatus = locStatus
             )
 
             if (isNavigating) {
@@ -3994,6 +4167,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             drawerDutyLabel?.text = "DUTY STATUS: ON"
             startLocationUpdates()
             setupLocationPuck()
+            startStaleLocationWatchdog()
+
+            if (!isGpsProviderEnabled()) {
+                updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
+            }
 
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -4010,6 +4188,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
         } else {
             drawerDutyLabel?.text = "DUTY STATUS: OFF"
+
+            stopStaleLocationWatchdog()
+            lastFreshLocationTimestamp = 0L
+            updateLocationReliabilityStatus(LocationReliabilityState.NORMAL_LIVE)
+            isCurrentLocationLive = false
 
             locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
             mapView?.location?.enabled = false
@@ -4242,15 +4425,23 @@ class DriverDashboardActivity : AppCompatActivity() {
         super.onStart()
         mapView?.onStart()
         cancelDutyAutoOffTimer()
+        com.example.bustrack_app.sync.network.NetworkMonitor.addListener(networkListener)
+        if (isDutyEnabled) {
+            startStaleLocationWatchdog()
+        }
     }
 
     override fun onStop() {
         super.onStop()
         mapView?.onStop()
+        com.example.bustrack_app.sync.network.NetworkMonitor.removeListener(networkListener)
+        stopStaleLocationWatchdog()
         scheduleDutyAutoOffTimer()
     }
 
     override fun onDestroy() {
+        com.example.bustrack_app.sync.network.NetworkMonitor.removeListener(networkListener)
+        stopStaleLocationWatchdog()
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
         mapView?.mapboxMap?.removeOnCameraChangeListener(cameraChangeListener)
