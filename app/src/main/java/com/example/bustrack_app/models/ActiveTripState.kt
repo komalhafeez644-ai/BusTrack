@@ -17,12 +17,19 @@ data class ActiveTripState(
     val isMorning: Boolean = true,
     val isDutyEnabled: Boolean = false,
     val isNavigating: Boolean = false,
+    val tripStatus: String = "ACTIVE", // "ACTIVE", "COMPLETED", "CANCELLED"
+    val currentStopIndex: Int = 0,
     val nextStopIndex: Int = 0,
     val stopStates: Map<Int, String> = emptyMap(),
     val stopArrivalTimes: Map<Int, String> = emptyMap(),
     val stopEtaTexts: Map<Int, String> = emptyMap(),
+    val isReverseTripActive: Boolean = false,
+    val reverseStopStates: Map<Int, String> = emptyMap(),
+    val reverseStopArrivalTimes: Map<Int, String> = emptyMap(),
+    val reverseStopEtaTexts: Map<Int, String> = emptyMap(),
     val lastKnownLat: Double = 0.0,
     val lastKnownLng: Double = 0.0,
     val tripStartTime: Long = System.currentTimeMillis(),
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    val stateVersion: Long = 1L
 ) : Serializable

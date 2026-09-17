@@ -328,6 +328,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var currentLocation: Location? = null
     private var isCurrentLocationLive = false
     private var assignedRoute: RouteModel? = null
+    // Locked during an active navigation session to protect route integrity from external LiveData changes
+    private var lockedActiveRoute: RouteModel? = null
+    private var lockedActiveBus: String? = null
     // Locked when a forward trip starts so a morning return after 11:00 is still
     // recorded as a morning drop, not reclassified from the current wall clock.
     private var activeTripIsMorning: Boolean? = null
@@ -2505,8 +2508,16 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         viewModel.dashboardData.observe(this) { data ->
             binding.apply {
-                tvBusNumberInfo.text = data.busNumber
-                tvRouteNameInfo.text = data.currentRoute
+                if (isNavigating && !lockedActiveBus.isNullOrBlank()) {
+                    tvBusNumberInfo.text = lockedActiveBus
+                } else {
+                    tvBusNumberInfo.text = data.busNumber
+                }
+                if (isNavigating && lockedActiveRoute != null) {
+                    tvRouteNameInfo.text = lockedActiveRoute?.routeName
+                } else {
+                    tvRouteNameInfo.text = data.currentRoute
+                }
                 tvCurrentDate.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Calendar.getInstance().time)
 
                 tvTotalStops.text = data.stopsCount
@@ -2523,6 +2534,13 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                     updateDutyUI(isDutyEnabled, reloadStyle = false)
                 }
+            }
+
+            // Route & Trip Integrity: If trip is active and navigating, do NOT replace the locked route!
+            if (isNavigating || currentActiveTripId != null) {
+                Log.d("TripIntegrity", "TRIP_ROUTE_LOCKED: Active trip $currentActiveTripId is locked to route ${assignedRoute?.routeName}. Ignoring external route change.")
+                checkAndResumeActiveTrip()
+                return@observe
             }
 
             resolveAssignedRoute(data)?.let { route ->
@@ -2591,39 +2609,9 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (routes.isNullOrEmpty()) return
 
         val localTrip = TripRecoveryHelper.getActiveTrip(this)
-        val activeState = if (localTrip != null && (localTrip.driverId == driver.driverId || localTrip.driverId == driver.id || localTrip.driverId == driver.uid)) {
-            localTrip
-        } else if (driver.isNavigating && (!driver.activeRouteName.isNullOrBlank() || !driver.activeTripId.isNullOrBlank() || !driver.route.isNullOrBlank())) {
-            val direction = driver.tripDirection.ifEmpty { "FORWARD" }
-            val rName = driver.activeRouteName.ifEmpty { driver.route.orEmpty() }
-            val tripId = driver.activeTripId.ifEmpty {
-                TripRecoveryHelper.generateTripId(driver.driverId, rName, direction)
-            }
-            ActiveTripState(
-                tripId = tripId,
-                driverId = driver.driverId,
-                routeId = driver.activeRouteId,
-                routeName = rName,
-                busNumber = driver.assignedBus.orEmpty(),
-                tripDirection = direction,
-                isMorning = isMorningTrip(),
-                isDutyEnabled = driver.status.equals("ON DUTY", true),
-                isNavigating = true,
-                nextStopIndex = driver.nextStopIndex,
-                stopStates = driver.stopArrivalTimes.map { (k, v) ->
-                    val idx = k.toIntOrNull() ?: 0
-                    idx to (if (v == "Skipped") StopState.SKIPPED.name else if (idx < driver.nextStopIndex) StopState.COMPLETED.name else StopState.ARRIVED.name)
-                }.toMap(),
-                stopArrivalTimes = driver.stopArrivalTimes.mapNotNull { (k, v) -> k.toIntOrNull()?.let { it to v } }.toMap(),
-                stopEtaTexts = driver.stopEtaTimes.mapNotNull { (k, v) -> k.toIntOrNull()?.let { it to v } }.toMap(),
-                lastKnownLat = driver.latitude,
-                lastKnownLng = driver.longitude
-            )
-        } else {
-            null
-        }
+        val activeState = TripRecoveryHelper.resolveConflict(localTrip, driver, this)
 
-        if (activeState != null && TripRecoveryHelper.isTripValid(activeState)) {
+        if (activeState != null && TripRecoveryHelper.isTripValid(activeState, this)) {
             val matchingRoute = routes.find {
                 (activeState.routeId.isNotEmpty() && it.id == activeState.routeId) ||
                 (activeState.routeName.isNotEmpty() && it.routeName.equals(activeState.routeName, ignoreCase = true)) ||
@@ -2639,9 +2627,16 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun resumeActiveTrip(route: RouteModel, state: ActiveTripState) {
-        Log.d("TripRecovery", "Resuming active trip: ${state.tripId}, route: ${route.routeName}, stopIndex: ${state.nextStopIndex}, direction: ${state.tripDirection}")
+        Log.d("TripIntegrity", "TRIP_RESTORE: Resuming active trip: ${state.tripId}, route: ${route.routeName}, stopIndex: ${state.nextStopIndex}, direction: ${state.tripDirection}")
         currentActiveTripId = state.tripId
         assignedRoute = route
+        lockedActiveRoute = route
+        lockedActiveBus = state.busNumber.ifEmpty { binding.tvBusNumberInfo.text.toString().trim() }
+        if (!lockedActiveBus.isNullOrBlank()) {
+            binding.tvBusNumberInfo.text = lockedActiveBus
+        }
+        binding.tvRouteNameInfo.text = route.routeName
+
         isDutyEnabled = true
         isUserTriggeredChange = false
         findViewById<SwitchMaterial>(R.id.switchDuty)?.isChecked = true
@@ -2649,18 +2644,21 @@ class DriverDashboardActivity : AppCompatActivity() {
         updateDutyUI(true, reloadStyle = false)
 
         activeTripIsMorning = state.isMorning
-        isNearStart = true
+        isNearStart = true // Do not block on initial start geofence during recovery!
 
-        if (state.tripDirection.equals("RETURN", true)) {
+        if (state.tripDirection.equals("RETURN", true) || state.isReverseTripActive) {
             isReverseTripActive = true
             isViewingReverseTrip = true
             ensureReverseTripStops()
             reverseStopArrivalTimes.clear()
-            reverseStopArrivalTimes.putAll(state.stopArrivalTimes)
+            val rArrivals = if (state.reverseStopArrivalTimes.isNotEmpty()) state.reverseStopArrivalTimes else state.stopArrivalTimes
+            reverseStopArrivalTimes.putAll(rArrivals)
             reverseStopEtaTexts.clear()
-            reverseStopEtaTexts.putAll(state.stopEtaTexts)
+            val rEtas = if (state.reverseStopEtaTexts.isNotEmpty()) state.reverseStopEtaTexts else state.stopEtaTexts
+            reverseStopEtaTexts.putAll(rEtas)
             reverseStopStates.clear()
-            state.stopStates.forEach { (k, v) ->
+            val rStates = if (state.reverseStopStates.isNotEmpty()) state.reverseStopStates else state.stopStates
+            rStates.forEach { (k, v) ->
                 reverseStopStates[k] = try { StopState.valueOf(v) } catch (_: Exception) { StopState.UPCOMING }
             }
         } else {
@@ -2688,6 +2686,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         updateBottomSheetInfo()
         persistCurrentActiveTripState()
 
+        Log.d("TripIntegrity", "TRIP_ROUTE_RESTORED: Route ${route.id} (${route.routeName})")
+        Log.d("TripIntegrity", "TRIP_STOP_RESTORED: nextStopIndex=$nextGlobalStopIndex, totalStops=${activeStops().size}")
+        Log.d("TripIntegrity", "TRIP_DIRECTION_RESTORED: direction=${state.tripDirection}, isMorning=${state.isMorning}")
+
         Toast.makeText(this, "Resuming Active Trip for ${route.routeName}...", Toast.LENGTH_SHORT).show()
         startNavigationAnimation()
     }
@@ -2696,26 +2698,38 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (!isNavigating) return
         val driver = viewModel.currentDriver.value
         val driverId = driver?.driverId ?: return
-        val route = assignedRoute ?: return
+        val route = lockedActiveRoute ?: assignedRoute ?: return
         val loc = currentLocation
+        val busNum = lockedActiveBus ?: binding.tvBusNumberInfo.text.toString().trim()
         val tripId = currentActiveTripId ?: TripRecoveryHelper.generateTripId(
-            driverId, route.routeName, if (isReverseTripActive) "RETURN" else "FORWARD"
+            driverId = driverId,
+            busNumber = busNum,
+            routeName = route.routeName,
+            direction = if (isReverseTripActive) "RETURN" else "FORWARD"
         ).also { currentActiveTripId = it }
+
+        val currentStopIdx = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) lastArrivedStopIndex else nextGlobalStopIndex
 
         val state = ActiveTripState(
             tripId = tripId,
             driverId = driverId,
             routeId = route.id,
             routeName = route.routeName,
-            busNumber = binding.tvBusNumberInfo.text.toString().trim(),
+            busNumber = busNum,
             tripDirection = if (isReverseTripActive) "RETURN" else "FORWARD",
             isMorning = isActiveTripMorning(),
             isDutyEnabled = isDutyEnabled,
             isNavigating = isNavigating,
+            tripStatus = if (isNavigating) "ACTIVE" else "IDLE",
+            currentStopIndex = currentStopIdx,
             nextStopIndex = nextGlobalStopIndex,
-            stopStates = activeStates().mapValues { it.value.name },
-            stopArrivalTimes = activeArrivalTimes(),
-            stopEtaTexts = activeEtaTexts(),
+            stopStates = stopStates.mapValues { it.value.name },
+            stopArrivalTimes = stopArrivalTimes.toMap(),
+            stopEtaTexts = stopEtaTexts.toMap(),
+            isReverseTripActive = isReverseTripActive,
+            reverseStopStates = reverseStopStates.mapValues { it.value.name },
+            reverseStopArrivalTimes = reverseStopArrivalTimes.toMap(),
+            reverseStopEtaTexts = reverseStopEtaTexts.toMap(),
             lastKnownLat = loc?.latitude ?: 0.0,
             lastKnownLng = loc?.longitude ?: 0.0,
             tripStartTime = System.currentTimeMillis(),
@@ -2725,7 +2739,15 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun clearCurrentActiveTripState() {
+        val completedTripId = currentActiveTripId
+        if (!completedTripId.isNullOrBlank()) {
+            TripRecoveryHelper.markTripCompleted(this, completedTripId)
+            Log.d("TripIntegrity", "TRIP_COMPLETED: Finished trip $completedTripId")
+        }
         currentActiveTripId = null
+        lockedActiveRoute = null
+        lockedActiveBus = null
+        activeTripIsMorning = null
         TripRecoveryHelper.clearActiveTrip(this)
     }
 
@@ -3148,6 +3170,11 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         binding.btnStartNavigation.setOnClickListener {
             ViewUtils.applyClickEffect(it)
+            if (isNavigating || currentActiveTripId != null) {
+                Toast.makeText(this, "An active trip is already in progress.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
             val route = assignedRoute
 
             if (!isDutyEnabled) {
@@ -3204,8 +3231,21 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun handleStartNavigation(route: RouteModel) {
+        if (isNavigating || currentActiveTripId != null) {
+            Toast.makeText(this, "An active trip is already in progress.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val driverId = viewModel.currentDriver.value?.driverId ?: ""
-        currentActiveTripId = TripRecoveryHelper.generateTripId(driverId, route.routeName, if (isReverseTripActive) "RETURN" else "FORWARD")
+        val busNum = binding.tvBusNumberInfo.text.toString().trim().ifEmpty { viewModel.currentDriver.value?.assignedBus.orEmpty() }
+        lockedActiveBus = busNum
+        lockedActiveRoute = route
+        assignedRoute = route
+        currentActiveTripId = TripRecoveryHelper.generateTripId(
+            driverId = driverId,
+            busNumber = busNum,
+            routeName = route.routeName,
+            direction = if (isReverseTripActive) "RETURN" else "FORWARD"
+        )
         // A new forward navigation session gets one source-arrival/drop event.
         if (!isReverseTripActive) {
             activeTripIsMorning = isMorningTrip()
@@ -3214,6 +3254,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 FirebaseRepository.updateDriverTripDirection(it, "FORWARD")
             }
         }
+        Log.d("TripIntegrity", "TRIP_START: driver=$driverId, bus=$busNum, route=${route.routeName}, direction=${if (isReverseTripActive) "RETURN" else "FORWARD"}, tripId=$currentActiveTripId, isMorning=$activeTripIsMorning")
         if (isNearStart) {
             updateBottomSheetInfo()
             startNavigationAnimation()
@@ -3269,7 +3310,15 @@ class DriverDashboardActivity : AppCompatActivity() {
             }
         }
         val driverId = viewModel.currentDriver.value?.driverId ?: ""
-        currentActiveTripId = TripRecoveryHelper.generateTripId(driverId, assignedRoute?.routeName ?: "", "RETURN")
+        val busNum = lockedActiveBus ?: binding.tvBusNumberInfo.text.toString().trim().ifEmpty { viewModel.currentDriver.value?.assignedBus.orEmpty() }
+        lockedActiveBus = busNum
+        lockedActiveRoute = assignedRoute
+        currentActiveTripId = TripRecoveryHelper.generateTripId(
+            driverId = driverId,
+            busNumber = busNum,
+            routeName = assignedRoute?.routeName ?: "",
+            direction = "RETURN"
+        )
         // Copying is important: the adapter updates StopItem.time, so reusing the
         // forward objects would overwrite the forward-trip display/history.
         reverseForwardStopIndexes = forwardStops.indices.reversed().toList()
@@ -3298,6 +3347,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         activeFallbackUtteranceId = null
         isReverseTripActive = true
         isViewingReverseTrip = true
+        activeTripIsMorning = false
         viewModel.currentDriver.value?.driverId?.let {
             FirebaseRepository.updateDriverTripDirection(it, "RETURN")
         }
@@ -3315,6 +3365,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         clearTraveledRouteHistory()
         assignedRoute?.let(::updateTripAddresses)
         updateBottomSheetInfo()
+        persistCurrentActiveTripState()
+        Log.d("TripIntegrity", "TRIP_START (RETURN): driver=$driverId, bus=$busNum, route=${assignedRoute?.routeName}, tripId=$currentActiveTripId")
         startNavigationAnimation()
         Toast.makeText(this, "Return trip started", Toast.LENGTH_SHORT).show()
     }
@@ -3362,7 +3414,15 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (!isReverseTripActive) return
 
         val driverId = viewModel.currentDriver.value?.driverId ?: ""
-        currentActiveTripId = TripRecoveryHelper.generateTripId(driverId, assignedRoute?.routeName ?: "", "FORWARD")
+        val busNum = lockedActiveBus ?: binding.tvBusNumberInfo.text.toString().trim().ifEmpty { viewModel.currentDriver.value?.assignedBus.orEmpty() }
+        lockedActiveBus = busNum
+        lockedActiveRoute = assignedRoute
+        currentActiveTripId = TripRecoveryHelper.generateTripId(
+            driverId = driverId,
+            busNumber = busNum,
+            routeName = assignedRoute?.routeName ?: "",
+            direction = "FORWARD"
+        )
         voiceSessionId++
         speechApi?.cancel()
         voiceInstructionsPlayer?.clear()
@@ -3383,6 +3443,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         currentNavigationEtaText = null
         clearTraveledRouteHistory()
         assignedRoute?.let(::updateTripAddresses)
+        persistCurrentActiveTripState()
+        Log.d("TripIntegrity", "TRIP_START (FORWARD): driver=$driverId, bus=$busNum, route=${assignedRoute?.routeName}, tripId=$currentActiveTripId")
 
         viewModel.currentDriver.value?.driverId?.let {
             FirebaseRepository.updateDriverTripDirection(it, "FORWARD")
