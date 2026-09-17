@@ -1,6 +1,8 @@
 package ui.admin
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.view.LayoutInflater
 import android.widget.EditText
@@ -13,6 +15,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -30,7 +34,10 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.plugin.animation.MapAnimationOptions
+import com.mapbox.maps.plugin.animation.flyTo
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
@@ -44,6 +51,9 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class RouteMapActivity : AppCompatActivity() {
 
@@ -52,12 +62,16 @@ class RouteMapActivity : AppCompatActivity() {
     private var mapView: MapView? = null
     private var pointAnnotationManager: PointAnnotationManager? = null
     private var polylineAnnotationManager: PolylineAnnotationManager? = null
+    private var temporaryPlacementAnnotationManager: PointAnnotationManager? = null
+    private var temporaryPlacementMarker: PointAnnotation? = null
+    private lateinit var searchAdapter: SearchAdapter
+    private var searchRequestId = 0L
+    private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRouteMapBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
         val routeId = intent.getStringExtra("ROUTE_ID")
         currentRoute = com.example.bustrack_app.data.RouteRepository.routeList.value?.find { it.id == routeId }
 
@@ -71,6 +85,7 @@ class RouteMapActivity : AppCompatActivity() {
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
             setupInitialCamera()
             updateMapUI()
+            setupTemporaryPlacementMarker()
         }
 
         // Tap to show Add Stop Dialog
@@ -78,6 +93,8 @@ class RouteMapActivity : AppCompatActivity() {
             showAddStopDialog(point)
             true
         }
+
+        setupLocationSearch()
 
         binding.btnClose.setOnClickListener {
             finish()
@@ -127,7 +144,7 @@ class RouteMapActivity : AppCompatActivity() {
         )
     }
 
-    private fun showAddStopDialog(point: Point) {
+    private fun showAddStopDialog(point: Point, fromTemporaryMarker: Boolean = false) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_stop_map, null)
         val etName = dialogView.findViewById<EditText>(R.id.etStopName)
         val tvLat = dialogView.findViewById<TextView>(R.id.tvLatValue)
@@ -148,7 +165,7 @@ class RouteMapActivity : AppCompatActivity() {
                 etName.error = "Stop name is required"
                 return@setOnClickListener
             }
-            saveNewStop(name, point)
+            saveNewStop(name, point, fromTemporaryMarker)
             dialog.dismiss()
         }
         dialog.show()
@@ -158,7 +175,7 @@ class RouteMapActivity : AppCompatActivity() {
         )
     }
 
-    private fun saveNewStop(name: String, point: Point) {
+    private fun saveNewStop(name: String, point: Point, clearTemporaryMarker: Boolean = false) {
         val route = currentRoute ?: return
         
         val newStop = StopItem(
@@ -198,7 +215,99 @@ class RouteMapActivity : AppCompatActivity() {
         route.stopsList.clear()
         route.stopsList.addAll(resequenced)
 
+        if (clearTemporaryMarker) {
+            clearTemporaryPlacementMarker()
+        }
         updateMapUI()
+    }
+
+    /**
+     * A Rawalpindi-bounded lookup only supplies a Point to the existing Add Stop
+     * dialog. Searching itself never writes route data.
+     */
+    private fun setupLocationSearch() {
+        searchAdapter = SearchAdapter(emptyList()) { item ->
+            (item as? RawalpindiSearchResult)?.let { showSearchPlacement(it.point) }
+        }
+        binding.rvLocationSearchResults.layoutManager = LinearLayoutManager(this)
+        binding.rvLocationSearchResults.adapter = searchAdapter
+
+        binding.etLocationSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchLocations(s.toString())
+            }
+
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        binding.etLocationSearch.setOnEditorActionListener { _, _, _ ->
+            searchLocations(binding.etLocationSearch.text.toString(), force = true)
+            true
+        }
+        binding.btnSearchLocation.setOnClickListener {
+            searchLocations(binding.etLocationSearch.text.toString(), force = true)
+        }
+    }
+
+    private fun searchLocations(rawQuery: String, force: Boolean = false) {
+        val query = rawQuery.trim()
+        if (query.length < 2) {
+            searchRequestId++
+            binding.rvLocationSearchResults.visibility = View.GONE
+            if (force && query.isNotEmpty()) {
+                Toast.makeText(this, "Enter at least 2 characters", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        val requestId = ++searchRequestId
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
+            delay(if (force) 0 else 350)
+            val results = RawalpindiLocationResolver.search(this@RouteMapActivity, query)
+            if (requestId != searchRequestId) return@launch
+            searchAdapter.updateResults(results)
+            binding.rvLocationSearchResults.visibility = if (results.isEmpty()) View.GONE else View.VISIBLE
+            if (force && results.isEmpty()) Toast.makeText(this@RouteMapActivity, "No Rawalpindi locations found", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupTemporaryPlacementMarker() {
+        temporaryPlacementAnnotationManager = mapView?.annotations?.createPointAnnotationManager()
+        temporaryPlacementAnnotationManager?.addClickListener { annotation ->
+            if (annotation.id == temporaryPlacementMarker?.id) {
+                showAddStopDialog(annotation.point, fromTemporaryMarker = true)
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun showSearchPlacement(point: Point) {
+        runOnUiThread {
+            mapView?.mapboxMap?.flyTo(
+                CameraOptions.Builder().center(point).zoom(16.0).build(),
+                MapAnimationOptions.mapAnimationOptions { duration(900) }
+            )
+
+            temporaryPlacementMarker?.let { temporaryPlacementAnnotationManager?.delete(it) }
+            val markerBitmap = bitmapFromDrawableRes(R.drawable.ic_temporary_location_pointer)
+            temporaryPlacementMarker = markerBitmap?.let {
+                temporaryPlacementAnnotationManager?.create(
+                    PointAnnotationOptions().withPoint(point).withIconImage(it).withIconSize(1.0)
+                )
+            }
+            binding.rvLocationSearchResults.visibility = View.GONE
+            binding.etLocationSearch.clearFocus()
+            Toast.makeText(this@RouteMapActivity, "Tap the blue marker to add a stop", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun clearTemporaryPlacementMarker() {
+        temporaryPlacementMarker?.let { temporaryPlacementAnnotationManager?.delete(it) }
+        temporaryPlacementMarker = null
     }
 
     private fun updateMapUI() {

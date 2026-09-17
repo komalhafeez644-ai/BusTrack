@@ -18,6 +18,7 @@ import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityEditParentProfileBinding
 import com.example.bustrack_app.viewmodels.ProfileViewModel
+import ui.admin.LocationPickerActivity
 import utils.StorageUtils
 import java.io.File
 import java.text.SimpleDateFormat
@@ -31,6 +32,17 @@ class EditParentProfileActivity : AppCompatActivity() {
     private var selectedImageUri: Uri? = null
     private var cameraImageUri: Uri? = null
     private var isImageRemoved = false
+
+    // Parent addresses use the same searchable map picker as student pickup
+    // locations, so a parent does not have to guess or manually type an address.
+    private val pickAddress = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val address = result.data?.getStringExtra("SELECTED_ADDRESS")?.trim().orEmpty()
+        if (address.isNotEmpty()) {
+            binding.etAddress.setText(address)
+            binding.etCity.setText("Rawalpindi")
+        }
+    }
 
     // Photo selection contract
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -127,6 +139,10 @@ class EditParentProfileActivity : AppCompatActivity() {
                     binding.imgProfile.setPadding(20, 20, 20, 20)
                 }
             )
+        }
+
+        binding.etAddress.setOnClickListener {
+            pickAddress.launch(Intent(this, LocationPickerActivity::class.java))
         }
     }
 

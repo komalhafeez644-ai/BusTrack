@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.databinding.ActivityRouteAnalysisBinding
@@ -30,6 +31,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import utils.ViewUtils
+import kotlinx.coroutines.launch
 
 class RouteAnalysisActivity : AppCompatActivity() {
 
@@ -52,6 +54,7 @@ class RouteAnalysisActivity : AppCompatActivity() {
         mapView = binding.mapView
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
             initManagers()
+            setupInitialCamera()
             performAnalysis()
         }
 
@@ -64,18 +67,47 @@ class RouteAnalysisActivity : AppCompatActivity() {
         polylineAnnotationManager = annotationApi?.createPolylineAnnotationManager()
     }
 
+    private fun setupInitialCamera() {
+        // Never leave an unresolved residential address on Mapbox's world/globe view.
+        mapView?.mapboxMap?.setCamera(
+            CameraOptions.Builder()
+                .center(Point.fromLngLat(73.0535, 33.5985)) // FG/PG College service area
+                .zoom(14.0)
+                .build()
+        )
+    }
+
     private fun performAnalysis() {
         val app = currentApplication ?: return
-        
-        // Validation: If coordinates are missing, analysis won't be accurate
-        if (app.latitude == 0.0 || app.longitude == 0.0) {
-            Toast.makeText(this, "Student location coordinates missing. Please set location on map first.", Toast.LENGTH_LONG).show()
-            updateUIWithNoMatch()
+
+        if (app.latitude != 0.0 && app.longitude != 0.0) {
+            analyseStudentPoint(Point.fromLngLat(app.longitude, app.latitude))
             return
         }
 
-        val studentPoint = Point.fromLngLat(app.longitude, app.latitude)
-        
+        // Older student records can have a typed residential address but no map point.
+        // Resolve it inside Rawalpindi before declaring that no route can be matched.
+        if (app.pickupPoint.isBlank()) {
+            Toast.makeText(this, "Student residential address is missing.", Toast.LENGTH_LONG).show()
+            updateUIWithNoMatch()
+            return
+        }
+        lifecycleScope.launch {
+            val resolved = RawalpindiLocationResolver.resolve(this@RouteAnalysisActivity, app.pickupPoint)
+            if (resolved == null) {
+                Toast.makeText(this@RouteAnalysisActivity, "Couldn't find this address in Rawalpindi.", Toast.LENGTH_LONG).show()
+                updateUIWithNoMatch()
+                return@launch
+            }
+            currentApplication = app.copy(
+                latitude = resolved.point.latitude(),
+                longitude = resolved.point.longitude()
+            )
+            analyseStudentPoint(resolved.point)
+        }
+    }
+
+    private fun analyseStudentPoint(studentPoint: Point) {
         val routes = RouteRepository.routeList.value ?: emptyList()
         if (routes.isEmpty()) {
             Toast.makeText(this, "No routes available for analysis", Toast.LENGTH_SHORT).show()

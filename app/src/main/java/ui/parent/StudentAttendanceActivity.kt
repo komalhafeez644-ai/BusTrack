@@ -3,6 +3,7 @@ package ui.parent
 import android.content.res.ColorStateList
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -98,17 +99,27 @@ class StudentAttendanceActivity : AppCompatActivity() {
     }
 
     private fun showMonthPicker() {
-        val monthYearList = mutableListOf<String>()
+        val monthYearList = linkedSetOf<String>()
         val calList = mutableListOf<java.util.Calendar>()
-        
-        val tempCal = java.util.Calendar.getInstance()
-        tempCal.add(java.util.Calendar.MONTH, 1) // Start from next month
+
+        // Month choices must be stable and unique. Starting at the selected/current
+        // month avoids the old future-month entry and prevents duplicate rows when
+        // the picker is opened across a month/year boundary.
+        val tempCal = (currentCalendar.clone() as java.util.Calendar).apply {
+            set(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
         
         val sdf = java.text.SimpleDateFormat("MMMM yyyy", java.util.Locale.getDefault())
         
         for (i in 0 until 12) {
-            monthYearList.add(sdf.format(tempCal.time))
-            calList.add(tempCal.clone() as java.util.Calendar)
+            val label = sdf.format(tempCal.time)
+            if (monthYearList.add(label)) {
+                calList.add(tempCal.clone() as java.util.Calendar)
+            }
             tempCal.add(java.util.Calendar.MONTH, -1)
         }
         
@@ -124,6 +135,9 @@ class StudentAttendanceActivity : AppCompatActivity() {
             .create()
         
         dialog.show()
+        // Device-default dialog themes can inherit a transparent/dark popup
+        // surface. The month chooser is always a solid white selector.
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.WHITE))
     }
 
     private fun setupChildSelector() {

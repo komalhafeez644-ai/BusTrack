@@ -805,6 +805,9 @@ class SearchAdapter(
         } else if (item is LocationModel) {
             holder.tvName.text = item.name
             holder.tvAddress.text = item.city
+        } else if (item is RawalpindiSearchResult) {
+            holder.tvName.text = item.name
+            holder.tvAddress.text = item.fullAddress
         }
         holder.itemView.setOnClickListener { onClick(item) }
     }

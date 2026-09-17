@@ -19,6 +19,7 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.ParentRepository
+import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.StudentModel
@@ -33,6 +34,9 @@ import com.google.android.material.textfield.TextInputLayout
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.mapbox.geojson.Point
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
+import com.mapbox.geojson.LineString
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
@@ -44,6 +48,13 @@ import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.generated.lineLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
+import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
+import com.mapbox.maps.extension.style.sources.addSource
+import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.sources.getSource
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -86,6 +97,9 @@ class ParentDashboardActivity : AppCompatActivity() {
     // deleting+recreating every marker on every 1-3s Firestore update was the source of
     // the bus icon visibly flickering/blinking on the Parent dashboard map.
     private var driverPointAnnotationManager: com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager? = null
+    private val parentRouteSourceId = "parent-approved-routes-source"
+    private val parentRouteLayerId = "parent-approved-routes-layer"
+    private var lastApprovedActiveDrivers: List<DriverModel> = emptyList()
 
     private val busLocations = listOf(
         Point.fromLngLat(67.0011, 24.8607) to "Bus-01",
@@ -106,6 +120,13 @@ class ParentDashboardActivity : AppCompatActivity() {
             bitmapFromDrawableRes(this@ParentDashboardActivity, R.drawable.ic_marker_bus)?.let {
                 style.addImage("bus-icon", it)
             }
+            renderApprovedActiveRoutes(lastApprovedActiveDrivers)
+        }
+
+        // Route changes are reflected only for drivers which the parent is already
+        // authorized to track; this observer does not broaden tracking access.
+        RouteRepository.routeList.observe(this) {
+            renderApprovedActiveRoutes(lastApprovedActiveDrivers)
         }
 
         // START DATA STREAM IMMEDIATELY
@@ -252,6 +273,8 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateMapMarkers(drivers: List<DriverModel>) {
+        lastApprovedActiveDrivers = drivers
+        renderApprovedActiveRoutes(drivers)
         // Reuse one PointAnnotationManager for the whole activity lifetime instead of
         // creating a new one on every update (was happening every 1-3s on every live
         // location push, a real source of visible flicker on its own).
@@ -340,6 +363,8 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun setupPlaceholderAnnotations() {
+        lastApprovedActiveDrivers = emptyList()
+        renderApprovedActiveRoutes(emptyList())
         val annotationApi = mapView?.annotations
         val pointAnnotationManager = annotationApi?.createPointAnnotationManager() ?: return
         pointAnnotationManager.deleteAll()
@@ -362,6 +387,49 @@ class ParentDashboardActivity : AppCompatActivity() {
                     .build(),
                 MapAnimationOptions.mapAnimationOptions { duration(1500) }
             )
+        }
+    }
+
+    /**
+     * Draws complete assigned routes for the already-filtered, approved active buses.
+     * It deliberately uses the stored route path rather than a bus-to-next-stop
+     * segment, so parents can see the whole journey. Return trips reverse a copied
+     * point list, leaving the shared forward route untouched.
+     */
+    private fun renderApprovedActiveRoutes(drivers: List<DriverModel>) {
+        val routes = RouteRepository.routeList.value.orEmpty()
+        val features = drivers.mapNotNull { driver ->
+            val route = routes.firstOrNull {
+                it.routeName == driver.route || it.routeCode == driver.route ||
+                        it.id == driver.route || it.busNo == driver.assignedBus
+            } ?: return@mapNotNull null
+            val forwardPoints = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
+            if (forwardPoints.size < 2) return@mapNotNull null
+            val journeyPoints = if (driver.tripDirection.equals("RETURN", true)) {
+                forwardPoints.asReversed()
+            } else {
+                forwardPoints
+            }
+            Feature.fromGeometry(LineString.fromLngLats(journeyPoints))
+        }
+        val collection = FeatureCollection.fromFeatures(features)
+
+        mapView?.mapboxMap?.getStyle { style ->
+            if (!style.styleSourceExists(parentRouteSourceId)) {
+                style.addSource(geoJsonSource(parentRouteSourceId) { featureCollection(collection) })
+            } else {
+                (style.getSource(parentRouteSourceId) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
+                    ?.featureCollection(collection)
+            }
+            if (!style.styleLayerExists(parentRouteLayerId)) {
+                style.addLayer(lineLayer(parentRouteLayerId, parentRouteSourceId) {
+                    lineColor("#2563EB")
+                    lineWidth(5.0)
+                    lineOpacity(0.85)
+                    lineCap(LineCap.ROUND)
+                    lineJoin(LineJoin.ROUND)
+                })
+            }
         }
     }
 
