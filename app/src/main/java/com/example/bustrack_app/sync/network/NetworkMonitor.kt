@@ -17,6 +17,30 @@ object NetworkMonitor {
     var isOnline: Boolean = false
         private set
 
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<(Boolean) -> Unit>()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    fun addListener(listener: (Boolean) -> Unit) {
+        listeners.add(listener)
+        mainHandler.post { listener(isOnline) }
+    }
+
+    fun removeListener(listener: (Boolean) -> Unit) {
+        listeners.remove(listener)
+    }
+
+    private fun notifyListeners(online: Boolean) {
+        mainHandler.post {
+            for (l in listeners) {
+                try {
+                    l(online)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in network listener: ${e.message}", e)
+                }
+            }
+        }
+    }
+
     fun startMonitoring(context: Context) {
         if (isMonitoring) return
         val appContext = context.applicationContext
@@ -29,24 +53,37 @@ object NetworkMonitor {
             override fun onAvailable(network: Network) {
                 super.onAvailable(network)
                 Log.d(TAG, "Network became available")
+                val wasOnline = isOnline
                 isOnline = true
+                if (!wasOnline) {
+                    notifyListeners(true)
+                }
                 SyncQueueManager.processQueue()
             }
 
             override fun onLost(network: Network) {
                 super.onLost(network)
                 Log.d(TAG, "Network lost")
+                val wasOnline = isOnline
                 isOnline = checkInitialConnectivity(connectivityManager)
+                if (wasOnline != isOnline) {
+                    notifyListeners(isOnline)
+                }
             }
 
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 super.onCapabilitiesChanged(network, capabilities)
                 val hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                         capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                val wasOnline = isOnline
                 if (hasInternet && !isOnline) {
                     isOnline = true
                     Log.d(TAG, "Validated internet connection available")
+                    notifyListeners(true)
                     SyncQueueManager.processQueue()
+                } else if (!hasInternet && isOnline) {
+                    isOnline = false
+                    notifyListeners(false)
                 }
             }
         }

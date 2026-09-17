@@ -514,8 +514,28 @@ class TrackDriverActivity : AppCompatActivity() {
         unavailableDialog?.show()
     }
 
+    private fun updateTrackingStatusHeader(driver: DriverModel) {
+        val tvHeader = findViewById<TextView>(R.id.tvHeaderTitle) ?: return
+        val isParent = intent.getBooleanExtra("IS_PARENT", false)
+        val baseTitle = if (isParent) "Tracking Detail" else "Live Tracking"
+
+        val currentTime = System.currentTimeMillis()
+        val isStale = (driver.locationTimestamp > 0L && (currentTime - driver.locationTimestamp) > 15000L) ||
+                driver.locationStatus.equals("STALE", ignoreCase = true) ||
+                driver.locationStatus.equals("UNAVAILABLE", ignoreCase = true)
+        val isLowAccuracy = driver.locationStatus.equals("LOW_ACCURACY", ignoreCase = true) ||
+                (driver.accuracy > 30f && driver.accuracy <= 65f)
+
+        when {
+            isStale -> tvHeader.text = "$baseTitle (Stale)"
+            isLowAccuracy -> tvHeader.text = "$baseTitle (Low Accuracy)"
+            else -> tvHeader.text = baseTitle
+        }
+    }
+
     private fun updateUI(driver: DriverModel) {
         try {
+            updateTrackingStatusHeader(driver)
             val sheet = findViewById<FrameLayout>(R.id.bottomSheet)
             sheet?.let {
                 it.findViewById<TextView>(R.id.tvBusIdSheet)?.text = driver.assignedBus ?: "BUS-101"

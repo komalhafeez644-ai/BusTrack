@@ -39,6 +39,12 @@ object SyncQueueManager {
         Log.d(TAG, "SyncQueueManager initialized")
     }
 
+    enum class SyncResult {
+        SYNCED_ONLINE,
+        QUEUED_OFFLINE,
+        FAILED
+    }
+
     /**
      * Enqueues a full document set operation with merge semantics.
      */
@@ -51,33 +57,57 @@ object SyncQueueManager {
         immediateSync: Boolean = true,
         onComplete: ((Boolean) -> Unit)? = null
     ) {
+        enqueueSetWithResult(
+            syncId, actionType, targetCollection, targetDocumentId, data, immediateSync
+        ) { result ->
+            onComplete?.invoke(result != SyncResult.FAILED)
+        }
+    }
+
+    /**
+     * Enqueues a full document set operation and reports exact SyncResult (online vs queued vs failed).
+     */
+    fun enqueueSetWithResult(
+        syncId: String,
+        actionType: String,
+        targetCollection: String,
+        targetDocumentId: String,
+        data: Map<String, Any?>,
+        immediateSync: Boolean = true,
+        onComplete: ((SyncResult) -> Unit)? = null
+    ) {
         scope.launch {
-            val payload = serializeMap(data)
-            val entity = SyncQueueEntity(
-                syncId = syncId,
-                actionType = actionType,
-                operationType = SyncQueueEntity.OP_SET,
-                targetCollection = targetCollection,
-                targetDocumentId = targetDocumentId,
-                payloadJson = payload,
-                createdAt = System.currentTimeMillis(),
-                status = SyncQueueEntity.STATUS_PENDING,
-                isConflated = false
-            )
+            try {
+                val payload = serializeMap(data)
+                val entity = SyncQueueEntity(
+                    syncId = syncId,
+                    actionType = actionType,
+                    operationType = SyncQueueEntity.OP_SET,
+                    targetCollection = targetCollection,
+                    targetDocumentId = targetDocumentId,
+                    payloadJson = payload,
+                    createdAt = System.currentTimeMillis(),
+                    status = SyncQueueEntity.STATUS_PENDING,
+                    isConflated = false
+                )
 
-            dao?.insertOrReplace(entity)
+                dao?.insertOrReplace(entity)
 
-            if (immediateSync && NetworkMonitor.isOnline) {
-                val success = trySyncSingleItem(entity, data)
-                if (success) {
-                    dao?.deleteById(syncId)
-                    withContext(Dispatchers.Main) { onComplete?.invoke(true) }
-                    return@launch
+                if (immediateSync && NetworkMonitor.isOnline) {
+                    val success = trySyncSingleItem(entity, data)
+                    if (success) {
+                        dao?.deleteById(syncId)
+                        withContext(Dispatchers.Main) { onComplete?.invoke(SyncResult.SYNCED_ONLINE) }
+                        return@launch
+                    }
                 }
-            }
 
-            // Either offline or immediate sync failed: optimistic callback for smooth UI
-            withContext(Dispatchers.Main) { onComplete?.invoke(true) }
+                // Successfully saved locally in Room, queued for sync
+                withContext(Dispatchers.Main) { onComplete?.invoke(SyncResult.QUEUED_OFFLINE) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed local save for $syncId: ${e.message}", e)
+                withContext(Dispatchers.Main) { onComplete?.invoke(SyncResult.FAILED) }
+            }
         }
     }
 

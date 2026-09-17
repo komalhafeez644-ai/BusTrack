@@ -35,5 +35,8 @@ data class DriverModel(
     var isNavigating: Boolean = false,
     var activeTripId: String = "",
     var activeRouteId: String = "",
-    var activeRouteName: String = ""
+    var activeRouteName: String = "",
+    var accuracy: Float = 0f,
+    var locationTimestamp: Long = 0L,
+    var locationStatus: String = "LIVE"
 ) : Serializable
