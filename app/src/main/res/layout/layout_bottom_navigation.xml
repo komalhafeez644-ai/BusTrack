@@ -155,36 +155,13 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:orientation="vertical">
 
-            <RelativeLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content">
-
-                <ImageView
-                    android:id="@+id/ivAlerts"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:src="@drawable/notifications"
-                    android:duplicateParentState="true"
-                    app:tint="@color/nav_item_color_selector" />
-
-                <TextView
-                    android:id="@+id/tvUnseenAlertsBadgeNav"
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_alignTop="@id/ivAlerts"
-                    android:layout_alignEnd="@id/ivAlerts"
-                    android:layout_marginTop="-2dp"
-                    android:layout_marginEnd="-4dp"
-                    android:background="@drawable/bg_status_badge_red"
-                    android:backgroundTint="#EF4444"
-                    android:gravity="center"
-                    android:text="0"
-                    android:textColor="@color/white"
-                    android:textSize="8sp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-            </RelativeLayout>
+            <ImageView
+                android:id="@+id/ivAlerts"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/notifications"
+                android:duplicateParentState="true"
+                app:tint="@color/nav_item_color_selector" />
 
             <TextView
                 android:id="@+id/tvAlerts"

@@ -56,6 +56,7 @@ import com.example.bustrack_app.data.FirebaseRepository
 import kotlinx.coroutines.launch
 import utils.ViewUtils
 import utils.FormUtils
+import utils.NavigationUtils
 import ui.admin.ChangePasswordActivity
 import ui.admin.LiveTrackingActivity
 import ui.admin.NotificationSettingsActivity
@@ -588,14 +589,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun setupDrawerListeners() {
-        findViewById<View>(R.id.drawerImgProfile)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ParentProfileActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerPrivacy)?.setOnClickListener { ViewUtils.applyClickEffect(it); val intent = Intent(this, PrivacyPolicyActivityActivity::class.java); intent.putExtra("FROM_USER", "parent"); startActivity(intent); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerTerms)?.setOnClickListener { ViewUtils.applyClickEffect(it); val intent = Intent(this, TermsConditionsActivity::class.java); intent.putExtra("FROM_USER", "parent"); startActivity(intent); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerAttendance)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, StudentAttendanceActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerNotifications)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ParentNotificationsActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerFaq)?.setOnClickListener { ViewUtils.applyClickEffect(it); startActivity(Intent(this, ParentFaqActivity::class.java)); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerChangePassword)?.setOnClickListener { ViewUtils.applyClickEffect(it); val intent = Intent(this, ChangePasswordActivity::class.java); intent.putExtra("FROM_USER", "parent"); startActivity(intent); drawerLayout.closeDrawer(GravityCompat.END) }
-        findViewById<View>(R.id.drawerLogout)?.setOnClickListener { ViewUtils.applyClickEffect(it); Firebase.auth.signOut(); val intent = Intent(this, LoginActivity::class.java); intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK; startActivity(intent); finish() }
+        NavigationUtils.setupParentDrawer(this, drawerLayout)
     }
 
     private fun loadProfileData() {

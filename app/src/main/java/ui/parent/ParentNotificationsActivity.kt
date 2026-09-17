@@ -20,8 +20,14 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.ktx.Firebase
 import utils.FormUtils
 
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
+import utils.ViewUtils
+
 class ParentNotificationsActivity : AppCompatActivity() {
 
+    private lateinit var drawerLayout: DrawerLayout
     private lateinit var rvNotifications: RecyclerView
     private lateinit var emptyState: View
     private var listeners: List<ListenerRegistration> = emptyList()
@@ -37,8 +43,12 @@ class ParentNotificationsActivity : AppCompatActivity() {
         emptyState = findViewById(R.id.emptyState)
         rvNotifications.layoutManager = LinearLayoutManager(this)
 
+        drawerLayout = findViewById(R.id.drawerLayout)
+        NavigationUtils.setupParentDrawer(this, drawerLayout)
+
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
-            finish()
+            ViewUtils.applyClickEffect(it)
+            drawerLayout.openDrawer(GravityCompat.END)
         }
 
         findViewById<TextView>(R.id.btnClearAll).setOnClickListener {
@@ -147,5 +157,13 @@ class ParentNotificationsActivity : AppCompatActivity() {
         }
 
         override fun getItemCount() = items.size
+    }
+
+    override fun onBackPressed() {
+        if (::drawerLayout.isInitialized && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
+        }
     }
 }

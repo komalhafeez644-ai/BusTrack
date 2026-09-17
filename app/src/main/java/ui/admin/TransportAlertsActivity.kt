@@ -13,6 +13,7 @@ import com.example.bustrack_app.adapter.AlertsAdapter
 import com.example.bustrack_app.databinding.ActivityTransportAlertsBinding
 import com.example.bustrack_app.viewmodels.AlertsViewModel
 import utils.NavigationUtils
+import ui.principal.PrincipalDashboardActivity
 
 class TransportAlertsActivity : AppCompatActivity() {
 
@@ -40,7 +41,18 @@ class TransportAlertsActivity : AppCompatActivity() {
         // BACK BUTTON
         binding.btnBack.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
+            if (hideAdminChrome) {
+                val intent = Intent(this, PrincipalDashboardActivity::class.java)
+                intent.putExtra("OPEN_DRAWER", true)
+                intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(intent)
+            }
             finish()
+        }
+
+        if (hideAdminChrome) {
+            binding.btnBack.setImageResource(R.drawable.ic_menu)
+            binding.btnBack.contentDescription = "Open menu"
         }
 
         // RECYCLER

@@ -12,7 +12,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.FaqModel
 
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
+import utils.ViewUtils
+
 class ParentFaqActivity : AppCompatActivity() {
+
+    private lateinit var drawerLayout: DrawerLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -20,9 +27,12 @@ class ParentFaqActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
+        drawerLayout = findViewById(R.id.drawerLayout)
+        NavigationUtils.setupParentDrawer(this, drawerLayout)
+
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
-            utils.ViewUtils.applyClickEffect(it)
-            finish()
+            ViewUtils.applyClickEffect(it)
+            drawerLayout.openDrawer(GravityCompat.END)
         }
 
         findViewById<View>(R.id.btnChatWithUs)?.setOnClickListener {
@@ -31,6 +41,14 @@ class ParentFaqActivity : AppCompatActivity() {
         }
 
         setupFaqList()
+    }
+
+    override fun onBackPressed() {
+        if (::drawerLayout.isInitialized && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
+        }
     }
 
     private fun setupFaqList() {

@@ -49,8 +49,15 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
                 // Set logic note
                 tvOptimizationLogic.text = "System matched ${application.studentName} with ${application.bestRoute} (${application.routeCode}) based on proximity to ${application.nearestStop}. This route is served by ${application.assignedBus}."
             
-                if (application.image != 0) {
+                // Use the student's saved photo URL. The previous layout supplied a
+                // hardcoded drawable here, which made every assignment look as if it had
+                // the same student's photo.
+                if (application.profileImageUrl.isNotBlank()) {
+                    utils.ImageUtils.loadProfileImage(this@AssignmentConfirmationActivity, application.profileImageUrl, ivProfile)
+                } else if (application.image != 0) {
                     ivProfile.setImageResource(application.image)
+                } else {
+                    ivProfile.setImageResource(R.drawable.ic_person)
                 }
             }
         } else {
@@ -105,6 +112,13 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
                 Toast.makeText(this, "Error: Student ID missing", Toast.LENGTH_SHORT).show()
                 return
             }
+
+            // Keep this guard here as well so a stale/deep-linked confirmation screen can
+            // never save an assignment when route analysis found no match.
+            if (it.bestRoute == "None" || it.routeCode == "None" || it.nearestStop == "None") {
+                Toast.makeText(this, "Please assign a route first, then confirm the assignment.", Toast.LENGTH_LONG).show()
+                return
+            }
             
             StudentRepository.assignRouteToStudent(
                 it.studentIdString,
@@ -114,7 +128,7 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
             ) { success ->
                 if (success) {
                     showSuccessDialog()
-                    viewModel.confirmAndNotify()
+                    viewModel.confirmAssignment()
                 } else {
                     Toast.makeText(this, "Failed to save assignment in database", Toast.LENGTH_LONG).show()
                 }

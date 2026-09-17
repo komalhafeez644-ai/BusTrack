@@ -14,8 +14,13 @@ import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.data.AuthRepository
 import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.launch
-import ui.driver.DriverDashboardActivity
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
+import utils.ViewUtils
 import ui.parent.ParentDashboardActivity
+import ui.driver.DriverDashboardActivity
+import ui.principal.PrincipalDashboardActivity
 
 class ChangePasswordActivity : AppCompatActivity() {
 
@@ -35,6 +40,16 @@ class ChangePasswordActivity : AppCompatActivity() {
         val progressBar = findViewById<ProgressBar>(R.id.progressBar)
 
         btnBack.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            val fromUser = intent.getStringExtra("FROM_USER")?.lowercase()
+            if (fromUser == "parent") {
+                val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+                if (drawerLayout != null) {
+                    NavigationUtils.setupParentDrawer(this, drawerLayout)
+                    drawerLayout.openDrawer(GravityCompat.END)
+                    return@setOnClickListener
+                }
+            }
             handleBackToDashboard()
         }
 
@@ -122,7 +137,7 @@ class ChangePasswordActivity : AppCompatActivity() {
             finish()
             return
         } else if (fromUser == "principal") {
-            val intent = Intent(this, ui.principal.PrincipalDashboardActivity::class.java)
+            val intent = Intent(this, PrincipalDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -135,7 +150,7 @@ class ChangePasswordActivity : AppCompatActivity() {
             val targetClass = when (role) {
                 "admin" -> AdminDashboardActivity::class.java
                 "driver" -> DriverDashboardActivity::class.java
-                "principal" -> ui.principal.PrincipalDashboardActivity::class.java
+                "principal" -> PrincipalDashboardActivity::class.java
                 else -> ParentDashboardActivity::class.java
             }
             
@@ -144,6 +159,15 @@ class ChangePasswordActivity : AppCompatActivity() {
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
             finish()
+        }
+    }
+
+    override fun onBackPressed() {
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
         }
     }
 }

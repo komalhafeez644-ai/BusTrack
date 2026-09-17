@@ -19,7 +19,6 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.RouteRepository
-import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.data.FirebaseRepository
 import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.RouteModel
@@ -350,15 +349,18 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             if (studentExists) {
-                val existsInDb = StudentRepository.studentList.value?.any { it.id == student.id } == true
-                if (existsInDb) {
-                    val intent = Intent(this, StudentDetailsActivity::class.java)
-                    intent.putExtra("STUDENT_ID", student.id)
-                    intent.putExtra("VIEW_ONLY", true)
-                    startActivity(intent)
-                } else {
-                    Toast.makeText(this, "Student record not found in database", Toast.LENGTH_SHORT).show()
-                }
+                // `student` was just resolved from the student's Firestore document. The
+                // repository list is an asynchronous cache and may not have its first
+                // snapshot yet, so checking it here caused a false "not found" on first
+                // open. StudentDetailsActivity now reads this same document directly.
+                val intent = Intent(this, StudentDetailsActivity::class.java)
+                intent.putExtra("STUDENT_ID", student.id)
+                // The verification step has already read this student's Firestore record.
+                // Pass its existing photo URL to the profile screen so the real photo can
+                // render immediately instead of waiting for a second asynchronous read.
+                intent.putExtra("STUDENT_PROFILE_IMAGE_URL", student.profileImageUrl)
+                intent.putExtra("VIEW_ONLY", true)
+                startActivity(intent)
             } else {
                 Toast.makeText(this, "Student profile not found", Toast.LENGTH_SHORT).show()
             }

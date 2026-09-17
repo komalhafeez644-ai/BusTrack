@@ -20,10 +20,13 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import ui.driver.DriverDashboardActivity
-import ui.parent.ParentDashboardActivity
-import ui.principal.PrincipalDashboardActivity
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
 import utils.ViewUtils
+import ui.parent.ParentDashboardActivity
+import ui.driver.DriverDashboardActivity
+import ui.principal.PrincipalDashboardActivity
 
 class PrivacyPolicyActivityActivity : AppCompatActivity() {
 
@@ -90,10 +93,28 @@ class PrivacyPolicyActivityActivity : AppCompatActivity() {
             sendInquiry()
         }
 
-        // Menu button logic - Opens Dashboard with Drawer open
+        // Menu button logic - Opens Parent Drawer if parent, else navigates back to Dashboard
         findViewById<View>(R.id.btnMenu)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
+            val fromUser = intent.getStringExtra("FROM_USER")?.lowercase()
+            if (fromUser == "parent" || currentUserRole == "parent") {
+                val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+                if (drawerLayout != null) {
+                    NavigationUtils.setupParentDrawer(this, drawerLayout)
+                    drawerLayout.openDrawer(GravityCompat.END)
+                    return@setOnClickListener
+                }
+            }
             handleBackToDashboard()
+        }
+    }
+
+    override fun onBackPressed() {
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
         }
     }
 

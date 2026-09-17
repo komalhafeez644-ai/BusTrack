@@ -19,7 +19,9 @@ import com.example.bustrack_app.viewmodels.ProfileViewModel
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
+import androidx.core.view.GravityCompat
 import utils.FormUtils
+import utils.NavigationUtils
 import utils.ViewUtils
 
 class ParentProfileActivity : AppCompatActivity() {
@@ -76,7 +78,7 @@ class ParentProfileActivity : AppCompatActivity() {
             
             binding.tvEmail.text = admin.email
             binding.tvAddress.text = admin.address.ifEmpty { "Not Provided" }
-            
+
             utils.ImageUtils.loadProfileImage(this, admin.profileImageUrl, binding.imgProfile)
         }
 
@@ -109,9 +111,11 @@ class ParentProfileActivity : AppCompatActivity() {
     }
 
     private fun setupClickListeners() {
+        NavigationUtils.setupParentDrawer(this, binding.drawerLayout)
+
         binding.btnBack.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            finish()
+            binding.drawerLayout.openDrawer(GravityCompat.END)
         }
         
         binding.btnEditProfile.setOnClickListener {
@@ -122,6 +126,14 @@ class ParentProfileActivity : AppCompatActivity() {
         binding.btnAddMoreChild.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             showAddChildBottomSheet()
+        }
+    }
+
+    override fun onBackPressed() {
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            binding.drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
         }
     }
 

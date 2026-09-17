@@ -91,6 +91,8 @@
             android:layout_weight="1"
             android:background="@drawable/bg_form_input_field"
             android:hint="Type your question…"
+            android:textColorHint="#94A3B8"
+            android:textColor="#1E293B"
             android:imeOptions="actionSend"
             android:inputType="textCapSentences|textMultiLine"
             android:maxLines="4"

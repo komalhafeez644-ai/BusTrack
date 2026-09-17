@@ -12,6 +12,9 @@ import com.example.bustrack_app.data.AuthRepository
 import kotlinx.coroutines.launch
 import ui.parent.ParentDashboardActivity
 import ui.driver.DriverDashboardActivity
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
 import utils.ViewUtils
 
 class TermsConditionsActivity : AppCompatActivity() {
@@ -22,9 +25,18 @@ class TermsConditionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_terms_conditions)
 
-        // Menu button logic - Opens Dashboard with Drawer open
+        // Menu button logic - Opens Parent Drawer if parent, else navigates back to Dashboard
         findViewById<android.view.View>(R.id.btnMenu)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
+            val fromUser = intent.getStringExtra("FROM_USER")?.lowercase()
+            if (fromUser == "parent") {
+                val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+                if (drawerLayout != null) {
+                    NavigationUtils.setupParentDrawer(this, drawerLayout)
+                    drawerLayout.openDrawer(GravityCompat.END)
+                    return@setOnClickListener
+                }
+            }
             handleBackToDashboard()
         }
 
@@ -58,14 +70,14 @@ class TermsConditionsActivity : AppCompatActivity() {
     private fun handleBackToDashboard() {
         val fromUser = intent.getStringExtra("FROM_USER")
         if (fromUser == "parent") {
-            val intent = Intent(this, ParentDashboardActivity::class.java)
+            val intent = Intent(this, ui.parent.ParentDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
             finish()
             return
         } else if (fromUser == "driver") {
-            val intent = Intent(this, DriverDashboardActivity::class.java)
+            val intent = Intent(this, ui.driver.DriverDashboardActivity::class.java)
             intent.putExtra("OPEN_DRAWER", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             startActivity(intent)
@@ -76,10 +88,10 @@ class TermsConditionsActivity : AppCompatActivity() {
         // Fallback to role-based detection if extra is missing
         lifecycleScope.launch {
             val role = authRepo.getCurrentUserRole()
-            val targetClass = when (role) {
-                "admin" -> AdminDashboardActivity::class.java
-                "driver" -> DriverDashboardActivity::class.java
-                else -> ParentDashboardActivity::class.java
+            val targetClass: Class<*> = when (role) {
+                "admin" -> ui.admin.AdminDashboardActivity::class.java
+                "driver" -> ui.driver.DriverDashboardActivity::class.java
+                else -> ui.parent.ParentDashboardActivity::class.java
             }
             
             val intent = Intent(this@TermsConditionsActivity, targetClass)
@@ -87,6 +99,15 @@ class TermsConditionsActivity : AppCompatActivity() {
             intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             startActivity(intent)
             finish()
+        }
+    }
+
+    override fun onBackPressed() {
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
         }
     }
 }

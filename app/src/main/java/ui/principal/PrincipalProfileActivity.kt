@@ -1,8 +1,8 @@
 package ui.principal
 
-import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.content.Intent
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
@@ -52,7 +52,14 @@ class PrincipalProfileActivity : AppCompatActivity() {
     }
 
     private fun setupClickListeners() {
-        binding.btnBack.setOnClickListener { finish() }
+        binding.btnBack.setImageResource(com.example.bustrack_app.R.drawable.ic_menu)
+        binding.btnBack.setOnClickListener {
+            val intent = Intent(this, PrincipalDashboardActivity::class.java)
+            intent.putExtra("OPEN_DRAWER", true)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
+            finish()
+        }
 
         binding.btnEditProfile.setOnClickListener {
             val intent = Intent(this, PrincipalEditProfileActivity::class.java)

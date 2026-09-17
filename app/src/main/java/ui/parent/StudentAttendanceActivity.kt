@@ -1,6 +1,7 @@
 package ui.parent
 
 import android.content.res.ColorStateList
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -14,15 +15,18 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.models.StudentModel
+import com.example.bustrack_app.models.AttendanceRecordModel
+import com.example.bustrack_app.data.ParentRepository
+import com.example.bustrack_app.data.FirebaseRepository
 import com.google.android.material.imageview.ShapeableImageView
 
-import com.example.bustrack_app.models.AttendanceRecordModel
-import com.example.bustrack_app.data.FirebaseRepository
-import com.example.bustrack_app.data.ParentRepository
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import utils.NavigationUtils
 
 class StudentAttendanceActivity : AppCompatActivity() {
+
+    private lateinit var drawerLayout: DrawerLayout
 
     private lateinit var tvStudentName: TextView
     private lateinit var tvGrade: TextView
@@ -71,9 +75,12 @@ class StudentAttendanceActivity : AppCompatActivity() {
         btnMonthFilter = findViewById(R.id.btnMonthFilter)
         tvEmptyState = findViewById(R.id.tvEmptyState)
 
+        drawerLayout = findViewById(R.id.drawerLayout)
+        NavigationUtils.setupParentDrawer(this, drawerLayout)
+
         findViewById<ImageView>(R.id.btnBack).setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            finish()
+            drawerLayout.openDrawer(GravityCompat.END)
         }
 
         updateMonthDisplay()
@@ -105,15 +112,17 @@ class StudentAttendanceActivity : AppCompatActivity() {
             tempCal.add(java.util.Calendar.MONTH, -1)
         }
         
-        val dialog = android.app.AlertDialog.Builder(this)
-        dialog.setTitle("Select Month")
-        dialog.setItems(monthYearList.toTypedArray()) { _, which ->
-            val selectedCal = calList[which]
-            currentCalendar.set(java.util.Calendar.MONTH, selectedCal.get(java.util.Calendar.MONTH))
-            currentCalendar.set(java.util.Calendar.YEAR, selectedCal.get(java.util.Calendar.YEAR))
-            updateMonthDisplay()
-            selectedStudent?.let { loadStudentAttendance(it) }
-        }
+        val dialog = android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog)
+            .setTitle("Select Month")
+            .setItems(monthYearList.toTypedArray()) { _, which ->
+                val selectedCal = calList[which]
+                currentCalendar.set(java.util.Calendar.MONTH, selectedCal.get(java.util.Calendar.MONTH))
+                currentCalendar.set(java.util.Calendar.YEAR, selectedCal.get(java.util.Calendar.YEAR))
+                updateMonthDisplay()
+                selectedStudent?.let { loadStudentAttendance(it) }
+            }
+            .create()
+        
         dialog.show()
     }
 
@@ -358,5 +367,13 @@ class StudentAttendanceActivity : AppCompatActivity() {
         }
 
         override fun getItemCount() = items.size
+    }
+
+    override fun onBackPressed() {
+        if (::drawerLayout.isInitialized && drawerLayout.isDrawerOpen(GravityCompat.END)) {
+            drawerLayout.closeDrawer(GravityCompat.END)
+        } else {
+            super.onBackPressed()
+        }
     }
 }

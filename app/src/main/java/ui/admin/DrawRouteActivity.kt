@@ -2,6 +2,7 @@ package ui.admin
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.location.Geocoder
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -42,14 +43,31 @@ import com.mapbox.maps.plugin.annotation.Annotation
 import com.mapbox.maps.plugin.gestures.addOnMapClickListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Locale
 
 class DrawRouteActivity : AppCompatActivity() {
+
+    companion object {
+        // Same Rawalpindi service area used by LocationPickerActivity. Keeping this
+        // boundary makes addresses entered before "Select on Map" resolve exactly as
+        // they do in the location picker, instead of depending on the SDK's broad,
+        // occasionally empty suggestion response.
+        private const val RAWALPINDI_BBOX = "72.70,33.35,73.35,33.90"
+    }
 
     private lateinit var binding: ActivityDrawRouteBinding
     private var mapView: MapView? = null
@@ -344,7 +362,22 @@ class DrawRouteActivity : AppCompatActivity() {
                         binding.rvSearchResults.visibility = View.VISIBLE
                     }
                 } else {
-                    // 2. Fallback to Mapbox search API ONLY if no Firestore matches
+                    // 2. Search the local road data first. Mapbox's autocomplete can
+                    // return a similarly spelled place (e.g. Jamalabad for Kamalabad)
+                    // instead of the exact Rawalpindi locality, while this lookup
+                    // returns all exact local matches with English display labels.
+                    val localRoadResults = withContext(Dispatchers.IO) {
+                        findOpenStreetMapLocations(cleanQuery)
+                    }
+                    if (requestId != searchRequestId) return@launch
+                    if (localRoadResults.isNotEmpty()) {
+                        searchAdapter.updateResults(localRoadResults)
+                        binding.rvSearchResults.visibility = View.VISIBLE
+                        return@launch
+                    }
+
+                    // 3. Mapbox remains available for places not present in the
+                    // local-road data.
                     val mapCenter = mapView?.mapboxMap?.cameraState?.center ?: Point.fromLngLat(73.0679, 33.6007)
                     val searchOptions = SearchOptions(
                         proximity = mapCenter,
@@ -363,23 +396,42 @@ class DrawRouteActivity : AppCompatActivity() {
                                     searchAdapter.updateResults(suggestions)
                                     binding.rvSearchResults.visibility = View.VISIBLE
                                 } else {
-                                    binding.rvSearchResults.visibility = View.GONE
+                                    showRouteGeocoderFallback(cleanQuery, requestId)
                                 }
                             }
                         }
 
                         override fun onError(e: Exception) {
                             if (requestId != searchRequestId) return
-                            runOnUiThread {
-                                if (requestId != searchRequestId) return@runOnUiThread
-                                binding.rvSearchResults.visibility = View.GONE
-                            }
+                            showRouteGeocoderFallback(cleanQuery, requestId)
                         }
                     })
                 }
             } catch (e: Exception) {
                 Log.e("SearchDebug", "Search error: ${e.message}")
             }
+        }
+    }
+
+    /** Shows a directly resolved road/area when the SDK autocomplete index has none. */
+    private fun showRouteGeocoderFallback(query: String, requestId: Long) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { findRouteLocation(query) }
+            if (requestId != searchRequestId) return@launch
+            if (result == null) {
+                binding.rvSearchResults.visibility = View.GONE
+                return@launch
+            }
+            val point = result.first
+            val resolvedLocation = LocationModel(
+                id = "route-geocoder:${point.longitude()},${point.latitude()}",
+                name = result.second,
+                latitude = point.latitude(),
+                longitude = point.longitude(),
+                city = "Rawalpindi"
+            )
+            searchAdapter.updateResults(listOf(resolvedLocation))
+            binding.rvSearchResults.visibility = View.VISIBLE
         }
     }
 
@@ -488,41 +540,187 @@ class DrawRouteActivity : AppCompatActivity() {
         val manualStart = intent.getStringExtra("MANUAL_START")
         val manualEnd = intent.getStringExtra("MANUAL_END")
 
-        lifecycleScope.launch {
-            if (!manualStart.isNullOrEmpty()) {
-                geocodeAndSetPoint(manualStart, true)
-            }
-            if (!manualEnd.isNullOrEmpty()) {
-                geocodeAndSetPoint(manualEnd, false)
-            }
-        }
+        if (!manualStart.isNullOrBlank()) geocodeAndSetPoint(manualStart, true)
+        if (!manualEnd.isNullOrBlank()) geocodeAndSetPoint(manualEnd, false)
     }
 
     private fun geocodeAndSetPoint(locationName: String, isStart: Boolean) {
-        val searchOptions = SearchOptions(
-            proximity = Point.fromLngLat(73.0679, 33.6007),
-            countries = listOf(IsoCountryCode.PAKISTAN),
-            limit = 1
-        )
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { findRouteLocation(locationName) }
+            if (result == null) {
+                Toast.makeText(
+                    this@DrawRouteActivity,
+                    "Couldn't find ${if (isStart) "source" else "destination"}: $locationName",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
 
-        searchEngine.search(locationName, searchOptions, object : SearchSuggestionsCallback {
-            override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {
-                suggestions.firstOrNull()?.let { suggestion ->
-                    searchEngine.select(suggestion, object : SearchSelectionCallback {
-                        override fun onResult(suggestion: SearchSuggestion, result: SearchResult, responseInfo: ResponseInfo) {
-                            runOnUiThread {
-                                if (isStart) setSource(result.coordinate, locationName)
-                                else setDestination(result.coordinate, locationName)
-                            }
-                        }
-                        override fun onResults(suggestion: SearchSuggestion, results: List<SearchResult>, responseInfo: ResponseInfo) {}
-                        override fun onSuggestions(suggestions: List<SearchSuggestion>, responseInfo: ResponseInfo) {}
-                        override fun onError(e: Exception) {}
-                    })
+            if (isStart) setSource(result.first, result.second)
+            else setDestination(result.first, result.second)
+        }
+    }
+
+    /**
+     * The location picker uses Mapbox's HTTP geocoder with a bounded local search.
+     * Draw Route previously used a separate SDK autocomplete request here; that request
+     * can return no suggestion for a valid typed address, leaving the route with no
+     * source/destination point. Use the same network path and Android fallback instead.
+     */
+    private fun findRouteLocation(query: String): Pair<Point, String>? {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isEmpty()) return null
+
+        try {
+            val encodedQuery = URLEncoder.encode(cleanQuery, "UTF-8")
+            val token = getString(R.string.mapbox_access_token)
+            val urlString = "https://api.mapbox.com/search/geocode/v6/forward" +
+                    "?q=$encodedQuery" +
+                    "&access_token=$token" +
+                    "&bbox=$RAWALPINDI_BBOX" +
+                    "&proximity=73.0679,33.6007" +
+                    "&country=pk" +
+                    "&types=address,street,place,locality,neighborhood,district" +
+                    "&autocomplete=true&language=en&limit=1"
+            val connection = URL(urlString).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val response = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+                val feature = JSONObject(response).optJSONArray("features")?.optJSONObject(0)
+                val coordinates = feature?.optJSONObject("geometry")?.optJSONArray("coordinates")
+                if (coordinates != null && coordinates.length() >= 2) {
+                    val lng = coordinates.optDouble(0, Double.NaN)
+                    val lat = coordinates.optDouble(1, Double.NaN)
+                    if (lng.isFinite() && lat.isFinite()) {
+                        val properties = feature.optJSONObject("properties")
+                        val name = properties?.optString("name").orEmpty().ifBlank { feature.optString("name") }
+                        val fullAddress = properties?.optString("full_address").orEmpty()
+                            .ifBlank { properties?.optString("place_formatted").orEmpty() }
+                            .ifBlank { name }
+                            .ifBlank { cleanQuery }
+                        connection.disconnect()
+                        return Point.fromLngLat(lng, lat) to fullAddress
+                    }
                 }
             }
-            override fun onError(e: Exception) {}
-        })
+            connection.disconnect()
+        } catch (e: Exception) {
+            Log.w("DrawRoute", "Mapbox geocoding failed for '$cleanQuery'", e)
+        }
+
+        findOpenStreetMapLocations(cleanQuery).firstOrNull()?.let { location ->
+            return Point.fromLngLat(location.longitude, location.latitude) to location.name
+        }
+
+        // A valid local landmark can be absent from Mapbox's index. This is the same
+        // last-resort geocoder used by the location picker for those cases.
+        if (!Geocoder.isPresent()) return null
+        return try {
+            @Suppress("DEPRECATION")
+            val address = Geocoder(this, Locale("en", "PK"))
+                .getFromLocationName(cleanQuery, 1, 33.35, 72.70, 33.90, 73.35)
+                ?.firstOrNull() ?: return null
+            val fullAddress = (0..address.maxAddressLineIndex)
+                .mapNotNull { address.getAddressLine(it) }
+                .joinToString(", ")
+                .ifBlank { cleanQuery }
+            Point.fromLngLat(address.longitude, address.latitude) to fullAddress
+        } catch (e: Exception) {
+            Log.w("DrawRoute", "Android geocoder fallback failed for '$cleanQuery'", e)
+            null
+        }
+    }
+
+    /**
+     * Mapbox does not currently index some local Rawalpindi roads (for example,
+     * Girja Road). OpenStreetMap contains those roads, so use it only after Mapbox
+     * returns no coordinate. This function is called at most once per debounced query.
+     */
+    private fun findOpenStreetMapLocations(query: String): List<LocationModel> {
+        return try {
+            // Treat the common "... abad" / "... a bad" typing variants as the
+            // canonical locality spelling.  This fixes inputs such as "Gulshan abad",
+            // "Kamala bad", and "Kamalaabad" without breaking ordinary multi-word
+            // names such as "Bahria Town".
+            val canonicalQuery = canonicalizeLocalityQuery(query)
+            val placeQuery = if (canonicalQuery.contains("rawalpindi", ignoreCase = true)) {
+                "$canonicalQuery, Pakistan"
+            } else {
+                "$canonicalQuery, Rawalpindi, Pakistan"
+            }
+            val url = URL(
+                "https://nominatim.openstreetmap.org/search?q=" +
+                        URLEncoder.encode(placeQuery, "UTF-8") +
+                        "&format=jsonv2&limit=5&countrycodes=pk&accept-language=en"
+            )
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "BusTrackApp/1.0 (Android route location search)")
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                connection.disconnect()
+                return emptyList()
+            }
+            val response = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+            connection.disconnect()
+            val results = JSONArray(response)
+            buildList {
+                for (index in 0 until results.length()) {
+                    val item = results.optJSONObject(index) ?: continue
+                    val lat = item.optString("lat").toDoubleOrNull()
+                    val lng = item.optString("lon").toDoubleOrNull()
+                    if (lat == null || lng == null || !lat.isFinite() || !lng.isFinite()) continue
+
+                    // Nominatim's English display_name puts the actual road/area
+                    // first. Keep only that short label as the main row title; the
+                    // remaining English locality details appear in the smaller row.
+                    val displayName = item.optString("display_name").ifBlank { query }
+                    val title = displayName.substringBefore(",").ifBlank { query }
+                    val subtitle = shortEnglishAddress(displayName)
+                    add(
+                        LocationModel(
+                            id = "osm:$lng,$lat",
+                            name = title,
+                            latitude = lat,
+                            longitude = lng,
+                            city = subtitle
+                        )
+                    )
+                }
+            // A locality can have several OSM boundaries/nodes. One clean suggestion
+            // is more helpful than identical names repeated with different coordinates.
+            }.distinctBy { it.name.lowercase(Locale.ROOT) }
+        } catch (e: Exception) {
+            Log.w("DrawRoute", "OpenStreetMap fallback failed for '$query'", e)
+            emptyList()
+        }
+    }
+
+    private fun shortEnglishAddress(displayName: String): String {
+        val parts = displayName.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        val localityParts = parts.drop(1)
+        val rawalpindiIndex = localityParts.indexOfFirst { it.equals("Rawalpindi", ignoreCase = true) }
+        val concise = when {
+            rawalpindiIndex == 0 -> listOf("Rawalpindi")
+            rawalpindiIndex > 0 -> (localityParts.take(1) + "Rawalpindi").distinct()
+            else -> localityParts.take(1)
+        }
+        return (concise + "Punjab" + "Pakistan").distinct().joinToString(", ")
+            .ifBlank { "Rawalpindi, Pakistan" }
+    }
+
+    private fun canonicalizeLocalityQuery(query: String): String {
+        val trimmed = query.trim()
+        val needsAbadCorrection = Regex("(?i)(\\s+abad|a\\s+bad|aabad)").containsMatchIn(trimmed)
+        if (!needsAbadCorrection) return trimmed
+        return trimmed
+            .replace(Regex("\\s+abad", RegexOption.IGNORE_CASE), "abad")
+            .replace(Regex("a\\s+bad", RegexOption.IGNORE_CASE), "abad")
+            .replace(Regex("aabad", RegexOption.IGNORE_CASE), "abad")
     }
 
     private fun clearPath() {
@@ -612,4 +810,4 @@ class SearchAdapter(
     }
 
     override fun getItemCount() = results.size
-} 
+}

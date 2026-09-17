@@ -32,10 +32,9 @@ class AssignmentConfirmationViewModel : ViewModel() {
         )
     }
 
-    // "Confirm & Notify Parent" button ka logic
-    fun confirmAndNotify() {
-        // Yahan aap API call kar sakte hain. Filhal hum status update kar rahe hain.
-        _actionStatus.value = "Notification sent to Parent successfully!"
+    // Confirmation feedback only. Parent notification is not implied by this action.
+    fun confirmAssignment() {
+        _actionStatus.value = "Assignment confirmed successfully!"
     }
 
     // "Edit Assignment" button ka logic

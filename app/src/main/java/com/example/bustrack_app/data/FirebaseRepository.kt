@@ -1133,4 +1133,24 @@ object FirebaseRepository {
             onResult(snapshot?.toObject<ParentModel>())
         }
     }
+
+    fun getParent(uid: String, onResult: (ParentModel?) -> Unit) {
+        db.collection("parents").document(uid).get()
+            .addOnSuccessListener { snapshot ->
+                onResult(snapshot.toObject<ParentModel>())
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
+
+    fun getAdminUser(uid: String, onResult: (AdminModel?) -> Unit) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { snapshot ->
+                onResult(snapshot.toObject<AdminModel>())
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
 }

@@ -295,15 +295,22 @@ class RouteAnalysisActivity : AppCompatActivity() {
 
         binding.btnConfirm.setOnClickListener {
             ViewUtils.applyClickEffect(it)
+
+            // A route assignment is valid only when analysis found both a route and one
+            // of its stops. Do not let the fallback "None" values enter confirmation.
+            if (matchedRoute == null || matchedStop == null) {
+                Toast.makeText(this, "Please assign a route first, then confirm the assignment.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             
             val updatedApp = currentApplication?.copy(
-                bestRoute = matchedRoute?.routeName ?: "None",
-                routeCode = matchedRoute?.routeCode ?: "None",
-                nearestStop = matchedStop?.stopName ?: "None",
+                bestRoute = matchedRoute!!.routeName,
+                routeCode = matchedRoute!!.routeCode,
+                nearestStop = matchedStop!!.stopName,
                 distance = binding.tvDistance.text.toString(),
                 matchPercent = binding.tvMatchPercent.text.toString(),
-                assignedBus = matchedRoute?.busNo ?: "Not Assigned",
-                assignedDriver = matchedRoute?.driverName ?: "Not Assigned"
+                assignedBus = matchedRoute!!.busNo ?: "Not Assigned",
+                assignedDriver = matchedRoute!!.driverName ?: "Not Assigned"
             )
 
             val intent = Intent(this, AssignmentConfirmationActivity::class.java)

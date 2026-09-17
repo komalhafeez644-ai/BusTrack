@@ -22,6 +22,7 @@ class StudentDetailsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityStudentDetailsBinding
     private val viewModel: StudentDetailsViewModel by viewModels()
     private var currentStudentId: String? = null
+    private var verifiedProfileImageUrl: String = ""
     private var isViewOnly: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +32,15 @@ class StudentDetailsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         currentStudentId = intent.getStringExtra("STUDENT_ID")
+        verifiedProfileImageUrl = intent.getStringExtra("STUDENT_PROFILE_IMAGE_URL").orEmpty()
         isViewOnly = intent.getBooleanExtra("VIEW_ONLY", false)
+
+        // A Tracking Request has already verified and loaded this exact student record.
+        // Render that same existing URL immediately; the normal Firestore detail load below
+        // remains the source of truth for all profile fields.
+        if (verifiedProfileImageUrl.isNotBlank()) {
+            utils.ImageUtils.loadProfileImage(this, verifiedProfileImageUrl, binding.imgStudentProfile)
+        }
 
         applyViewOnlyMode()
         observeData()
@@ -109,8 +118,11 @@ class StudentDetailsActivity : AppCompatActivity() {
             binding.tvFatherName.text = data.fatherName
             binding.tvPhoneNumber.text = data.phoneNumber
             
-            // Image Loading logic
-            utils.ImageUtils.loadProfileImage(this, data.profileImageUrl, binding.imgStudentProfile)
+            // Prefer the fresh student record, but retain the verified request value while a
+            // document with an older/missing image field is returned. Both values are the
+            // existing student's profileImageUrl; no new photo store or format is introduced.
+            val profileImageUrl = data.profileImageUrl.ifBlank { verifiedProfileImageUrl }
+            utils.ImageUtils.loadProfileImage(this, profileImageUrl, binding.imgStudentProfile)
         }
     }
 
