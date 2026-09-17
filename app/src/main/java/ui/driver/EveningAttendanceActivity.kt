@@ -32,6 +32,12 @@ class EveningAttendanceActivity : AppCompatActivity() {
     private lateinit var adapter: AttendanceAdapter
     private var isMorning = true
     private var routeName = ""
+    private var routeId = ""
+    private var busId = ""
+    private var driverId = ""
+    private var driverName = ""
+    private var tripId = ""
+    private var tripDirection = "FORWARD"
     private val attendanceList = ArrayList<AttendanceRecordModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +47,12 @@ class EveningAttendanceActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         routeName = intent.getStringExtra("ROUTE_NAME") ?: ""
+        routeId = intent.getStringExtra("ROUTE_ID") ?: ""
+        busId = intent.getStringExtra("BUS_ID") ?: ""
+        driverId = intent.getStringExtra("DRIVER_ID") ?: ""
+        driverName = intent.getStringExtra("DRIVER_NAME") ?: ""
+        tripId = intent.getStringExtra("TRIP_ID") ?: ""
+        tripDirection = intent.getStringExtra("TRIP_DIRECTION") ?: "FORWARD"
 
         setupUI()
         setupListeners()
@@ -255,24 +267,56 @@ class EveningAttendanceActivity : AppCompatActivity() {
         }
 
         private fun updateAttendance(item: AttendanceRecordModel, newStatus: String) {
-            val currentTime = if (newStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date()) else newStatus
-            
+            val markTimestamp = System.currentTimeMillis()
+            val currentTime = if (newStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(markTimestamp)) else newStatus
+            val attendanceType = if (isMorning) "MORNING_PICKUP" else "EVENING_DROP"
+            val attendanceStatus = when (newStatus) {
+                "Present" -> if (isMorning) "PICKED_UP" else "DROPPED_OFF"
+                "Absent" -> "ABSENT"
+                "Leave" -> "LEAVE"
+                else -> newStatus.uppercase(java.util.Locale.getDefault())
+            }
+
             val updatedItem = if (isMorning) {
                 // Morning: Pickup is marked now, Drop is pending until bus reaches school.
                 item.copy(
-                    morningPickup = currentTime, 
-                    morningDrop = if(newStatus == "Absent" || newStatus == "Leave") newStatus else (if(newStatus == "Pending") "--" else "Pending Drop")
+                    morningPickup = currentTime,
+                    morningDrop = if (newStatus == "Absent" || newStatus == "Leave") newStatus else (if (newStatus == "Pending") "--" else "Pending Drop"),
+                    busId = if (item.busId.isNotEmpty()) item.busId else this@EveningAttendanceActivity.busId,
+                    routeId = if (item.routeId.isNotEmpty()) item.routeId else this@EveningAttendanceActivity.routeId,
+                    stopId = if (item.stopId.isNotEmpty()) item.stopId else item.stop,
+                    stopName = if (item.stopName.isNotEmpty()) item.stopName else item.stop,
+                    tripId = if (item.tripId.isNotEmpty()) item.tripId else this@EveningAttendanceActivity.tripId,
+                    tripDirection = if (item.tripDirection.isNotEmpty()) item.tripDirection else this@EveningAttendanceActivity.tripDirection,
+                    attendanceType = attendanceType,
+                    attendanceStatus = attendanceStatus,
+                    timestamp = markTimestamp,
+                    markedByDriverId = if (item.markedByDriverId.isNotEmpty()) item.markedByDriverId else this@EveningAttendanceActivity.driverId,
+                    markedByDriverName = if (item.markedByDriverName.isNotEmpty()) item.markedByDriverName else this@EveningAttendanceActivity.driverName,
+                    syncStatus = if (com.example.bustrack_app.sync.network.NetworkMonitor.isOnline) "SYNCED" else "PENDING"
                 )
             } else {
                 // Evening: Pickup is marked now (at school), Drop is pending until bus reaches home stop.
                 item.copy(
                     eveningPickup = currentTime,
-                    eveningDrop = if(newStatus == "Absent" || newStatus == "Leave") newStatus else (if(newStatus == "Pending") "--" else "Pending Drop")
+                    eveningDrop = if (newStatus == "Absent" || newStatus == "Leave") newStatus else (if (newStatus == "Pending") "--" else "Pending Drop"),
+                    busId = if (item.busId.isNotEmpty()) item.busId else this@EveningAttendanceActivity.busId,
+                    routeId = if (item.routeId.isNotEmpty()) item.routeId else this@EveningAttendanceActivity.routeId,
+                    stopId = if (item.stopId.isNotEmpty()) item.stopId else item.stop,
+                    stopName = if (item.stopName.isNotEmpty()) item.stopName else item.stop,
+                    tripId = if (item.tripId.isNotEmpty()) item.tripId else this@EveningAttendanceActivity.tripId,
+                    tripDirection = if (item.tripDirection.isNotEmpty()) item.tripDirection else this@EveningAttendanceActivity.tripDirection,
+                    attendanceType = attendanceType,
+                    attendanceStatus = attendanceStatus,
+                    timestamp = markTimestamp,
+                    markedByDriverId = if (item.markedByDriverId.isNotEmpty()) item.markedByDriverId else this@EveningAttendanceActivity.driverId,
+                    markedByDriverName = if (item.markedByDriverName.isNotEmpty()) item.markedByDriverName else this@EveningAttendanceActivity.driverName,
+                    syncStatus = if (com.example.bustrack_app.sync.network.NetworkMonitor.isOnline) "SYNCED" else "PENDING"
                 )
             }
-            
-            com.example.bustrack_app.data.FirebaseRepository.saveAttendance(updatedItem) { success ->
-                if (success) {
+
+            com.example.bustrack_app.data.FirebaseRepository.saveAttendanceWithResult(updatedItem) { result ->
+                if (result != com.example.bustrack_app.sync.SyncQueueManager.SyncResult.FAILED) {
                     // Update local list to reflect changes immediately
                     val index = attendanceList.indexOfFirst { it.studentId == item.studentId && it.date == item.date }
                     if (index != -1) {
@@ -280,14 +324,18 @@ class EveningAttendanceActivity : AppCompatActivity() {
                         adapter.updateData(attendanceList)
                     }
                     com.example.bustrack_app.data.FirebaseRepository.notifyParentsOfAttendance(
-                        item.studentId, 
-                        item.studentName, 
-                        newStatus, 
+                        item.studentId,
+                        item.studentName,
+                        newStatus,
                         item.date,
                         isMorning
                     )
+
+                    if (result == com.example.bustrack_app.sync.SyncQueueManager.SyncResult.QUEUED_OFFLINE) {
+                        Toast.makeText(this@EveningAttendanceActivity, "Attendance marked successfully. Waiting for internet sync.", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
-                    Toast.makeText(this@EveningAttendanceActivity, "Failed to sync with server", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EveningAttendanceActivity, "Attendance could not be saved. Please try again.", Toast.LENGTH_SHORT).show()
                 }
             }
         }

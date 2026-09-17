@@ -256,24 +256,49 @@ object FirebaseRepository {
 
     // --- ATTENDANCE ---
     fun saveAttendance(record: AttendanceRecordModel, onComplete: (Boolean) -> Unit) {
+        saveAttendanceWithResult(record) { result ->
+            onComplete(result != com.example.bustrack_app.sync.SyncQueueManager.SyncResult.FAILED)
+        }
+    }
+
+    fun saveAttendanceWithResult(
+        record: AttendanceRecordModel,
+        onComplete: (com.example.bustrack_app.sync.SyncQueueManager.SyncResult) -> Unit
+    ) {
         val normalizedDate = record.date.replace("/", "-")
         val normalizedRecord = record.copy(date = normalizedDate)
         val docId = "${record.studentId}_$normalizedDate"
         val syncId = "ATT_${record.studentId}_$normalizedDate"
 
-        val dataMap = mapOf(
+        val effectiveTimestamp = if (normalizedRecord.timestamp > 0L) normalizedRecord.timestamp else System.currentTimeMillis()
+        val effectiveStopName = if (normalizedRecord.stopName.isNotEmpty()) normalizedRecord.stopName else normalizedRecord.stop
+        val effectiveStop = if (normalizedRecord.stop.isNotEmpty()) normalizedRecord.stop else effectiveStopName
+
+        val dataMap = mutableMapOf<String, Any?>(
             "studentId" to normalizedRecord.studentId,
             "studentName" to normalizedRecord.studentName,
             "route" to normalizedRecord.route,
-            "stop" to normalizedRecord.stop,
+            "stop" to effectiveStop,
             "morningPickup" to normalizedRecord.morningPickup,
             "morningDrop" to normalizedRecord.morningDrop,
             "eveningPickup" to normalizedRecord.eveningPickup,
             "eveningDrop" to normalizedRecord.eveningDrop,
-            "date" to normalizedRecord.date
+            "date" to normalizedRecord.date,
+            "busId" to normalizedRecord.busId,
+            "routeId" to normalizedRecord.routeId,
+            "stopId" to normalizedRecord.stopId,
+            "stopName" to effectiveStopName,
+            "tripId" to normalizedRecord.tripId,
+            "tripDirection" to normalizedRecord.tripDirection,
+            "attendanceType" to normalizedRecord.attendanceType,
+            "attendanceStatus" to normalizedRecord.attendanceStatus,
+            "timestamp" to effectiveTimestamp,
+            "markedByDriverId" to normalizedRecord.markedByDriverId,
+            "markedByDriverName" to normalizedRecord.markedByDriverName,
+            "syncStatus" to normalizedRecord.syncStatus
         )
 
-        com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
+        com.example.bustrack_app.sync.SyncQueueManager.enqueueSetWithResult(
             syncId = syncId,
             actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_ATTENDANCE,
             targetCollection = "attendance",

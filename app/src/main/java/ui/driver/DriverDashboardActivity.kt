@@ -1250,7 +1250,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             !attendancePromptedStops.contains(lastArrivedStopIndex)
         ) {
             stops.getOrNull(lastArrivedStopIndex)?.let { arrivedStop ->
-                if (showAttendanceForStop(arrivedStop.stopName)) {
+                if (showAttendanceForStop(arrivedStop)) {
                     attendancePromptedStops.add(lastArrivedStopIndex)
                 }
             }
@@ -1274,7 +1274,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     nextStop.latitude, nextStop.longitude,
                     distance
                 )
-                if (distance[0] <= ATTENDANCE_PROMPT_RADIUS && showAttendanceForStop(nextStop.stopName)) {
+                if (distance[0] <= ATTENDANCE_PROMPT_RADIUS && showAttendanceForStop(nextStop)) {
                     attendancePromptedStops.add(nextGlobalStopIndex)
                 }
             }
@@ -1326,7 +1326,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         )
 
                         if (!attendancePromptedStops.contains(candidateIndex)) {
-                            if (showAttendanceForStop(candidateStop.stopName)) {
+                            if (showAttendanceForStop(candidateStop)) {
                                 attendancePromptedStops.add(candidateIndex)
                             }
                         }
@@ -1436,18 +1436,38 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     /**
-     * Arrival events can race with Android saving the Activity state.  Never force a
-     * FragmentManager transaction from the GPS callback: it can throw and restart the
-     * app.  A later GPS update will keep the stop state intact if the UI cannot be
-     * shown at that exact moment.
+     * Displays the attendance sheet for the specified stop while validating active trip,
+     * route, and stop presence.
      */
-    private fun showAttendanceForStop(stopName: String): Boolean {
+    private fun showAttendanceForStop(stop: com.example.bustrack_app.models.StopItem): Boolean {
         if (!isMorningPickupTrip()) return false
         if (isFinishing || isDestroyed || supportFragmentManager.isStateSaved) return false
         if (supportFragmentManager.findFragmentByTag("AttendanceSheet") != null) return false
 
+        val route = assignedRoute
+        if (route == null || stop.stopName.isBlank()) {
+            Toast.makeText(this, "Unable to mark attendance. No active trip or stop found.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+
+        val today = attendanceDate().replace("/", "-")
+        val period = if (isActiveTripMorning()) "MORNING" else "EVENING"
+        val tripId = currentActiveTripId.takeUnless { it.isNullOrEmpty() } ?: "${today}_${period}_${route.id}"
+        val driver = viewModel.currentDriver.value
+
         AttendanceBottomSheet
-            .newInstance(stopName, assignedRoute?.routeName.orEmpty(), true)
+            .newInstance(
+                stopName = stop.stopName,
+                routeName = route.routeName,
+                isMorning = isActiveTripMorning(),
+                stopId = stop.id.ifEmpty { stop.stopName },
+                routeId = route.id,
+                tripId = tripId,
+                tripDirection = if (isReverseTripActive) "RETURN" else "FORWARD",
+                busId = driver?.assignedBus.orEmpty(),
+                driverId = driver?.driverId.orEmpty(),
+                driverName = driver?.name.orEmpty()
+            )
             .show(supportFragmentManager, "AttendanceSheet")
         return true
     }
@@ -4341,8 +4361,21 @@ class DriverDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.drawerEveningAttendance)?.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             it.postDelayed({
-                val intent = Intent(this, EveningAttendanceActivity::class.java)
-                intent.putExtra("ROUTE_NAME", assignedRoute?.routeName ?: "")
+                val route = assignedRoute
+                val driver = viewModel.currentDriver.value
+                val today = attendanceDate().replace("/", "-")
+                val period = if (isActiveTripMorning()) "MORNING" else "EVENING"
+                val tripId = currentActiveTripId.takeUnless { it.isNullOrEmpty() } ?: "${today}_${period}_${route?.id.orEmpty()}"
+
+                val intent = Intent(this, EveningAttendanceActivity::class.java).apply {
+                    putExtra("ROUTE_NAME", route?.routeName ?: "")
+                    putExtra("ROUTE_ID", route?.id ?: "")
+                    putExtra("BUS_ID", driver?.assignedBus ?: "")
+                    putExtra("DRIVER_ID", driver?.driverId ?: "")
+                    putExtra("DRIVER_NAME", driver?.name ?: "")
+                    putExtra("TRIP_ID", tripId)
+                    putExtra("TRIP_DIRECTION", if (isReverseTripActive) "RETURN" else "FORWARD")
+                }
                 startActivity(intent)
                 overridePendingTransition(0, 0)
                 drawerLayout.closeDrawer(GravityCompat.END)
