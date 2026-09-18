@@ -12,16 +12,54 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
+import com.example.bustrack_app.adapter.RecentActivityAdapter
+import com.example.bustrack_app.data.FirebaseRepository
+import com.example.bustrack_app.models.AdminRecentActivity
+import com.example.bustrack_app.models.NotificationModel
 import com.example.bustrack_app.viewmodels.ProfileViewModel
 import com.bumptech.glide.Glide
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.ktx.Firebase
 import ui_authentication.LoginActivity
+import utils.FormUtils
 import utils.NavigationUtils
+import utils.ViewUtils
 
 class AdminDashboardActivity : AppCompatActivity() {
 
     private lateinit var drawerLayout: DrawerLayout
     private val profileViewModel: ProfileViewModel by viewModels()
+
+    private var isQuickActionsExpanded = false
+    private var isRecentActivitiesExpanded = false
+    private lateinit var recentActivityAdapter: RecentActivityAdapter
+    private val retrievedActivities = mutableListOf<AdminRecentActivity>()
+    private var notificationListeners: List<ListenerRegistration> = emptyList()
+
+    private val sampleRecentActivities = listOf(
+        AdminRecentActivity(
+            id = "",
+            title = "Route 42 Completed",
+            description = "Successfully reached all 14 stops...",
+            timeAgo = "2 mins ago",
+            iconRes = R.drawable.ic_assignment,
+            iconTint = 0xFF4CAF50.toInt(),
+            bgTint = 0xFFE8F5E9.toInt()
+        ),
+        AdminRecentActivity(
+            id = "",
+            title = "Delay Detected: Bus #108",
+            description = "Heavy traffic on Main St. Estimate...",
+            timeAgo = "15 mins ago",
+            iconRes = R.drawable.ic_lock,
+            iconTint = 0xFFF44336.toInt(),
+            bgTint = 0xFFFFF1F1.toInt()
+        )
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +77,8 @@ class AdminDashboardActivity : AppCompatActivity() {
 
         setupClickListeners()
         setupDrawerListeners()
+        updateQuickActionsUI()
+        setupRecentActivities()
         observeProfileData()
         observeDashboardStats()
     }
@@ -141,6 +181,17 @@ class AdminDashboardActivity : AppCompatActivity() {
             utils.ViewUtils.applyClickEffect(it)
             startActivity(Intent(this, TransportAlertsActivity::class.java))
             overridePendingTransition(0, 0)
+        }
+
+        findViewById<TextView>(R.id.tvQuickActionsSeeAll)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            isQuickActionsExpanded = !isQuickActionsExpanded
+            updateQuickActionsUI()
+        }
+
+        findViewById<View>(R.id.layoutManageBuses)?.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            startActivity(Intent(this, ManageBusesActivity::class.java))
         }
 
         findViewById<CardView>(R.id.btnManageBuses)?.setOnClickListener {
@@ -257,6 +308,123 @@ class AdminDashboardActivity : AppCompatActivity() {
         }
 
         dialog.show()
+    }
+
+    private fun updateQuickActionsUI() {
+        val btnManageDrivers = findViewById<View>(R.id.btnManageDrivers)
+        val btnManageRoutes = findViewById<View>(R.id.btnManageRoutes)
+        val quickActionsLayout = findViewById<LinearLayout>(R.id.quickActionsLayout)
+        val tvQuickActionsSeeAll = findViewById<TextView>(R.id.tvQuickActionsSeeAll)
+
+        if (isQuickActionsExpanded) {
+            btnManageDrivers?.visibility = View.VISIBLE
+            btnManageRoutes?.visibility = View.VISIBLE
+            quickActionsLayout?.weightSum = 4f
+            tvQuickActionsSeeAll?.text = "SHOW LESS"
+        } else {
+            btnManageDrivers?.visibility = View.GONE
+            btnManageRoutes?.visibility = View.GONE
+            quickActionsLayout?.weightSum = 2f
+            tvQuickActionsSeeAll?.text = "SEE ALL"
+        }
+    }
+
+    private fun setupRecentActivities() {
+        val rv = findViewById<RecyclerView>(R.id.rvRecentActivities)
+        rv?.layoutManager = LinearLayoutManager(this)
+
+        recentActivityAdapter = RecentActivityAdapter(emptyList()) { item ->
+            if (item.id.isNotBlank()) {
+                FirebaseRepository.markNotificationRead(item.id)
+            }
+            val intent = Intent(this, AlertDetailActivity::class.java).apply {
+                putExtra("NOTIFICATION_ID", item.id)
+                putExtra("ALERT_TITLE", item.title)
+                putExtra("ALERT_SUBTITLE", item.description)
+                putExtra("ALERT_TYPE", "GENERAL")
+                putExtra("ALERT_ICON", item.iconRes)
+            }
+            startActivity(intent)
+        }
+        rv?.adapter = recentActivityAdapter
+
+        findViewById<TextView>(R.id.tvRecentActivityViewAll)?.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            isRecentActivitiesExpanded = !isRecentActivitiesExpanded
+            updateRecentActivitiesUI()
+        }
+
+        updateRecentActivitiesUI()
+        observeRecentActivities()
+    }
+
+    private fun updateRecentActivitiesUI() {
+        val tvViewAll = findViewById<TextView>(R.id.tvRecentActivityViewAll)
+        val activitiesToDisplay = if (retrievedActivities.isNotEmpty()) {
+            retrievedActivities
+        } else {
+            sampleRecentActivities
+        }
+
+        val displayList = if (isRecentActivitiesExpanded) {
+            activitiesToDisplay
+        } else {
+            activitiesToDisplay.take(2)
+        }
+
+        recentActivityAdapter.update(displayList)
+        tvViewAll?.text = if (isRecentActivitiesExpanded) "SHOW LESS" else "VIEW ALL"
+        tvViewAll?.visibility = View.VISIBLE
+    }
+
+    private fun observeRecentActivities() {
+        val uid = Firebase.auth.currentUser?.uid ?: ""
+        notificationListeners = FirebaseRepository.listenToNotifications(uid, "admin") { notifications ->
+            retrievedActivities.clear()
+            retrievedActivities.addAll(notifications.map { notif ->
+                val (iconRes, iconTint, bgTint) = mapNotificationToVisuals(notif)
+                AdminRecentActivity(
+                    id = notif.id,
+                    title = notif.title.ifBlank { "Activity Alert" },
+                    description = notif.message.ifBlank { notif.description.ifBlank { "Recent activity update" } },
+                    timeAgo = FormUtils.timeAgo(notif.timestamp),
+                    iconRes = iconRes,
+                    iconTint = iconTint,
+                    bgTint = bgTint
+                )
+            })
+            updateRecentActivitiesUI()
+        }
+    }
+
+    private fun mapNotificationToVisuals(notif: NotificationModel): Triple<Int, Int, Int> {
+        return when {
+            notif.type == NotificationModel.TYPE_DRIVER_ALERT || notif.alertType.isNotBlank() -> {
+                when (notif.alertType) {
+                    "Accident", "Bus Breakdown", "Student Emergency" ->
+                        Triple(R.drawable.warning, 0xFFF44336.toInt(), 0xFFFFF1F1.toInt())
+                    "Road Block", "Heavy Traffic", "Fuel Issue", "Bad Weather", "Police Check", "Wrong Route" ->
+                        Triple(R.drawable.notification_active, 0xFFD97706.toInt(), 0xFFFEF3C7.toInt())
+                    else ->
+                        Triple(R.drawable.notification_active, 0xFF0284C7.toInt(), 0xFFE0F2FE.toInt())
+                }
+            }
+            notif.type == "ATTENDANCE" || notif.type == NotificationModel.TYPE_EMERGENCY ->
+                Triple(R.drawable.person_check, 0xFFF44336.toInt(), 0xFFFFF1F1.toInt())
+            notif.type == "TRACKING_REQUEST" ->
+                Triple(R.drawable.security_shield, 0xFFD97706.toInt(), 0xFFFEF3C7.toInt())
+            notif.type == NotificationModel.TYPE_IMPORTANT ->
+                Triple(R.drawable.notification_active, 0xFFD97706.toInt(), 0xFFFEF3C7.toInt())
+            notif.type.contains("ROUTE") || notif.type.contains("TRIP") ->
+                Triple(R.drawable.ic_assignment, 0xFF4CAF50.toInt(), 0xFFE8F5E9.toInt())
+            else ->
+                Triple(R.drawable.notifications, 0xFF0284C7.toInt(), 0xFFE0F2FE.toInt())
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        notificationListeners.forEach { it.remove() }
     }
 
     private fun getGreeting(): String {

@@ -501,6 +501,7 @@
                     app:layout_constraintTop_toBottomOf="@id/menuGrid" />
 
                 <TextView
+                    android:id="@+id/tvQuickActionsSeeAll"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="24dp"
@@ -508,6 +509,9 @@
                     android:textColor="@color/primaryBlue"
                     android:textSize="12sp"
                     android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackground"
                     app:layout_constraintBottom_toBottomOf="@id/tvQuickActions"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="@id/tvQuickActions" />
@@ -524,6 +528,7 @@
 
                     <!-- Action 1 -->
                     <LinearLayout
+                        android:id="@+id/layoutManageBuses"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -707,110 +712,25 @@
                             android:textStyle="bold" />
 
                         <TextView
+                            android:id="@+id/tvRecentActivityViewAll"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_alignParentEnd="true"
                             android:text="VIEW ALL"
                             android:textColor="@color/primaryBlue"
                             android:textSize="12sp"
-                            android:textStyle="bold" />
+                            android:textStyle="bold"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/selectableItemBackground" />
                     </RelativeLayout>
 
-                    <!-- Activity Item 1 -->
-                    <LinearLayout
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvRecentActivities"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_google"
-                            android:backgroundTint="#E8F5E9"
-                            android:padding="10dp"
-                            android:src="@drawable/ic_assignment"
-                            app:tint="#4CAF50" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Route 42 Completed"
-                                android:textColor="@color/primaryDark"
-                                android:textSize="14sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Successfully reached all 14 stops..."
-                                android:textColor="#9E9E9E"
-                                android:textSize="12sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="2 mins ago"
-                            android:textColor="#BDBDBD"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-
-                    <!-- Activity Item 2 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <ImageView
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_google"
-                            android:backgroundTint="#FFF1F1"
-                            android:padding="10dp"
-                            android:src="@drawable/ic_lock"
-                            app:tint="#F44336" />
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Delay Detected: Bus #108"
-                                android:textColor="@color/primaryDark"
-                                android:textSize="14sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Heavy traffic on Main St. Estimate..."
-                                android:textColor="#9E9E9E"
-                                android:textSize="12sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="15 mins ago"
-                            android:textColor="#BDBDBD"
-                            android:textSize="10sp" />
-                    </LinearLayout>
+                        android:layout_marginTop="8dp"
+                        android:nestedScrollingEnabled="false" />
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
