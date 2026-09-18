@@ -19,7 +19,9 @@ class DriverFaqActivity : AppCompatActivity() {
         setupRecyclerView()
 
         findViewById<View>(R.id.btnChatWithUs)?.setOnClickListener {
-            startActivity(Intent(this, ui.chatbot.ChatbotActivity::class.java))
+            val intent = Intent(this, ui.chatbot.ChatbotActivity::class.java)
+            intent.putExtra("USER_ROLE", "driver")
+            startActivity(intent)
         }
 
         findViewById<View>(R.id.btnBack).setOnClickListener {

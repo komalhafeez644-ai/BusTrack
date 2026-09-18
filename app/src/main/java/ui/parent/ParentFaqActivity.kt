@@ -37,7 +37,9 @@ class ParentFaqActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnChatWithUs)?.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            startActivity(android.content.Intent(this, ui.chatbot.ChatbotActivity::class.java))
+            val intent = android.content.Intent(this, ui.chatbot.ChatbotActivity::class.java)
+            intent.putExtra("USER_ROLE", "parent")
+            startActivity(intent)
         }
 
         setupFaqList()

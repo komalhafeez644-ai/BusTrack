@@ -14,13 +14,14 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
 import com.example.bustrack_app.adapter.ChatMessageAdapter
+import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.data.ChatbotRepository
 import com.example.bustrack_app.models.ChatMessageModel
 import kotlinx.coroutines.launch
 
 /**
- * Help & Support Chatbot (Task 6). Reachable from every module's existing FAQ screen via
- * a "Chat with us" button - the FAQ screens themselves are untouched otherwise.
+ * Help & Support Chatbot. Accessible only for Parent and Driver roles.
+ * Disallowed for Admin and Principal accounts.
  */
 class ChatbotActivity : AppCompatActivity() {
 
@@ -29,9 +30,11 @@ class ChatbotActivity : AppCompatActivity() {
     private lateinit var progressSending: ProgressBar
     private lateinit var btnSend: ImageView
     private lateinit var tvEmpty: TextView
+    private lateinit var tvChatStatus: TextView
 
     private val messages = mutableListOf<ChatMessageModel>()
     private lateinit var adapter: ChatMessageAdapter
+    private var userRole: String = "parent"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,11 +42,17 @@ class ChatbotActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
+        val passedRole = intent.getStringExtra("USER_ROLE")?.lowercase()
+        if (!passedRole.isNullOrBlank()) {
+            userRole = passedRole
+        }
+
         rvChat = findViewById(R.id.rvChatMessages)
         etInput = findViewById(R.id.etChatInput)
         progressSending = findViewById(R.id.progressSending)
         btnSend = findViewById(R.id.btnSendChat)
         tvEmpty = findViewById(R.id.tvEmptyChat)
+        tvChatStatus = findViewById(R.id.tvChatStatus)
 
         adapter = ChatMessageAdapter(messages)
         rvChat.layoutManager = LinearLayoutManager(this)
@@ -57,6 +66,44 @@ class ChatbotActivity : AppCompatActivity() {
         etInput.setOnEditorActionListener { _, _, _ ->
             sendCurrentInput()
             true
+        }
+
+        resolveRoleAndConfigureUI()
+    }
+
+    private fun resolveRoleAndConfigureUI() {
+        // Immediate UI configuration based on passed intent role
+        applyRoleUI(userRole)
+
+        lifecycleScope.launch {
+            try {
+                val actualRole = AuthRepository().getCurrentUserRole().lowercase()
+                if (actualRole.isNotBlank()) {
+                    userRole = actualRole
+                }
+            } catch (e: Exception) {
+                Log.w("ChatbotActivity", "Role lookup error, fallback to $userRole", e)
+            }
+
+            if (userRole == "admin" || userRole == "principal") {
+                Toast.makeText(this@ChatbotActivity, "Chatbot is not available for this account.", Toast.LENGTH_SHORT).show()
+                finish()
+                return@launch
+            }
+
+            applyRoleUI(userRole)
+        }
+    }
+
+    private fun applyRoleUI(role: String) {
+        if (role == "driver") {
+            tvChatStatus.text = "Ask about assigned route, stops, duty, navigation…"
+            tvEmpty.text = "Ask me anything about your assigned route, stops, navigation, duty mode, or attendance marking."
+            etInput.hint = "Type your driver question…"
+        } else {
+            tvChatStatus.text = "Ask about tracking, child attendance, routes…"
+            tvEmpty.text = "Ask me anything about child attendance, bus tracking, pickup/drop status, route info, or notifications."
+            etInput.hint = "Type your question…"
         }
     }
 
@@ -74,19 +121,11 @@ class ChatbotActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Send full running history so the bot has conversational context, not
-                // just the last message.
+                // Send full running history and user role for role-isolated prompt injection
                 val history = messages.map { it.role to it.content }
-                val reply = ChatbotRepository.sendMessage(history)
+                val reply = ChatbotRepository.sendMessage(history, userRole)
                 adapter.addMessage(ChatMessageModel("assistant", reply))
             } catch (e: Exception) {
-                // DIAGNOSTIC: the real failure reason (HTTP status code + OpenAI's error
-                // body if the request reached the server and got a non-2xx response, or
-                // the exact exception type/message if it never reached the server at all -
-                // e.g. UnknownHostException, SSLHandshakeException, SocketTimeoutException)
-                // was previously discarded here with no logging at all, so Logcat showed
-                // nothing useful. Check Logcat filtered on tag "ChatbotDebug" after
-                // reproducing the failure - that will contain the exact underlying cause.
                 Log.e("ChatbotDebug", "Chatbot request failed: ${e.javaClass.name}: ${e.message}", e)
 
                 val friendlyMessage = when {
