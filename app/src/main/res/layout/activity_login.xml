@@ -42,7 +42,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="login"
+                    android:text="Login"
                     android:textColor="@color/white"
                     android:textSize="35sp"
                     android:textStyle="bold" />
@@ -51,7 +51,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="secure Access using Email and Password"
+                    android:text="Secure Access using Email and Password"
                     android:textColor="@color/white"
                     android:textSize="16sp" />
 
