@@ -178,6 +178,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     // style. Keep the fit request until that style is ready instead of consuming
     // it against the default globe camera.
     private var isMapStyleReady = false
+    // Every style load is asynchronous.  Ignore a callback from an older load (for
+    // example navigation-night completing after the dashboard style was requested).
+    private var mapStyleLoadGeneration = 0L
     private var dashboardCameraFitPending = true
     private var currentRouteGeometry: String? = null
     private var traveledRouteGeometry: String? = null
@@ -246,11 +249,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var activeStopStatus = "NEXT" // NEXT, ARRIVED, PASSED
     private var lastArrivedStopIndex = -1
     private var isCurrentlyAtStop = false
-    private val ARRIVAL_RADIUS = 80.0 // meters
+    private val ARRIVAL_RADIUS = 70.0 // meters
     // Attendance must be ready before the bus is exactly inside the smaller
     // arrival geofence, otherwise the driver sees it too late at the stop.
     private val ATTENDANCE_PROMPT_RADIUS = 140.0 // meters
-    private val DEPARTURE_RADIUS = 70.0 // meters
+    // Leave a small hysteresis band before considering a stop departed.  Entry and
+    // exit at the same radius made normal GPS noise immediately complete a stop.
+    private val DEPARTURE_RADIUS = 85.0 // meters
     // How many UPCOMING stops ahead of the current pointer we'll check when scanning
     // for geofence entry. Geofence proximity is the sole source of truth for stop
     // arrival/skip decisions (see checkGeofenceAndStopStatus below) - this bounds how
@@ -263,6 +268,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var departureCandidateIndex = -1
     private var departureConfirmCount = 0
     private val DEPARTURE_CONFIRM_THRESHOLD = 3
+    private var arrivedStopRouteSegmentIndex: Int? = null
 
     private var lastSplitIndex = 0
     private val SPLIT_SEARCH_WINDOW = 120
@@ -278,6 +284,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     private val PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS = 4.0
     private val OPPOSITE_DIRECTION_REROUTE_DEGREES = 120.0
     private var isRerouteInFlight = false
+    // A return request can be issued while a forward request/reroute is still in
+    // flight.  Only the newest route response is allowed to change route state.
+    private var routeRequestGeneration = 0L
     private var lastOffRouteRerouteTimeMs = 0L
     private val MIN_OFFROUTE_REROUTE_GAP_MS = 3000L
     private var lastRerouteCompletedTimeMs = 0L
@@ -456,7 +465,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         setupStopsRecyclerView()
 
+        val initialStyleGeneration = ++mapStyleLoadGeneration
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+            if (initialStyleGeneration != mapStyleLoadGeneration || isDestroyed) return@loadStyle
             isMapStyleReady = true
             dashboardCameraFitPending = true
             mapView?.mapboxMap?.setBounds(
@@ -490,7 +501,9 @@ class DriverDashboardActivity : AppCompatActivity() {
             setNavigationMode(true, reloadStyle = true)
             startFollowingPuck()
         } else {
-            setNavigationMode(false, reloadStyle = false)
+            // This is initial UI setup, not an intentional End Navigation action.
+            // Do not clear a persisted trip before checkAndResumeActiveTrip runs.
+            setNavigationMode(false, reloadStyle = false, clearActiveTrip = false)
         }
 
         if (intent.getBooleanExtra("OPEN_DRAWER", false)) {
@@ -811,6 +824,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         // before calling this, don't fire a second overlapping request.
         if (isRerouteInFlight) return
         isRerouteInFlight = true
+        val requestGeneration = ++routeRequestGeneration
 
         // Invalidate and stop the prior route's instruction immediately.  Route
         // requests are asynchronous, so waiting for onRoutesReady allowed an old
@@ -902,6 +916,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
                     runOnUiThread {
+                        if (requestGeneration != routeRequestGeneration) return@runOnUiThread
                         isRerouteInFlight = false
                         lastRerouteCompletedTimeMs = System.currentTimeMillis()
                         if (routes.isEmpty()) return@runOnUiThread
@@ -935,6 +950,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     }
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                    if (requestGeneration != routeRequestGeneration) return
                     if (!routeOptions.bearingsList().isNullOrEmpty()) {
                         Log.w("NavDebug", "Reroute with bearing failed, retrying without bearing constraints...")
                         val unconstrainedOptions = routeOptions.toBuilder().bearingsList(null).build()
@@ -945,6 +961,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     Log.e("NavDebug", "Reroute failed: ${reasons.firstOrNull()?.message}")
                 }
                 override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
+                    if (requestGeneration != routeRequestGeneration) return
                     isRerouteInFlight = false
                 }
             }
@@ -1209,6 +1226,14 @@ class DriverDashboardActivity : AppCompatActivity() {
         lastArrivedStopIndex = index
         isCurrentlyAtStop = true
         activeStopStatus = "ARRIVED"
+        arrivedStopRouteSegmentIndex = currentLocation
+            ?.takeIf { fullNavigationPoints.size >= 2 }
+            ?.let { location ->
+                projectOntoForwardRoute(
+                    Point.fromLngLat(location.longitude, location.latitude),
+                    1000.0
+                )?.segmentIndex
+            }
         refreshLoadStat()
         persistCurrentActiveTripState()
         return true
@@ -1225,6 +1250,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         isCurrentlyAtStop = false
         activeStopStatus = "PASSED"
         lastArrivedStopIndex = -1
+        arrivedStopRouteSegmentIndex = null
         nextGlobalStopIndex = index + 1
         refreshLoadStat()
         persistCurrentActiveTripState()
@@ -1353,7 +1379,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                     currentStop.latitude, currentStop.longitude,
                     departResults
                 )
-                if (departResults[0] > DEPARTURE_RADIUS) {
+                // A stop is passed only after leaving its geofence *and* advancing
+                // along the route.  Distance alone accepts a turn-around or GPS
+                // drift away from the stop as a pass.
+                val hasAdvancedForward = arrivedStopRouteSegmentIndex?.let { arrivedSegment ->
+                    projectOntoForwardRoute(
+                        Point.fromLngLat(location.longitude, location.latitude),
+                        1000.0
+                    )?.segmentIndex?.let { it > arrivedSegment } == true
+                } ?: false
+                if (departResults[0] > DEPARTURE_RADIUS && hasAdvancedForward) {
                     if (departureCandidateIndex == arrivedIndex) {
                         departureConfirmCount++
                     } else {
@@ -1415,7 +1450,13 @@ class DriverDashboardActivity : AppCompatActivity() {
             val arrived = lastArrivedStopIndex
             val distance = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, stops[arrived].latitude, stops[arrived].longitude, distance)
-            if (distance[0] > DEPARTURE_RADIUS) {
+            val hasAdvancedForward = arrivedStopRouteSegmentIndex?.let { arrivedSegment ->
+                projectOntoForwardRoute(
+                    Point.fromLngLat(location.longitude, location.latitude),
+                    1000.0
+                )?.segmentIndex?.let { it > arrivedSegment } == true
+            } ?: false
+            if (distance[0] > DEPARTURE_RADIUS && hasAdvancedForward) {
                 departureConfirmCount = if (departureCandidateIndex == arrived) departureConfirmCount + 1 else 1
                 departureCandidateIndex = arrived
                 if (departureConfirmCount >= DEPARTURE_CONFIRM_THRESHOLD && transitionToCompleted(arrived)) {
@@ -2525,7 +2566,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val currentTime = System.currentTimeMillis()
                 val isPendingSync = (currentTime - lastDutyToggleTime) < DUTY_SYNC_DEBOUNCE_MS
 
-                if (!isPendingSync && data.isOnDuty != isDutyEnabled) {
+                val activeTrip = isNavigating || currentActiveTripId != null
+                if (!isPendingSync && data.isOnDuty != isDutyEnabled &&
+                    !(activeTrip && !data.isOnDuty)
+                ) {
                     isDutyEnabled = data.isOnDuty
 
                     isUserTriggeredChange = false
@@ -3356,6 +3400,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         navStartIndex = 0
         lastArrivedStopIndex = -1
         isCurrentlyAtStop = false
+        arrivedStopRouteSegmentIndex = null
         departureCandidateIndex = -1
         departureConfirmCount = 0
         returnStopDeviations.clear()
@@ -3436,6 +3481,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         navStartIndex = 0
         lastArrivedStopIndex = -1
         isCurrentlyAtStop = false
+        arrivedStopRouteSegmentIndex = null
         departureCandidateIndex = -1
         departureConfirmCount = 0
         returnStopDeviations.clear()
@@ -3809,6 +3855,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         currentNavPoints = navPoints
+        val requestGeneration = ++routeRequestGeneration
         Toast.makeText(this, "Requesting Route...", Toast.LENGTH_SHORT).show()
 
         // A fresh route is a new instruction stream. This prevents a delayed
@@ -3839,6 +3886,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             routeOptionsBuilder.build(),
             object : NavigationRouterCallback {
                 override fun onRoutesReady(routes: List<NavigationRoute>, routerOrigin: String) {
+                    if (requestGeneration != routeRequestGeneration) return
                     if (routes.isEmpty()) return
                     val selectedRoute = shortestRoadRoute(routes)
                     // Keep a local, immediately usable copy before the asynchronous
@@ -3883,11 +3931,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                     persistCurrentActiveTripState()
                 }
                 override fun onFailure(reasons: List<RouterFailure>, routeOptions: RouteOptions) {
+                    if (requestGeneration != routeRequestGeneration) return
                     val errorDetail = reasons.firstOrNull()?.message ?: "Unknown error"
                     Log.e("NavDebug", "Navigation failed: $errorDetail")
                     Toast.makeText(this@DriverDashboardActivity, "Navigation Error: $errorDetail", Toast.LENGTH_LONG).show()
                 }
                 override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
+                    if (requestGeneration != routeRequestGeneration) return
                     Log.d("NavDebug", "Route request canceled")
                 }
             }
@@ -3899,9 +3949,17 @@ class DriverDashboardActivity : AppCompatActivity() {
     // this function - which used to unconditionally overwrite that real data with
     // "Navigation starting" / "Distance: --" placeholders below. showPlaceholderInstruction
     // lets a caller that already wrote real data opt out of clobbering it.
-    private fun setNavigationMode(isNavigating: Boolean, reloadStyle: Boolean = true, showPlaceholderInstruction: Boolean = true) {
+    private fun setNavigationMode(
+        isNavigating: Boolean,
+        reloadStyle: Boolean = true,
+        showPlaceholderInstruction: Boolean = true,
+        clearActiveTrip: Boolean = true
+    ) {
         val wasNavigating = this.isNavigating
         if (!isNavigating && wasNavigating) {
+            // An End Navigation action also invalidates any outstanding directions
+            // response so it cannot reactivate the old session afterward.
+            routeRequestGeneration++
             // Make every pending asynchronous speech result from this navigation
             // session stale before the UI/route state is torn down.
             voiceSessionId++
@@ -3912,6 +3970,16 @@ class DriverDashboardActivity : AppCompatActivity() {
             abandonNavigationAudioFocus()
         }
         this.isNavigating = isNavigating
+        if (isNavigating && !wasNavigating) {
+            // Enable follow as soon as the navigation session becomes active, rather
+            // than waiting for the asynchronous navigation-style callback. Location
+            // fixes received while that style is loading must still be allowed to
+            // drive the camera. startFollowingPuck() performs the one visual
+            // recenter after the style is ready.
+            isCameraFollowingBus = true
+            lastCameraFollowLocation = null
+            binding.btnRecenter.visibility = View.GONE
+        }
         cancelDutyAutoOffTimer()
         binding.apply {
             if (isNavigating) {
@@ -3940,37 +4008,41 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 updateBottomSheetTheme(true)
 
-                if (isNewNavigationSession) mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
-                    isMapStyleReady = true
-                    setupNavigationLayers(style)
-                    clearNavigationRouteGeometry(style)
+                if (isNewNavigationSession) {
+                    val styleGeneration = ++mapStyleLoadGeneration
+                    mapView?.mapboxMap?.loadStyle("mapbox://styles/mapbox/navigation-night-v1") { style ->
+                        if (styleGeneration != mapStyleLoadGeneration || !this@DriverDashboardActivity.isNavigating || isDestroyed) return@loadStyle
+                        isMapStyleReady = true
+                        setupNavigationLayers(style)
+                        clearNavigationRouteGeometry(style)
 
-                    style.styleLayers.forEach { layer ->
-                        if (layer.id.contains("traffic") || layer.id.contains("congestion") || layer.id.contains("road-casing")) {
-                            style.getLayer(layer.id)?.visibility(Visibility.NONE)
+                        style.styleLayers.forEach { layer ->
+                            if (layer.id.contains("traffic") || layer.id.contains("congestion") || layer.id.contains("road-casing")) {
+                                style.getLayer(layer.id)?.visibility(Visibility.NONE)
+                            }
                         }
-                    }
 
-                    recreateAnnotationManagers()
-                    setupLocationPuck()
-                    mapView?.location?.pulsingEnabled = false
+                        recreateAnnotationManagers()
+                        setupLocationPuck()
+                        mapView?.location?.pulsingEnabled = false
 
-                    mapboxNavigation?.getNavigationRoutes()?.firstOrNull()?.let { navRoute ->
-                        fullNavigationPoints = LineString.fromPolyline(navRoute.directionsRoute.geometry()!!, 6).coordinates()
+                        mapboxNavigation?.getNavigationRoutes()?.firstOrNull()?.let { navRoute ->
+                            fullNavigationPoints = LineString.fromPolyline(navRoute.directionsRoute.geometry()!!, 6).coordinates()
 
-                        drawPointsOnMap(fullNavigationPoints)
-                        // A style reload starts with empty GeoJSON sources. The bus
-                        // can be stationary, so do not wait for a fresh GPS callback
-                        // before putting the active route back on the map.
-                        restoreNavigationRouteGeometry(style)
+                            drawPointsOnMap(fullNavigationPoints)
+                            // A style reload starts with empty GeoJSON sources. The bus
+                            // can be stationary, so do not wait for a fresh GPS callback
+                            // before putting the active route back on the map.
+                            restoreNavigationRouteGeometry(style)
 
-                        lastRawPositionForSnap = null
-                        currentLocation?.let { loc ->
-                            updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                            lastRawPositionForSnap = null
+                            currentLocation?.let { loc ->
+                                updateNavigationRouteProgress(Point.fromLngLat(loc.longitude, loc.latitude))
+                            }
                         }
-                    }
 
-                    startFollowingPuck()
+                        startFollowingPuck()
+                    }
                 }
 
                 cardRouteDetails.visibility = View.GONE
@@ -4001,9 +4073,10 @@ class DriverDashboardActivity : AppCompatActivity() {
                 layoutMapControls.animate().translationY(-240f).setDuration(500).start()
                 btnRecenter.animate().translationY(-240f).setDuration(500).start()
             } else {
-                clearCurrentActiveTripState()
+                if (clearActiveTrip) clearCurrentActiveTripState()
                 navigationUiActive = false
                 isCameraFollowingBus = false
+                lastCameraFollowLocation = null
                 mapboxNavigation?.setNavigationRoutes(emptyList())
                 fullNavigationPoints = emptyList()
                 clearTraveledRouteHistory()
@@ -4023,7 +4096,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 if (reloadStyle) {
                     isMapStyleReady = false
+                    val styleGeneration = ++mapStyleLoadGeneration
                     mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) {
+                        if (styleGeneration != mapStyleLoadGeneration || this@DriverDashboardActivity.isNavigating || isDestroyed) return@loadStyle
                         isMapStyleReady = true
                         recreateAnnotationManagers()
                         setupLocationPuck()
@@ -4250,7 +4325,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             startLocationUpdates()
             setupLocationPuck()
             startStaleLocationWatchdog()
-
             if (!isGpsProviderEnabled()) {
                 updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
             }
@@ -4275,7 +4349,6 @@ class DriverDashboardActivity : AppCompatActivity() {
             lastFreshLocationTimestamp = 0L
             updateLocationReliabilityStatus(LocationReliabilityState.NORMAL_LIVE)
             isCurrentLocationLive = false
-
             locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
             mapView?.location?.enabled = false
 
@@ -4496,12 +4569,13 @@ class DriverDashboardActivity : AppCompatActivity() {
     }
 
     private fun scheduleDutyAutoOffTimer() {
-        if (!isDutyEnabled || isNavigating) return
+        if (!isDutyEnabled || isNavigating || currentActiveTripId != null) return
 
         cancelDutyAutoOffTimer()
         val driverIdSnapshot = viewModel.currentDriver.value?.driverId ?: return
 
         val runnable = Runnable {
+            if (isNavigating || currentActiveTripId != null) return@Runnable
             FirebaseRepository.updateDriverStatus(driverIdSnapshot, "Inactive")
             FirebaseRepository.updateDriverRouteGeometry(
                 driverIdSnapshot, null, null, 0, emptyMap(), false
