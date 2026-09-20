@@ -64,6 +64,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import utils.ViewUtils
+import utils.AddressDisplayFormatter
 import com.mapbox.android.gestures.MoveGestureDetector
 import com.mapbox.maps.plugin.gestures.OnMoveListener
 import com.mapbox.maps.plugin.gestures.gestures
@@ -280,6 +281,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     // until Re-centre is tapped, matching the behaviour users expect from navigation.
     private var isCameraFollowingBus = false
     private var lastCameraFollowLocation: Location? = null
+    // Location fixes are requested at a one-second cadence. Keep the live
+    // follow transition shorter than that cadence so it cannot perpetually
+    // trail an older GPS point while follow mode is enabled.
+    private val CAMERA_FOLLOW_ANIMATION_DURATION_MS = 450L
 
     private val OFF_ROUTE_THRESHOLD_METERS = 35.0
     private val PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS = 4.0
@@ -1124,7 +1129,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .getFromLocation(location.latitude, location.longitude, 1)
                     ?.firstOrNull()?.getAddressLine(0)
                     ?.replace(Regex("^[A-Z0-9]{4,8}\\+[A-Z0-9]{2,4}\\s*"), "")
-                    ?.let(::normalizeDisplayAddress)
+                    ?.let(AddressDisplayFormatter::normalize)
             } catch (_: Exception) {
                 null
             }
@@ -1136,19 +1141,6 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    private fun normalizeDisplayAddress(address: String): String {
-        val parts = address.split(',')
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-
-        return parts.fold(mutableListOf<String>()) { uniqueParts, part ->
-            if (uniqueParts.none { it.equals(part, ignoreCase = true) }) {
-                uniqueParts += part
-            }
-            uniqueParts
-        }.joinToString(", ")
     }
 
     // ---------------------------------------------------------------------------------
@@ -1521,7 +1513,11 @@ class DriverDashboardActivity : AppCompatActivity() {
         val stops = displayedStops()
 
 
-        val liveArrivedIndex = if (isViewingReverseTrip && isCurrentlyAtStop && lastArrivedStopIndex != -1) {
+        // The adapter receives the actively occupied stop for both trip
+        // directions. Restricting this to the reverse-view toggle made a forward
+        // stop render PASSED immediately after ARRIVED, while still inside the
+        // same configured geofence.
+        val liveArrivedIndex = if (isCurrentlyAtStop && lastArrivedStopIndex != -1) {
             lastArrivedStopIndex
         } else {
             -1
@@ -2062,7 +2058,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // bottom sheet. This is framing only; zoom and dashboard UI stay unchanged.
                 .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
                 .build(),
-            MapAnimationOptions.mapAnimationOptions { duration(850) }
+            MapAnimationOptions.mapAnimationOptions { duration(CAMERA_FOLLOW_ANIMATION_DURATION_MS) }
         )
     }
 

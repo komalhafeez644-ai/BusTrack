@@ -78,6 +78,7 @@ import retrofit2.Response
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import utils.AddressDisplayFormatter
 import java.util.Locale
 
 class TrackDriverActivity : AppCompatActivity() {
@@ -160,6 +161,14 @@ class TrackDriverActivity : AppCompatActivity() {
     private var lastAppliedBusScale = -1f
     private var lastFollowCameraTarget: Point? = null
     private val CAMERA_FOLLOW_MIN_MOVEMENT_METERS = 0.5
+    // Firestore normally delivers a fresh live point every second. Finish each
+    // follow transition before the next one arrives so the map always settles
+    // on the newest bus position instead of remaining in an older animation.
+    private val CAMERA_FOLLOW_ANIMATION_DURATION_MS = 450L
+    // Firestore can receive small coordinate changes while a parked bus is
+    // stationary. They are valid position updates, but not valid direction data.
+    private val MIN_SPEED_FOR_TRACKING_BEARING_UPDATE_KPH = 2.9
+    private var lastValidTrackingBearing: Float? = null
     private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingBusScaleUpdate: Runnable? = null
     // Bounds used only inside computeBusModelScale()'s intermediate "apparent size"
@@ -649,11 +658,19 @@ class TrackDriverActivity : AppCompatActivity() {
 
                         previousPoint?.let { start ->
                             if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
-                                val bearing = calculateBearing(start, targetPoint)
                                 val modelLayer = style.getLayer(DRIVER_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer
-                                // Same base Z correction (90°) as Driver Dashboard's LocationPuck3D;
-                                // only the live compass bearing is added on top, dynamically.
-                                modelLayer?.modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG + bearing.toDouble()))
+                                val movedMeters = TurfMeasurement.distance(start, targetPoint, TurfConstants.UNIT_METERS)
+                                if (driver.speed >= MIN_SPEED_FOR_TRACKING_BEARING_UPDATE_KPH &&
+                                    movedMeters >= CAMERA_FOLLOW_MIN_MOVEMENT_METERS
+                                ) {
+                                    // Preserve the established movement-bearing calculation;
+                                    // only reject stationary GPS drift before it reaches the model.
+                                    lastValidTrackingBearing = calculateBearing(start, targetPoint)
+                                }
+                                // Keep the last reliable movement direction while parked.
+                                lastValidTrackingBearing?.let { bearing ->
+                                    modelLayer?.modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG + bearing.toDouble()))
+                                }
                                 animateDriver(start, targetPoint)
                             }
                         }
@@ -720,7 +737,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         // current zoom/pitch instead of repeatedly resetting the camera.
                         mapView?.mapboxMap?.easeTo(
                             CameraOptions.Builder().center(displayPoint).build(),
-                            MapAnimationOptions.mapAnimationOptions { duration(650) }
+                            MapAnimationOptions.mapAnimationOptions { duration(CAMERA_FOLLOW_ANIMATION_DURATION_MS) }
                         )
                         lastFollowCameraTarget = displayPoint
                     }
@@ -756,7 +773,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 ?.removePrefix(",")
                 ?.removeSuffix(",")
                 ?.trim()
-                ?.let(::normalizeDisplayAddress)
+                ?.let(AddressDisplayFormatter::normalize)
             val label = result?.let { resolved ->
                 val feature = resolved.featureName
                 when {
@@ -779,19 +796,6 @@ class TrackDriverActivity : AppCompatActivity() {
                     ?.text = lastResolvedAddress
             }
         }
-    }
-
-    private fun normalizeDisplayAddress(address: String): String {
-        val parts = address.split(',')
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-
-        return parts.fold(mutableListOf<String>()) { uniqueParts, part ->
-            if (uniqueParts.none { it.equals(part, ignoreCase = true) }) {
-                uniqueParts += part
-            }
-            uniqueParts
-        }.joinToString(", ")
     }
 
     /**
