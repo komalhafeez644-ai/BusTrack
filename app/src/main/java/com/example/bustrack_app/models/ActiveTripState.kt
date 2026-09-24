@@ -9,6 +9,8 @@ import java.io.Serializable
  */
 data class ActiveTripState(
     val tripId: String = "",
+    /** Stable identity shared by the forward and return legs of one round trip. */
+    val roundTripSessionId: String = "",
     val driverId: String = "",
     val routeId: String = "",
     val routeName: String = "",

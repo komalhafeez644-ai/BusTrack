@@ -110,6 +110,12 @@ class TrackDriverActivity : AppCompatActivity() {
     private var currentRouteId: String? = null
     private var previousPoint: Point? = null
     private var previousRawPoint: Point? = null
+    private var renderedDriverPoint: Point? = null
+    private var driverPositionAnimator: ValueAnimator? = null
+    private var lastDriverFixTimestamp = 0L
+    private var driverTransitionDurationMs = 1000L
+    private var sourceGeneration = 0L
+    private var driverGeoJsonSource: com.mapbox.maps.extension.style.sources.generated.GeoJsonSource? = null
     private var unavailableDialog: Dialog? = null
     private var isUnavailablePopupDismissed = false
     private var lastGeocodedLocation: android.location.Location? = null
@@ -161,11 +167,9 @@ class TrackDriverActivity : AppCompatActivity() {
     private val BUS_MODEL_ELEVATION_METERS = 3.0
     private var lastAppliedBusScale = -1f
     private var lastFollowCameraTarget: Point? = null
-    private val CAMERA_FOLLOW_MIN_MOVEMENT_METERS = 0.5
     // Firestore normally delivers a fresh live point every second. Finish each
     // follow transition before the next one arrives so the map always settles
     // on the newest bus position instead of remaining in an older animation.
-    private val CAMERA_FOLLOW_ANIMATION_DURATION_MS = 450L
     // Firestore can receive small coordinate changes while a parked bus is
     // stationary. They are valid position updates, but not valid direction data.
     private val MIN_SPEED_FOR_TRACKING_BEARING_UPDATE_KPH = 2.9
@@ -306,7 +310,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 currentCameraMode = TrackingCameraMode.DRIVER_FOLLOW
                 viewModel.targetDriver.value?.let { driver ->
                     if (driver.latitude != 0.0 && driver.longitude != 0.0) {
-                        recenterOnDriver(displayPointForDriver(driver))
+                        recenterOnDriver(renderedDriverPoint ?: displayPointForDriver(driver))
                     }
                 }
             }
@@ -338,7 +342,12 @@ class TrackDriverActivity : AppCompatActivity() {
             rvStops?.adapter = stopsAdapter
 
             bottomSheet.findViewById<View>(R.id.btnViewAllStops)?.setOnClickListener {
-                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+                val nextState = if (bottomSheetBehavior.state == BottomSheetBehavior.STATE_EXPANDED) {
+                    BottomSheetBehavior.STATE_COLLAPSED
+                } else {
+                    BottomSheetBehavior.STATE_EXPANDED
+                }
+                bottomSheetBehavior.state = nextState
             }
 
             // ROOT-CAUSE FIX: this bottom sheet layout is shared with
@@ -434,12 +443,15 @@ class TrackDriverActivity : AppCompatActivity() {
                         driver.status.equals("ACTIVE", true) ||
                         driver.status.equals("On Duty", true)
 
-                val isNavigating = driver.isNavigating || !driver.currentRoutePolyline.isNullOrEmpty()
-
                 val currentTime = System.currentTimeMillis()
                 val isDataRecent = (currentTime - driver.lastUpdated) < 1800000 // 30 mins window
 
-                if (isStatusActive && isNavigating && isDataRecent && driver.latitude != 0.0) {
+                // Live location is published while a driver is On Duty; navigation
+                // state only controls route guidance and must not block a fresh GPS
+                // position from reaching this viewer. This matches the Admin overview,
+                // Parent, and Principal tracking feeds.
+                if (isStatusActive && isDataRecent &&
+                    driver.latitude != 0.0 && driver.longitude != 0.0) {
                     unavailableDialog?.dismiss()
                     unavailableDialog = null
                     isUnavailablePopupDismissed = false
@@ -548,6 +560,14 @@ class TrackDriverActivity : AppCompatActivity() {
     private fun updateUI(driver: DriverModel) {
         try {
             updateTrackingStatusHeader(driver)
+            val incomingFixTimestamp = driver.locationTimestamp.takeIf { it > 0L }
+                ?: driver.lastUpdated.takeIf { it > 0L }
+                ?: System.currentTimeMillis()
+            if (lastDriverFixTimestamp > 0L && incomingFixTimestamp > 0L && incomingFixTimestamp < lastDriverFixTimestamp) {
+                Log.d("LocationDebug", "Ignoring out-of-order live location timestamp=$incomingFixTimestamp " +
+                        "latest=$lastDriverFixTimestamp driver=${driver.driverId}")
+                return
+            }
             val sheet = findViewById<FrameLayout>(R.id.bottomSheet)
             sheet?.let {
                 it.findViewById<TextView>(R.id.tvBusIdSheet)?.text = driver.assignedBus ?: "BUS-101"
@@ -585,7 +605,16 @@ class TrackDriverActivity : AppCompatActivity() {
                 // Capture before the asynchronous style callback. The field is
                 // advanced below for the next Firestore update.
                 val previousRawPointForUpdate = previousRawPoint
+                val previousDisplayPointForUpdate = renderedDriverPoint ?: previousPoint
                 val targetPoint = displayPointForDriver(driver)
+                val incomingFixTimestamp = driver.locationTimestamp.takeIf { it > 0L }
+                    ?: driver.lastUpdated.takeIf { it > 0L }
+                    ?: System.currentTimeMillis()
+                if (lastDriverFixTimestamp > 0L && incomingFixTimestamp > lastDriverFixTimestamp) {
+                    driverTransitionDurationMs = (incomingFixTimestamp - lastDriverFixTimestamp).coerceIn(500L, 2000L)
+                }
+                lastDriverFixTimestamp = maxOf(lastDriverFixTimestamp, incomingFixTimestamp)
+                val renderGeneration = ++sourceGeneration
 
                 // Set the real camera before creating the model layer. Previously
                 // the layer was created at the default globe zoom (huge model),
@@ -606,12 +635,12 @@ class TrackDriverActivity : AppCompatActivity() {
                 mapView?.mapboxMap?.getStyle { style ->
                     if (!style.styleSourceExists(DRIVER_SOURCE_ID)) {
                         style.addSource(geoJsonSource(DRIVER_SOURCE_ID) {
-                            geometry(targetPoint)
+                            geometry(previousDisplayPointForUpdate ?: targetPoint)
                         })
-                    } else {
-                        val source = style.getSource(DRIVER_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
-                        source?.geometry(targetPoint)
                     }
+                    driverGeoJsonSource = style.getSource(DRIVER_SOURCE_ID)
+                            as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+                    driverGeoJsonSource?.geometry(previousDisplayPointForUpdate ?: renderedDriverPoint ?: targetPoint)
 
                     if (!style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
                         // Base orientation/scale matches DriverDashboardActivity's LocationPuck3D
@@ -664,39 +693,27 @@ class TrackDriverActivity : AppCompatActivity() {
                         symbolLayer?.textField(locationName)
 
                         val modelLayer = style.getLayer(DRIVER_MODEL_LAYER_ID) as? com.mapbox.maps.extension.style.layers.generated.ModelLayer
-                        previousRawPointForUpdate?.let { start ->
-                            val movedMeters = TurfMeasurement.distance(start, rawPointForUpdate, TurfConstants.UNIT_METERS)
-                            val previousBearingForLog = lastValidTrackingBearing
-                            if (driver.speed >= MIN_SPEED_FOR_TRACKING_BEARING_UPDATE_KPH &&
-                                movedMeters >= CAMERA_FOLLOW_MIN_MOVEMENT_METERS
-                            ) {
-                                // Keep the existing movement-bearing formula, but use
-                                // actual GPS movement rather than a nearest-route snap
-                                // that can jump to a parallel or crossing segment.
-                                lastValidTrackingBearing = calculateBearing(start, rawPointForUpdate)
+                        val startForBearing = previousDisplayPointForUpdate ?: previousRawPointForUpdate
+                        if (startForBearing != null) {
+                            val movedMeters = TurfMeasurement.distance(startForBearing, targetPoint, TurfConstants.UNIT_METERS)
+                            if (movedMeters >= 0.3) {
+                                val rawBearing = calculateBearing(startForBearing, targetPoint)
+                                lastValidTrackingBearing = smoothBearing(lastValidTrackingBearing, rawBearing)
                             }
-                            // DIAGNOSTIC (Problem 2): the bearing here is already computed
-                            // from consecutive RAW GPS fixes (not a snapped/display point),
-                            // so the suspected "snapped-point bearing" risk does not apply
-                            // to this code path as written. The remaining candidate cause is
-                            // sampling resolution: Firestore only delivers a new driver.*
-                            // point every ~1s/2m (see DriverDashboardActivity's
-                            // FIRESTORE_UPDATE_INTERVAL/FIRESTORE_MIN_DISTANCE), so on a turn
-                            // the chord between two consecutive raw fixes can cut the corner
-                            // instead of matching the vehicle's instantaneous heading. Log
-                            // every input to confirm/rule this out against a real turn.
-                            Log.d("HEADING_DEBUG", "previousRawGPS=$start currentRawGPS=$rawPointForUpdate " +
-                                    "movedMeters=$movedMeters speed=${driver.speed} " +
-                                    "calculatedBearing=$lastValidTrackingBearing previousBearing=$previousBearingForLog " +
-                                    "modelRotationZ=${BUS_MODEL_BASE_Z_DEG + (lastValidTrackingBearing?.toDouble() ?: 0.0)}")
                         }
                         lastValidTrackingBearing?.let { bearing ->
                             modelLayer?.modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG + bearing.toDouble()))
                         }
-                        previousPoint?.let { start ->
-                            if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
-                                animateDriver(start, targetPoint)
-                            }
+                    }
+
+                    // A delayed style callback from an older snapshot must not pull
+                    // the marker back after a newer fix has already been rendered.
+                    if (renderGeneration == sourceGeneration) {
+                        val start = renderedDriverPoint ?: previousDisplayPointForUpdate ?: targetPoint
+                        if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
+                            animateDriver(start, targetPoint, driverTransitionDurationMs)
+                        } else {
+                            renderedDriverPoint = targetPoint
                         }
                     }
 
@@ -734,12 +751,6 @@ class TrackDriverActivity : AppCompatActivity() {
             // Apply a tilted 3D perspective
             if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
                 if (!hasCenteredOnDriver) {
-                    // First valid GPS fix for this driver: instant jump (no
-                    // animation) straight to the tracking zoom/pitch, so the bus
-                    // is visible immediately and Recenter is never required for
-                    // initial positioning. Unlike the old (0,0) check, this always
-                    // fires exactly once regardless of whatever default camera the
-                    // MapView started with.
                     mapView?.mapboxMap?.setCamera(
                         CameraOptions.Builder()
                             .center(displayPoint)
@@ -749,32 +760,6 @@ class TrackDriverActivity : AppCompatActivity() {
                     )
                     lastFollowCameraTarget = displayPoint
                     hasCenteredOnDriver = true
-                } else if (!isRecenterAnimationInProgress) {
-                    // Skip live-follow nudges while a Recenter transition is still
-                    // running - two camera animations updating at once is what
-                    // caused the reported "zoom in close, then auto-correct" jump.
-                    val lastTarget = lastFollowCameraTarget
-                    val movedSinceLastCameraUpdate = lastTarget == null ||
-                            TurfMeasurement.distance(lastTarget, rawPoint, TurfConstants.UNIT_METERS) >= CAMERA_FOLLOW_MIN_MOVEMENT_METERS
-
-                    Log.d("CAMERA_DEBUG", "followUpdate: cameraMode=$currentCameraMode gpsAccepted=true " +
-                            "followCalled=$movedSinceLastCameraUpdate " +
-                            "followSkippedReason=${if (!movedSinceLastCameraUpdate) "movedSinceLastCameraUpdate<${CAMERA_FOLLOW_MIN_MOVEMENT_METERS}m" else "n/a"} " +
-                            "cameraBefore=$lastTarget targetBusLocation=$rawPoint")
-
-                    if (movedSinceLastCameraUpdate) {
-                        // Follow the latest persisted GPS coordinate. The marker may
-                        // still be display-snapped, but that snap must never hold the
-                        // camera on an older/parallel route segment.
-                        mapView?.mapboxMap?.easeTo(
-                            CameraOptions.Builder().center(rawPoint).build(),
-                            MapAnimationOptions.mapAnimationOptions { duration(CAMERA_FOLLOW_ANIMATION_DURATION_MS) }
-                        )
-                        lastFollowCameraTarget = rawPoint
-                    }
-                } else {
-                    Log.d("CAMERA_DEBUG", "followUpdate skipped: cameraMode=$currentCameraMode " +
-                            "followSkippedReason=isRecenterAnimationInProgress targetBusLocation=$rawPoint")
                 }
             }
         } catch (e: Exception) {
@@ -823,7 +808,11 @@ class TrackDriverActivity : AppCompatActivity() {
 
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed || generation != geocodeGeneration) return@withContext
-                lastResolvedAddress = address ?: "Location unavailable"
+                // A geocoder response is optional. Keep a valid live location
+                // visible even when reverse geocoding is temporarily unavailable.
+                lastResolvedAddress = address ?: String.format(
+                    Locale.getDefault(), "%.5f, %.5f", location.latitude, location.longitude
+                )
                 lastResolvedLocationLabel = label
                 findViewById<FrameLayout>(R.id.bottomSheet)
                     ?.findViewById<TextView>(R.id.tvCurrentLocSheet)
@@ -839,11 +828,8 @@ class TrackDriverActivity : AppCompatActivity() {
      * instead of the old flyTo() - mixing flyTo's fly-curve animator with
      * easeTo's linear one on the same camera is what caused the reported
      * "zooms in very close, then auto-adjusts smaller" jump. The
-     * isRecenterAnimationInProgress flag also stops a live GPS update from
-     * layering a second camera animation on top of this one while it runs;
-     * it's cleared via a plain postDelayed(RECENTER_ANIMATION_DURATION_MS)
-     * rather than an animator-end callback, since MapAnimationOptions'
-     * animatorListener() isn't available in this Mapbox SDK version.
+     * Recenter targets the currently rendered bus position. The live renderer
+     * then keeps camera and marker together on each subsequent animation frame.
      */
     private fun recenterOnDriver(target: Point) {
         Log.d("CAMERA_DEBUG", "recenterOnDriver (manual): cameraModeBefore=$currentCameraMode " +
@@ -883,21 +869,25 @@ class TrackDriverActivity : AppCompatActivity() {
         }.getOrElse { rawPoint }
     }
 
-    private fun animateDriver(start: Point, end: Point) {
+    private fun animateDriver(start: Point, end: Point, durationMs: Long) {
+        driverPositionAnimator?.cancel()
         val animator = ValueAnimator.ofFloat(0f, 1f)
-        animator.duration = 400
+        animator.duration = durationMs
         animator.interpolator = LinearInterpolator()
         animator.addUpdateListener { animation ->
             val fraction = animation.animatedValue as Float
             val lat = start.latitude() + (end.latitude() - start.latitude()) * fraction
             val lng = start.longitude() + (end.longitude() - start.longitude()) * fraction
             val currentPoint = Point.fromLngLat(lng, lat)
+            renderedDriverPoint = currentPoint
 
-            mapView?.mapboxMap?.getStyle { style ->
-                val source = style.getSource(DRIVER_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
-                source?.geometry(currentPoint)
+            if (animation === driverPositionAnimator) driverGeoJsonSource?.geometry(currentPoint)
+            if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(currentPoint).build())
+                lastFollowCameraTarget = currentPoint
             }
         }
+        driverPositionAnimator = animator
         animator.start()
     }
 
@@ -913,6 +903,14 @@ class TrackDriverActivity : AppCompatActivity() {
         val brng = Math.atan2(y, x)
 
         return ((Math.toDegrees(brng) + 360) % 360).toFloat()
+    }
+
+    private fun smoothBearing(current: Float?, target: Float): Float {
+        if (current == null) return target
+        var diff = (target - current) % 360f
+        if (diff > 180f) diff -= 360f
+        if (diff < -180f) diff += 360f
+        return (current + diff * 0.4f + 360f) % 360f
     }
 
     /**
@@ -1264,6 +1262,7 @@ class TrackDriverActivity : AppCompatActivity() {
     override fun onStop() { super.onStop(); mapView?.onStop() }
     override fun onDestroy() {
         super.onDestroy()
+        driverPositionAnimator?.cancel()
         pendingBusScaleUpdate?.let(busScaleHandler::removeCallbacks)
         pendingRecenterAnimationReset?.let(recenterAnimationHandler::removeCallbacks)
         mapView?.mapboxMap?.removeOnCameraChangeListener(busModelCameraChangeListener)

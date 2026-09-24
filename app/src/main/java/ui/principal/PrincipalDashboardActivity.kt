@@ -70,11 +70,20 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private var pointAnnotationManager: PointAnnotationManager? = null
     private val driverMarkers = mutableMapOf<String, PointAnnotation>()
     private val driverPreviousPositions = mutableMapOf<String, Point>()
+    private val driverRenderedPositions = mutableMapOf<String, Point>()
+    private val driverAnimators = mutableMapOf<String, ValueAnimator>()
+    private val driverFixTimestamps = mutableMapOf<String, Long>()
+    private val driverBearings = mutableMapOf<String, Double>()
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
     private var isUserInteracting = false
     private lateinit var searchAdapter: BusSearchAdapter
     private var unavailableDialog: android.app.Dialog? = null
     private var isUnavailablePopupDismissed = false
+    private var isMapStyleReady = false
+    private var pendingDrivers: List<DriverModel> = emptyList()
+    private var hasInitializedTrackingCamera = false
+    private var markerUpdateGeneration = 0L
+    private var busGeoJsonSource: com.mapbox.maps.extension.style.sources.generated.GeoJsonSource? = null
 
     private val BUS_SOURCE_ID = "bus-source"
     private val BUS_MODEL_LAYER_ID = "bus-model-layer"
@@ -96,7 +105,11 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
         // Initialize Mapbox Map
         mapView = findViewById(R.id.mapView)
+        // Subscribe before style creation and retain the most recent live snapshot;
+        // this is the same handoff used by the working Admin tracking screen.
+        observeLiveTracking()
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
+            isMapStyleReady = true
             style.addStyleModel(BUS_MODEL_ID, "asset://bus.glb")
 
             val annotationApi = mapView?.annotations
@@ -149,7 +162,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                 findViewById<ImageView>(R.id.ivCompass)?.rotation = -bearing
             }
 
-            observeLiveTracking()
+            if (pendingDrivers.isNotEmpty()) updateMarkers(pendingDrivers)
         }
 
         setupUI()
@@ -264,6 +277,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
     private fun observeLiveTracking() {
         liveTrackingViewModel.activeDrivers.observe(this) { drivers ->
+            pendingDrivers = drivers.orEmpty()
             if (drivers == null || drivers.isEmpty()) {
                 findViewById<View>(R.id.driverCard)?.visibility = View.GONE
                 showUnavailableDialog()
@@ -272,7 +286,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                 unavailableDialog = null
                 isUnavailablePopupDismissed = false
             }
-            drivers?.let { updateMarkers(it) }
+            if (isMapStyleReady) drivers?.let { updateMarkers(it) }
         }
 
         liveTrackingViewModel.selectedDriver.observe(this) { driver ->
@@ -314,37 +328,41 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateMarkers(drivers: List<DriverModel>) {
+        pendingDrivers = drivers
+        val updateGeneration = ++markerUpdateGeneration
         mapView?.mapboxMap?.getStyle { style ->
-            val features = drivers.filter { it.latitude != 0.0 && it.longitude != 0.0 }.map { driver ->
-                val point = Point.fromLngLat(driver.longitude, driver.latitude)
-                val prevPoint = driverPreviousPositions[driver.driverId]
-                val bearing = if (prevPoint != null && (prevPoint.latitude() != point.latitude() || prevPoint.longitude() != point.longitude())) {
-                    calculateBearing(prevPoint, point).toDouble()
-                } else {
-                    0.0
-                }
-                driverPreviousPositions[driver.driverId] = point
-
-                Feature.fromGeometry(point).apply {
-                    addStringProperty("driverId", driver.driverId)
-                    addStringProperty("name", driver.assignedBus ?: driver.name)
-                    addNumberProperty("bearing", bearing + 180.0)
-                    val rotationArray = JsonArray()
-                    rotationArray.add(0.0)
-                    rotationArray.add(0.0)
-                    rotationArray.add(bearing + 180.0)
-                    addProperty("rotation", rotationArray)
+            if (updateGeneration != markerUpdateGeneration || isDestroyed) return@getStyle
+            drivers.filter { it.latitude != 0.0 && it.longitude != 0.0 }.forEach { driver ->
+                val target = Point.fromLngLat(driver.longitude, driver.latitude)
+                val receivedAt = driver.locationTimestamp.takeIf { it > 0L }
+                    ?: driver.lastUpdated.takeIf { it > 0L }
+                    ?: System.currentTimeMillis()
+                val priorTimestamp = driverFixTimestamps[driver.driverId] ?: 0L
+                if (receivedAt >= priorTimestamp) {
+                    val start = driverRenderedPositions[driver.driverId] ?: target
+                    val moved = start.latitude() != target.latitude() || start.longitude() != target.longitude()
+                    if (moved && receivedAt > priorTimestamp) {
+                        val interval = if (priorTimestamp > 0L) (receivedAt - priorTimestamp).coerceIn(600L, 2000L) else 1000L
+                        driverAnimators.remove(driver.driverId)?.cancel()
+                        animateDriverPosition(driver, start, target, interval)
+                        driverFixTimestamps[driver.driverId] = receivedAt
+                    } else if (!moved) {
+                        driverRenderedPositions[driver.driverId] = target
+                        followRenderedDriverIfNeeded(driver.driverId, target)
+                    }
+                    driverFixTimestamps[driver.driverId] = maxOf(priorTimestamp, receivedAt)
                 }
             }
+            val features = makeDriverFeatures(drivers)
 
             if (!style.styleSourceExists(BUS_SOURCE_ID)) {
                 style.addSource(geoJsonSource(BUS_SOURCE_ID) {
                     featureCollection(FeatureCollection.fromFeatures(features))
                 })
-            } else {
-                val source = style.getSource(BUS_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
-                source?.featureCollection(FeatureCollection.fromFeatures(features))
             }
+            busGeoJsonSource = style.getSource(BUS_SOURCE_ID)
+                    as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+            busGeoJsonSource?.featureCollection(FeatureCollection.fromFeatures(features))
 
             if (!style.styleLayerExists(BUS_MODEL_LAYER_ID)) {
                 style.addLayer(modelLayer(BUS_MODEL_LAYER_ID, BUS_SOURCE_ID) {
@@ -370,32 +388,81 @@ class PrincipalDashboardActivity : AppCompatActivity() {
                     textAllowOverlap(true)
                 })
             }
-        }
 
-        // 3. Camera handling
-        if (!isUserInteracting && drivers.isNotEmpty()) {
-            val selected = liveTrackingViewModel.selectedDriver.value
-            if (selected != null) {
-                focusOnDriver(selected)
-            } else if (drivers.size == 1) {
-                focusOnDriver(drivers[0])
-            } else {
-                focusOnAllDrivers(drivers)
+            if (!hasInitializedTrackingCamera && !isUserInteracting && drivers.isNotEmpty()) {
+                val selected = liveTrackingViewModel.selectedDriver.value
+                if (selected != null) {
+                    val point = driverRenderedPositions[selected.driverId]
+                        ?: Point.fromLngLat(selected.longitude, selected.latitude)
+                    mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).zoom(15.0).build())
+                    hasInitializedTrackingCamera = true
+                } else if (drivers.size == 1) {
+                    val driver = drivers[0]
+                    val point = driverRenderedPositions[driver.driverId]
+                        ?: Point.fromLngLat(driver.longitude, driver.latitude)
+                    mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).zoom(15.0).build())
+                    hasInitializedTrackingCamera = true
+                } else {
+                    val points = drivers.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+                        .map { driverRenderedPositions[it.driverId] ?: Point.fromLngLat(it.longitude, it.latitude) }
+                    mapView?.mapboxMap?.cameraForCoordinates(points, EdgeInsets(200.0, 100.0, 200.0, 100.0), null, null)
+                        ?.let { mapView?.mapboxMap?.setCamera(it); hasInitializedTrackingCamera = true }
+                }
             }
         }
     }
 
-    private fun animateMarker(annotation: PointAnnotation, start: Point, end: Point) {
-        val animator = ValueAnimator.ofFloat(0f, 1f)
-        animator.duration = 400
-        animator.interpolator = LinearInterpolator()
-        animator.addUpdateListener { animation ->
-            val fraction = animation.animatedValue as Float
-            val lat = start.latitude() + (end.latitude() - start.latitude()) * fraction
-            val lng = start.longitude() + (end.longitude() - start.longitude()) * fraction
-            annotation.point = Point.fromLngLat(lng, lat)
+    private fun makeDriverFeatures(drivers: List<DriverModel>): List<Feature> = drivers
+        .filter { it.latitude != 0.0 && it.longitude != 0.0 }
+        .map { driver ->
+            val point = driverRenderedPositions[driver.driverId]
+                ?: Point.fromLngLat(driver.longitude, driver.latitude)
+            val bearing = driverBearings[driver.driverId] ?: 0.0
+            Feature.fromGeometry(point).apply {
+                addStringProperty("driverId", driver.driverId)
+                addStringProperty("name", driver.assignedBus ?: driver.name)
+                addNumberProperty("bearing", bearing + 180.0)
+                val rotation = JsonArray().apply {
+                    add(0.0); add(0.0); add(bearing + 180.0)
+                }
+                addProperty("rotation", rotation)
+            }
         }
+
+    private fun animateDriverPosition(driver: DriverModel, start: Point, end: Point, durationMs: Long) {
+        val previousPoint = driverPreviousPositions[driver.driverId] ?: start
+        val targetBearing = calculateBearing(previousPoint, end).toDouble()
+        driverPreviousPositions[driver.driverId] = end
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = durationMs
+            interpolator = LinearInterpolator()
+            addUpdateListener { frame ->
+                val fraction = frame.animatedValue as Float
+                val point = Point.fromLngLat(
+                    start.longitude() + (end.longitude() - start.longitude()) * fraction,
+                    start.latitude() + (end.latitude() - start.latitude()) * fraction
+                )
+                driverRenderedPositions[driver.driverId] = point
+                driverBearings[driver.driverId] = targetBearing
+                if (driverAnimators[driver.driverId] === frame) {
+                    busGeoJsonSource?.featureCollection(FeatureCollection.fromFeatures(makeDriverFeatures(pendingDrivers)))
+                }
+                followRenderedDriverIfNeeded(driver.driverId, point)
+            }
+        }
+        driverAnimators[driver.driverId] = animator
         animator.start()
+    }
+
+    private fun followRenderedDriverIfNeeded(driverId: String, point: Point) {
+        if (isUserInteracting) return
+        val selectedId = liveTrackingViewModel.selectedDriver.value?.driverId
+        val shouldFollow = selectedId == driverId ||
+                (selectedId == null && liveTrackingViewModel.activeDrivers.value?.size == 1)
+        if (shouldFollow) {
+            mapView?.mapboxMap?.setCamera(CameraOptions.Builder().center(point).build())
+            hasInitializedTrackingCamera = true
+        }
     }
 
     private fun calculateBearing(start: Point, end: Point): Float {
@@ -413,7 +480,8 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     }
 
     private fun focusOnAllDrivers(drivers: List<DriverModel>) {
-        val points = drivers.map { Point.fromLngLat(it.longitude, it.latitude) }
+        val points = drivers.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+            .map { driver -> driverRenderedPositions[driver.driverId] ?: Point.fromLngLat(driver.longitude, driver.latitude) }
         val camera = mapView?.mapboxMap?.cameraForCoordinates(
             points,
             EdgeInsets(200.0, 100.0, 200.0, 100.0),
@@ -421,25 +489,22 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             null
         )
         camera?.let {
-            // Same fix as TrackDriverActivity/LiveTrackingActivity: this runs on every
-            // driver-location update, and flyTo()'s dramatic globe animation kept
-            // getting interrupted before finishing (updates every 1-3s vs 1000ms
-            // animation) - that's what showed up as blinking. easeTo() has no globe
-            // effect, so being interrupted just redirects smoothly instead.
-            mapView?.mapboxMap?.easeTo(it, MapAnimationOptions.mapAnimationOptions { duration(800) })
+            mapView?.mapboxMap?.easeTo(it, MapAnimationOptions.mapAnimationOptions { duration(350) })
+            hasInitializedTrackingCamera = true
         }
     }
 
     private fun focusOnDriver(driver: DriverModel) {
         if (driver.latitude != 0.0) {
-            val point = Point.fromLngLat(driver.longitude, driver.latitude)
+            val point = driverRenderedPositions[driver.driverId] ?: Point.fromLngLat(driver.longitude, driver.latitude)
             mapView?.mapboxMap?.easeTo(
                 CameraOptions.Builder()
                     .center(point)
                     .zoom(15.0)
                     .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(800) }
+                MapAnimationOptions.mapAnimationOptions { duration(350) }
             )
+            hasInitializedTrackingCamera = true
         }
     }
 
@@ -607,6 +672,8 @@ class PrincipalDashboardActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        driverAnimators.values.forEach { it.cancel() }
+        driverAnimators.clear()
         bitmapCache.clear()
         mapView?.onDestroy()
     }

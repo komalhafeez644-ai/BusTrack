@@ -187,7 +187,7 @@ class StudentAttendanceActivity : AppCompatActivity() {
         // Update Card UI (Matching StudentAdapter logic for consistency)
         tvStudentName.text = student.name
         tvGrade.text = student.grade
-        tvStudentId.text = "ID: ${student.id}"
+        tvStudentId.text = student.rollNumber.ifBlank { "N/A" }
 
         val route = student.route ?: ""
         btnViewDetails.visibility = View.GONE // Hide action button in attendance screen

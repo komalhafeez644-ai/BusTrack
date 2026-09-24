@@ -18,6 +18,7 @@ import java.util.Date
 import java.util.Locale
 import com.example.bustrack_app.R
 import utils.ViewUtils
+import utils.AttendanceStatus
 
 /**
  * Attendance Bottom Sheet shown to the driver when the geofence/arrival logic in
@@ -165,6 +166,21 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
         FirebaseRepository.fetchStudentsByStop(routeName, stopName, onStudentsLoaded)
     }
 
+    /** Keep the original successful pickup time when a record is viewed/edited again. */
+    private fun preservedPickup(existing: String?, status: String, replacement: String): String =
+        if (status == "Present" && isRecordedPickup(existing)) existing!! else replacement
+
+    private fun pendingOrEmptyDrop(existing: String?, status: String): String = when {
+        status == "Absent" || AttendanceStatus.isShortLeave(status) || status == "Pending" -> "--"
+        existing?.contains(":") == true -> existing
+        else -> "Pending Drop"
+    }
+
+    private fun isRecordedPickup(value: String?): Boolean = value?.let {
+        it.contains(":") || it.equals("Present", true) ||
+                it.equals("School", true) || it.equals("En Route", true)
+    } == true
+
     private fun saveAllAttendance() {
         if (isSavingInProgress) return
 
@@ -191,13 +207,13 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
         val markTimestamp = System.currentTimeMillis()
         val recordsToSave = students.filter { marked.containsKey(it.id) }.map { student ->
-            val status = marked.getValue(student.id)
+            val status = AttendanceStatus.forStorage(marked.getValue(student.id))
             val currentTime = if (status == "Present") SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(markTimestamp)) else status
-            val attendanceType = if (isMorning) "MORNING_PICKUP" else "EVENING_DROP"
+            val attendanceType = if (isMorning) "MORNING_PICKUP" else "EVENING_PICKUP"
             val attendanceStatus = when (status) {
-                "Present" -> if (isMorning) "PICKED_UP" else "DROPPED_OFF"
+                "Present" -> "PICKED_UP"
                 "Absent" -> "ABSENT"
-                "Leave" -> "LEAVE"
+                AttendanceStatus.SHORT_LEAVE -> "S_LEAVE"
                 else -> status.uppercase(Locale.getDefault())
             }
 
@@ -207,10 +223,10 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 studentName = student.name,
                 route = routeName,
                 stop = stopName,
-                morningPickup = if (isMorning) currentTime else (existing?.morningPickup ?: "--"),
-                morningDrop = if (isMorning) (if (status == "Absent" || status == "Leave") status else "Pending Drop") else (existing?.morningDrop ?: "--"),
-                eveningPickup = if (!isMorning) currentTime else (existing?.eveningPickup ?: "--"),
-                eveningDrop = if (!isMorning) (if (status == "Absent" || status == "Leave") status else "Pending Drop") else (existing?.eveningDrop ?: "--"),
+                morningPickup = if (isMorning) preservedPickup(existing?.morningPickup, status, currentTime) else (existing?.morningPickup ?: "--"),
+                morningDrop = if (isMorning) pendingOrEmptyDrop(existing?.morningDrop, status) else (existing?.morningDrop ?: "--"),
+                eveningPickup = if (!isMorning) preservedPickup(existing?.eveningPickup, status, currentTime) else (existing?.eveningPickup ?: "--"),
+                eveningDrop = if (!isMorning) pendingOrEmptyDrop(existing?.eveningDrop, status) else (existing?.eveningDrop ?: "--"),
                 date = date,
                 busId = busId,
                 routeId = routeId,
@@ -250,7 +266,7 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                 }
 
                 if (result != com.example.bustrack_app.sync.SyncQueueManager.SyncResult.FAILED) {
-                    val status = marked.getValue(record.studentId)
+                    val status = AttendanceStatus.forStorage(marked.getValue(record.studentId))
                     FirebaseRepository.notifyParentsOfAttendance(
                         record.studentId,
                         record.studentName,

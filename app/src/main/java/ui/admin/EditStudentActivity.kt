@@ -111,7 +111,7 @@ class EditStudentActivity : AppCompatActivity() {
         
         studentData = StudentRepository.studentList.value?.find { it.id == studentId }
         studentData?.let {
-            etEditStudentId.setText(it.id)
+            etEditStudentId.setText(it.rollNumber)
             etEditFullName.setText(it.name)
             spinnerEditGrade.setText(it.grade, false)
             etEditParentName.setText(it.fatherName)
@@ -244,11 +244,16 @@ class EditStudentActivity : AppCompatActivity() {
     }
 
     private fun setupFormFormatting() {
+        FormUtils.setupRollNumberFormatting(etEditStudentId)
         utils.FormUtils.setupTitleCaseInput(etEditFullName)
         utils.FormUtils.setupTitleCaseInput(etEditParentName)
     }
 
     private fun validateForm(): Boolean {
+        if (!FormUtils.isValidRollNumber(etEditStudentId.text.toString().trim())) {
+            etEditStudentId.error = "Roll Number required"
+            return false
+        }
         if (etEditFullName.text.toString().trim().isEmpty()) {
             etEditFullName.error = "Name is required"
             return false
@@ -287,6 +292,7 @@ class EditStudentActivity : AppCompatActivity() {
             val finalBus = if (bus == "No Bus Assigned" || bus == "Unassigned") null else bus
 
             val updatedStudent = oldData.copy(
+                rollNumber = etEditStudentId.text.toString().trim(),
                 name = etEditFullName.text.toString().trim(),
                 grade = spinnerEditGrade.text.toString(),
                 fatherName = etEditParentName.text.toString().trim(),

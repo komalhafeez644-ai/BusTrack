@@ -41,8 +41,11 @@ class AuthRepository {
             val authResult = try {
                 auth.signInWithEmailAndPassword(cleanEmail, password).await()
             } catch (e: Exception) {
-                // Special handling for pre-created Principal account
-                if (cleanEmail == "principal@gmail.com" && password == "principal123") {
+                // Special handling for pre-created Principal and Admin accounts
+                val isPrincipal = cleanEmail == "principal@gmail.com" && password == "principal123"
+                val isSecondAdmin = cleanEmail == "barlasmaria2@gmail.com" && password == "@admin583"
+                
+                if (isPrincipal || isSecondAdmin) {
                     try {
                         // Create the account if it doesn't exist
                         auth.createUserWithEmailAndPassword(cleanEmail, password).await()
@@ -68,7 +71,7 @@ class AuthRepository {
                 // Drivers (and Admin/Principal) set their password directly via the secure Firebase email link,
                 // proving email ownership. They do not require a separate verification step.
                 val isExemptFromSeparateVerification = role == "driver" || role == "admin" || role == "principal" || 
-                    cleanEmail == "admin@gmail.com" || cleanEmail == "principal@gmail.com"
+                    cleanEmail == "admin@gmail.com" || cleanEmail == "barlasmaria2@gmail.com" || cleanEmail == "principal@gmail.com"
 
                 if (!isExemptFromSeparateVerification && !user.isEmailVerified) {
                     auth.signOut()
@@ -183,7 +186,7 @@ class AuthRepository {
         // 2. Fallback Role Discovery
         if (role == null) {
             role = when (cleanEmail) {
-                "admin@gmail.com" -> "admin"
+                "admin@gmail.com", "barlasmaria2@gmail.com" -> "admin"
                 "principal@gmail.com" -> "principal"
                 else -> {
                     try {
@@ -307,7 +310,7 @@ class AuthRepository {
         val email = user.email?.trim()?.lowercase()
         
         // Hardcoded safety for admin and principal email
-        if (email == "admin@gmail.com") return "admin"
+        if (email == "admin@gmail.com" || email == "barlasmaria2@gmail.com") return "admin"
         if (email == "principal@gmail.com") return "principal"
         
         return try {

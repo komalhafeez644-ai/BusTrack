@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityProfileBinding
 import com.example.bustrack_app.viewmodels.ProfileViewModel
+import com.google.firebase.auth.FirebaseAuth
 import utils.NavigationUtils
 import com.bumptech.glide.Glide
 
@@ -42,7 +43,7 @@ class ProfileActivity : AppCompatActivity() {
             
             binding.tvAdminName.text = name
             binding.tvInfoFullName.text = name
-            binding.tvInfoEmail.text = admin.email.ifEmpty { "admin@gmail.com" }
+            binding.tvInfoEmail.text = admin.email.ifEmpty { FirebaseAuth.getInstance().currentUser?.email ?: "admin@gmail.com" }
             binding.tvInfoPhone.text = admin.phone.ifEmpty { "+92 300 1234567" }
             binding.tvInfoDept.text = dept
             binding.tvInfoEmpID.text = empId

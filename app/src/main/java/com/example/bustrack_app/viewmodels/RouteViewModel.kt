@@ -52,4 +52,8 @@ class RouteViewModel : ViewModel() {
     fun filterRoutes(query: String) {
         _searchQuery.value = query
     }
+
+    fun deleteRoute(routeId: String, onComplete: (Boolean) -> Unit = {}) {
+        RouteRepository.deleteRoute(routeId, onComplete)
+    }
 }

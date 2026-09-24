@@ -150,6 +150,9 @@ import com.mapbox.maps.plugin.ModelScaleMode
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.navigation.tripdata.maneuver.api.MapboxManeuverApi
 import com.mapbox.navigation.base.formatter.DistanceFormatter
+import utils.TripPeriod
+import utils.TripWindow
+import utils.AttendanceStatus
 
 /**
  * Unidirectional lifecycle for a single stop: UPCOMING -> ARRIVED -> COMPLETED.
@@ -210,6 +213,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Its stop instances, state, arrival times and ETA values are all independent.
     private var isReverseTripActive = false
     private var currentActiveTripId: String? = null
+    private var currentRoundTripSessionId: String? = null
     private var hasCheckedActiveTripRecovery = false
     private var isViewingReverseTrip = false
     private var reverseTripCompleted = false
@@ -263,7 +267,12 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private var departureCandidateIndex = -1
     private var departureConfirmCount = 0
+    private var missedStopCandidateIndex = -1
+    private var missedStopConfirmCount = 0
+    private var previousMissedStopDistanceMeters = Double.NaN
     private val DEPARTURE_CONFIRM_THRESHOLD = 3
+    private val MISSED_STOP_CONFIRM_THRESHOLD = 3
+    private val MISSED_STOP_NEXT_RADIUS_METERS = 140.0
     private var arrivedStopRouteSegmentIndex: Int? = null
 
     private var lastSplitIndex = 0
@@ -278,7 +287,6 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Location fixes are requested at a one-second cadence. Keep the live
     // follow transition shorter than that cadence so it cannot perpetually
     // trail an older GPS point while follow mode is enabled.
-    private val CAMERA_FOLLOW_ANIMATION_DURATION_MS = 450L
 
     private val OFF_ROUTE_THRESHOLD_METERS = 35.0
     private val PARALLEL_ROAD_OFF_ROUTE_THRESHOLD_METERS = 4.0
@@ -401,12 +409,14 @@ class DriverDashboardActivity : AppCompatActivity() {
     // which looked like the bus jumping to a new coordinate.
     private var lastPuckPosition: Location? = null
     private var lastPuckElapsedNanos = 0L
+    private var puckTransitionDurationMs = 0L
     private var lastAcceptedLocationElapsedNanos = 0L
     private val MAX_ACCEPTABLE_PUCK_ACCURACY_METERS = 50f
     private val STATIONARY_HOLD_SPEED_MPS = 1.0f
     private val MIN_MOVING_PUCK_UPDATE_METERS = 0.5f
     private val MAX_PLAUSIBLE_PUCK_SPEED_MPS = 55.0
     private val STALE_CACHED_LOCATION_MAX_AGE_MS = 5000L
+    private val MAX_CALLBACK_LOCATION_AGE_MS = 5000L
 
     enum class LocationReliabilityState {
         NORMAL_LIVE,
@@ -1161,13 +1171,18 @@ class DriverDashboardActivity : AppCompatActivity() {
         ?.firstOrNull { it.latitude != 0.0 && it.longitude != 0.0 }
         ?.let { Point.fromLngLat(it.longitude, it.latitude) }
 
-    // A single period boundary must drive pickup, drop and load calculations.
-    private val MORNING_ATTENDANCE_CUTOFF_HOUR = 11
+    private fun currentTripPeriod(): TripPeriod = TripWindow.currentPeriod()
 
-    private fun isMorningTrip(): Boolean =
-        Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < MORNING_ATTENDANCE_CUTOFF_HOUR
+    private fun isMorningTrip(): Boolean = currentTripPeriod() == TripPeriod.MORNING
 
     private fun isActiveTripMorning(): Boolean = activeTripIsMorning ?: isMorningTrip()
+
+    /** A recovery session is valid only during the TripWindow that started it. */
+    private fun isRecoveryOutsideCurrentWindow(state: ActiveTripState? = null): Boolean {
+        val tripIsMorning = state?.isMorning ?: activeTripIsMorning ?: return false
+        val tripPeriod = if (tripIsMorning) TripPeriod.MORNING else TripPeriod.EVENING
+        return currentTripPeriod() != tripPeriod
+    }
 
     private fun attendanceDate(): String =
         SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()).format(Calendar.getInstance().time)
@@ -1183,7 +1198,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         Location.distanceBetween(location.latitude, location.longitude, source.latitude(), source.longitude(), distance)
         if (distance[0] > ARRIVAL_RADIUS) return
         sourceArrivalRecordedForCurrentTrip = true
-        if (isActiveTripMorning()) FirebaseRepository.updateDropTimesForRoute(
+        // Morning drop is the terminal event of the morning RETURN leg only.
+        if (isActiveTripMorning() && isReverseTripActive) FirebaseRepository.updateDropTimesForRoute(
             assignedRoute?.routeName.orEmpty(), "", true,
             attendanceDate(),
             timeFormat.format(Calendar.getInstance().time)
@@ -1192,7 +1208,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             reverseTripCompleted = true
             currentNavigationEtaText = "Route completed"
             mapboxNavigation?.setNavigationRoutes(emptyList())
-            clearCurrentActiveTripState()
+            completeCurrentTrip()
         }
     }
 
@@ -1249,6 +1265,10 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (stateOf(index) != StopState.UPCOMING) return false
         activeStates()[index] = StopState.SKIPPED
         activeArrivalTimes()[index] = "Skipped"
+        if (nextGlobalStopIndex == index) nextGlobalStopIndex = index + 1
+        missedStopCandidateIndex = -1
+        missedStopConfirmCount = 0
+        previousMissedStopDistanceMeters = Double.NaN
         persistCurrentActiveTripState()
         return true
     }
@@ -1282,6 +1302,56 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (isReverseTripActive) {
             checkActiveTripGeofence(location, stops)
             return
+        }
+
+        // Recover a missed arrival only after reliable forward evidence reaches the
+        // following stop. A single noisy fix or an overshoot followed by a U-turn
+        // cannot skip the current stop; returning within its geofence still arrives.
+        val missedIndex = nextGlobalStopIndex
+        val accuracyOk = !location.hasAccuracy() || location.accuracy <= MAX_ACCEPTABLE_PUCK_ACCURACY_METERS
+        if (!isCurrentlyAtStop && accuracyOk && fullNavigationPoints.size >= 2 &&
+            missedIndex in stops.indices && missedIndex + 1 < stops.size &&
+            stateOf(missedIndex) == StopState.UPCOMING
+        ) {
+            val followingStop = stops[missedIndex + 1]
+            val missedStop = stops[missedIndex]
+            val followingDistance = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude,
+                followingStop.latitude, followingStop.longitude, followingDistance)
+            val missedDistance = FloatArray(1)
+            Location.distanceBetween(location.latitude, location.longitude,
+                missedStop.latitude, missedStop.longitude, missedDistance)
+            val busProjection = projectOntoForwardRoute(Point.fromLngLat(location.longitude, location.latitude), 100_000.0)
+            val followingProjection = projectOntoForwardRoute(
+                Point.fromLngLat(followingStop.longitude, followingStop.latitude), 100_000.0
+            )
+            val clearlyBeyondFollowing = busProjection != null && followingProjection != null &&
+                busProjection.segmentIndex > followingProjection.segmentIndex
+            val reachedFollowingArea = followingDistance[0] <= MISSED_STOP_NEXT_RADIUS_METERS || clearlyBeyondFollowing
+            val movingAwayFromMissedStop = previousMissedStopDistanceMeters.isNaN() ||
+                missedDistance[0] > previousMissedStopDistanceMeters + 2.0
+            if (reachedFollowingArea && movingAwayFromMissedStop) {
+                missedStopConfirmCount = if (missedStopCandidateIndex == missedIndex) missedStopConfirmCount + 1 else 1
+                missedStopCandidateIndex = missedIndex
+                previousMissedStopDistanceMeters = missedDistance[0].toDouble()
+                if (missedStopConfirmCount >= MISSED_STOP_CONFIRM_THRESHOLD &&
+                    transitionToSkipped(missedIndex)
+                ) {
+                    Log.w("STOP_DEBUG", "Missed-stop recovery: stop=${stops[missedIndex].stopName} skipped after " +
+                        "$MISSED_STOP_CONFIRM_THRESHOLD reliable forward fixes; next=$nextGlobalStopIndex")
+                    updateUpcomingStopsUI()
+                    drawPointsOnMap(fullNavigationPoints)
+                    triggerReroute()
+                }
+            } else {
+                missedStopCandidateIndex = -1
+                missedStopConfirmCount = 0
+                previousMissedStopDistanceMeters = missedDistance[0].toDouble()
+            }
+        } else if (!isCurrentlyAtStop) {
+            missedStopCandidateIndex = -1
+            missedStopConfirmCount = 0
+            previousMissedStopDistanceMeters = Double.NaN
         }
 
         // Open attendance as the bus approaches its next stop, not only after it
@@ -1359,12 +1429,22 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // A stop is passed only after leaving its geofence *and* advancing
                 // along the route.  Distance alone accepts a turn-around or GPS
                 // drift away from the stop as a pass.
-                val hasAdvancedForward = arrivedStopRouteSegmentIndex?.let { arrivedSegment ->
-                    projectOntoForwardRoute(
-                        Point.fromLngLat(location.longitude, location.latitude),
-                        1000.0
-                    )?.segmentIndex?.let { it > arrivedSegment } == true
-                } ?: false
+                val currentSegment = projectOntoForwardRoute(
+                    Point.fromLngLat(location.longitude, location.latitude),
+                    1000.0
+                )?.segmentIndex
+
+                if (arrivedStopRouteSegmentIndex == null && departResults[0] <= DEPARTURE_RADIUS) {
+                    arrivedStopRouteSegmentIndex = currentSegment
+                }
+
+                val hasAdvancedForward = when {
+                    arrivedStopRouteSegmentIndex != null && currentSegment != null -> {
+                        currentSegment > arrivedStopRouteSegmentIndex!! || departResults[0] > (DEPARTURE_RADIUS * 2.0)
+                    }
+                    departResults[0] > DEPARTURE_RADIUS -> true
+                    else -> false
+                }
                 Log.d("STOP_DEBUG", "departureCheck: arrivedIndex=$arrivedIndex targetStop=${currentStop.stopName} " +
                         "distance=${departResults[0]} departureExitConditionMet=${departResults[0] > DEPARTURE_RADIUS} " +
                         "hasAdvancedForward=$hasAdvancedForward departureConfirmedCount=$departureConfirmCount " +
@@ -1444,7 +1524,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                         reverseTripCompleted = true
                         currentNavigationEtaText = "Route completed"
                         mapboxNavigation?.setNavigationRoutes(emptyList())
-                        clearCurrentActiveTripState()
+                        completeCurrentTrip()
                     }
                     updateUpcomingStopsUI()
                     drawPointsOnMap(fullNavigationPoints)
@@ -1558,6 +1638,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 val etaString = if (liveArrivedIndex != -1 && arrivalTimes.containsKey(liveArrivedIndex)) {
                     val arrival = arrivalTimes[liveArrivedIndex]
                     "Arrived: $arrival"
+                } else if (isRerouteInFlight) {
+                    "Recalculating..."
                 } else if (displayStopIndex < stops.size) {
                     "${durationRemaining.toInt()} min"
                 } else {
@@ -1566,15 +1648,22 @@ class DriverDashboardActivity : AppCompatActivity() {
                 currentNavigationEtaText = etaString
                 tvEta?.text = etaString
 
-                binding.tvEtaNav.text = if (etaString.startsWith("Arrived:") || etaString == "Route completed") {
-                    etaString
+                if (isRerouteInFlight && liveArrivedIndex == -1) {
+                    binding.tvEstDistance.text = "--"
+                    binding.tvEstDuration.text = "Recalculating..."
+                    binding.tvEtaNav.text = "ETA: Recalculating..."
+                    binding.tvDistanceNav.text = "Distance: --"
                 } else {
-                    "ETA: $etaString"
-                }
-                binding.tvDistanceNav.text = if (distanceRemaining < 1.0) {
-                    "Distance: ${(distanceRemaining * 1000).toInt()} m"
-                } else {
-                    String.format(Locale.getDefault(), "Distance: %.1f km", distanceRemaining)
+                    binding.tvEtaNav.text = if (etaString.startsWith("Arrived:") || etaString == "Route completed") {
+                        etaString
+                    } else {
+                        "ETA: $etaString"
+                    }
+                    binding.tvDistanceNav.text = if (distanceRemaining < 1.0) {
+                        "Distance: ${(distanceRemaining * 1000).toInt()} m"
+                    } else {
+                        String.format(Locale.getDefault(), "Distance: %.1f km", distanceRemaining)
+                    }
                 }
 
                 // Publish the same freshly calculated top ETA immediately. Without
@@ -1591,6 +1680,12 @@ class DriverDashboardActivity : AppCompatActivity() {
                         stop.time = if (isReverseTripActive && isViewingReverseTrip) "NOT VISITED" else "Skipped"
                     } else if (arrivalTime != null) {
                         stop.time = "Arrived: $arrivalTime"
+                    } else if (isRerouteInFlight && liveArrivedIndex == -1) {
+                        if (index >= displayStopIndex) {
+                            stop.time = "ETA: Recalculating..."
+                        } else {
+                            stop.time = "ETA: --"
+                        }
                     } else if (index == displayStopIndex) {
                         val etaTime = Calendar.getInstance().apply { add(Calendar.SECOND, accumulatedSeconds) }.time
                         val etaText = "ETA: ${timeFormat.format(etaTime)}"
@@ -1656,7 +1751,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 fun isPresent(value: String?): Boolean =
                     !value.isNullOrBlank() && value != "--" &&
                             !value.equals("Pending", true) &&
-                            !value.equals("Absent", true) && !value.equals("Leave", true)
+                            !value.equals("Absent", true) && !AttendanceStatus.isShortLeave(value)
 
                 fun hasDropped(value: String?): Boolean =
                     isPresent(value) && !value.equals("School", true) &&
@@ -1851,9 +1946,9 @@ class DriverDashboardActivity : AppCompatActivity() {
     // Accuracy-aware GPS hold: drop noisy stationary wander, keep real movement, and
     // never animate the puck for a full second (Mapbox's default) — overlapping
     // interpolations were sliding the bus backward and sideways between fixes.
-    private fun feedRawLocationToPuck(location: Location) {
+    private fun feedRawLocationToPuck(location: Location): Boolean {
         if (location.hasAccuracy() && location.accuracy > MAX_ACCEPTABLE_PUCK_ACCURACY_METERS) {
-            return
+            return false
         }
         val previous = lastPuckPosition
         val movedMeters = previous?.distanceTo(location) ?: Float.MAX_VALUE
@@ -1866,29 +1961,37 @@ class DriverDashboardActivity : AppCompatActivity() {
                 5f
             )
             if (!isMoving && movedMeters < noiseFloor) {
-                return
+                return false
             }
             if (isMoving && movedMeters < MIN_MOVING_PUCK_UPDATE_METERS) {
-                return
+                return false
             }
             if (lastPuckElapsedNanos > 0L && location.elapsedRealtimeNanos > lastPuckElapsedNanos) {
                 val dtSec = (location.elapsedRealtimeNanos - lastPuckElapsedNanos) / 1_000_000_000.0
                 if (dtSec in 0.05..12.0 && (movedMeters / dtSec) > MAX_PLAUSIBLE_PUCK_SPEED_MPS) {
-                    return
+                    return false
                 }
+                puckTransitionDurationMs = if (isMoving && dtSec in 0.05..12.0) {
+                    (dtSec * 900.0).toLong().coerceIn(250L, 1800L)
+                } else 0L
+            } else {
+                puckTransitionDurationMs = 0L
             }
+        } else {
+            puckTransitionDurationMs = 0L
         }
         updateBusHeading(location, previous, movedMeters)
         lastPuckPosition = Location(location)
         lastPuckElapsedNanos = location.elapsedRealtimeNanos
 
-        val animMs = if (previous == null || !isMoving) 0L else 280L
+        val animMs = if (previous == null || !isMoving) 0L else puckTransitionDurationMs
         navigationLocationProvider.changePosition(
             location = toMapboxLocation(location),
             keyPoints = emptyList(),
             latLngTransitionOptions = { duration = animMs },
             bearingTransitionOptions = { duration = animMs }
         )
+        return true
     }
 
     private fun startLocationUpdates() {
@@ -1915,7 +2018,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                     val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
                     if (accuracy <= UNACCEPTABLE_ACCURACY_THRESHOLD_METERS) {
-                        lastFreshLocationTimestamp = System.currentTimeMillis()
+                        lastFreshLocationTimestamp = location.time.takeIf { it > 0L }
+                            ?: System.currentTimeMillis()
                         val wasLive = isCurrentLocationLive
                         currentLocation = Location(location)
                         isCurrentLocationLive = (accuracy <= LOW_ACCURACY_THRESHOLD_METERS)
@@ -1972,12 +2076,18 @@ class DriverDashboardActivity : AppCompatActivity() {
     /** Single coordinated route-state path. Raw Fused GPS is authoritative. */
     private fun handleLocationUpdate(location: Location) {
         if (!isDutyEnabled) return
+        val now = System.currentTimeMillis()
+        val fixTimestamp = location.time.takeIf { it > 0L && it <= now + 2000L } ?: now
+        if (now - fixTimestamp > MAX_CALLBACK_LOCATION_AGE_MS) {
+            Log.d("LocationDebug", "Dropping delayed location fix age=${now - fixTimestamp}ms")
+            return
+        }
         val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
         if (accuracy > UNACCEPTABLE_ACCURACY_THRESHOLD_METERS) {
             return
         }
 
-        lastFreshLocationTimestamp = System.currentTimeMillis()
+        lastFreshLocationTimestamp = fixTimestamp
         val wasLive = isCurrentLocationLive
         currentRawLocation = Location(location)
         currentLocation = Location(location)
@@ -1993,8 +2103,10 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         // The newest Fused GPS fix is the single visual-puck authority, both before
         // and during navigation. Mapbox matcher callbacks no longer animate it.
-        feedRawLocationToPuck(location)
-        followLiveBusCamera(location)
+        if (feedRawLocationToPuck(location)) {
+            // Camera follows the same accepted visual coordinate as the puck.
+            lastPuckPosition?.let(::followLiveBusCamera)
+        }
 
         if (isNavigating) {
             updateLocationSummary(location)
@@ -2052,7 +2164,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 // bottom sheet. This is framing only; zoom and dashboard UI stay unchanged.
                 .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
                 .build(),
-            MapAnimationOptions.mapAnimationOptions { duration(CAMERA_FOLLOW_ANIMATION_DURATION_MS) }
+            MapAnimationOptions.mapAnimationOptions { duration(puckTransitionDurationMs) }
         )
         Log.d("CAMERA_DEBUG", "followLiveBusCamera applied: gpsAccepted=true followCalled=true " +
                 "cameraBefore=${previous?.let { "${it.latitude},${it.longitude}" }} targetBusLocation=${target.latitude()},${target.longitude()} " +
@@ -2108,6 +2220,10 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun syncTrackingDataToFirestore(location: Location, force: Boolean = false) {
         val driverId = viewModel.currentDriver.value?.driverId ?: return
         if (!isDutyEnabled) return
+        if (currentActiveTripId != null && isRecoveryOutsideCurrentWindow()) {
+            expireRecoveryForNextTripWindow(currentActiveTripId.orEmpty())
+            return
+        }
 
         val now = System.currentTimeMillis()
         val distanceMoved = lastFirestoreLocation?.distanceTo(location) ?: Float.MAX_VALUE
@@ -2495,7 +2611,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             if (driver != null) {
                 // Restore the persisted direction before its stop maps. Otherwise a
                 // recreated dashboard displays a running return trip as forward.
-                if (driver.tripDirection.equals("RETURN", true) && !isReverseTripActive) {
+                if (driver.isNavigating && driver.tripDirection.equals("RETURN", true) && !isReverseTripActive) {
                     isReverseTripActive = true
                     isViewingReverseTrip = true
                     ensureReverseTripStops()
@@ -2688,22 +2804,158 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
     }
 
+    private fun isOrphanedForwardTripAtSource(route: RouteModel, state: ActiveTripState? = null): Boolean {
+        val reverseActive = state?.isReverseTripActive ?: isReverseTripActive
+        if (reverseActive) return false
+
+        val stopsCount = route.stopsList.size
+        val nextIdx = state?.nextStopIndex ?: nextGlobalStopIndex
+        if (stopsCount == 0 || nextIdx < stopsCount) return false
+
+        val loc = currentLocation ?: (if (state != null && state.lastKnownLat != 0.0 && state.lastKnownLng != 0.0) {
+            Location("state_loc").apply {
+                latitude = state.lastKnownLat
+                longitude = state.lastKnownLng
+            }
+        } else null) ?: return false
+
+        val currentPoint = Point.fromLngLat(loc.longitude, loc.latitude)
+        val startPoint = route.pathPoints.firstOrNull()?.let {
+            Point.fromLngLat(it.longitude, it.latitude)
+        } ?: route.stopsList.firstOrNull()?.let {
+            Point.fromLngLat(it.longitude, it.latitude)
+        } ?: return false
+
+        val distToSource = TurfMeasurement.distance(currentPoint, startPoint, TurfConstants.UNIT_METERS)
+        return distToSource <= RESUME_ROUTE_VALIDATION_RADIUS_METERS
+    }
+
+    private fun isForwardCompleted(route: RouteModel, state: ActiveTripState? = null): Boolean {
+        val reverseActive = state?.isReverseTripActive ?: isReverseTripActive
+        val nextIndex = state?.nextStopIndex ?: nextGlobalStopIndex
+        return !reverseActive && route.stopsList.isNotEmpty() && nextIndex >= route.stopsList.size
+    }
+
+    private fun isReturnCompleted(route: RouteModel, state: ActiveTripState? = null): Boolean {
+        val reverseActive = state?.isReverseTripActive ?: isReverseTripActive
+        val direction = state?.tripDirection.orEmpty()
+        if (!reverseActive && !direction.equals("RETURN", true)) return false
+        val nextIndex = state?.nextStopIndex ?: nextGlobalStopIndex
+        val stopCount = if (state != null && state.reverseStopStates.isNotEmpty()) {
+            state.reverseStopStates.size
+        } else if (reverseStops.isNotEmpty()) {
+            reverseStops.size
+        } else {
+            route.stopsList.size
+        }
+        return stopCount > 0 && nextIndex >= stopCount
+    }
+
+    /** A completed Return leg closes the round trip for this configured window. */
+    private fun isCurrentTripWindowCompleted(route: RouteModel): Boolean {
+        val period = currentTripPeriod()
+        if (period == TripPeriod.GAP) return false
+        val driverId = viewModel.currentDriver.value?.driverId.orEmpty()
+        if (driverId.isBlank()) return false
+        val busNumber = binding.tvBusNumberInfo.text.toString().trim()
+            .ifEmpty { viewModel.currentDriver.value?.assignedBus.orEmpty() }
+        val completedReturnTripId = TripRecoveryHelper.generateTripId(
+            driverId = driverId,
+            busNumber = busNumber,
+            routeName = route.routeName,
+            direction = "RETURN",
+            sessionPeriod = period.name
+        )
+        return TripRecoveryHelper.isTripCompleted(this, completedReturnTripId)
+    }
+
+    private fun stateLocation(state: ActiveTripState?): Location? = currentLocation ?: state
+        ?.takeIf { it.lastKnownLat != 0.0 && it.lastKnownLng != 0.0 }
+        ?.let {
+            Location("persisted_trip_location").apply {
+                latitude = it.lastKnownLat
+                longitude = it.lastKnownLng
+            }
+        }
+
+    private fun isNearSource(route: RouteModel, location: Location?): Boolean {
+        val source = originalRouteSource() ?: return false
+        val loc = location ?: return false
+        return TurfMeasurement.distance(
+            Point.fromLngLat(loc.longitude, loc.latitude), source, TurfConstants.UNIT_METERS
+        ) <= RESUME_ROUTE_VALIDATION_RADIUS_METERS
+    }
+
+    private fun isNearLastStop(route: RouteModel, location: Location?): Boolean {
+        val lastStop = route.stopsList.lastOrNull { it.latitude != 0.0 && it.longitude != 0.0 } ?: return false
+        val loc = location ?: return false
+        return TurfMeasurement.distance(
+            Point.fromLngLat(loc.longitude, loc.latitude),
+            Point.fromLngLat(lastStop.longitude, lastStop.latitude),
+            TurfConstants.UNIT_METERS
+        ) <= RESUME_ROUTE_VALIDATION_RADIUS_METERS
+    }
+
+    /** Restores a completed forward leg without restarting it; Start Navigation can now begin Return. */
+    private fun restoreForwardWaitingForReturn(route: RouteModel, state: ActiveTripState) {
+        currentActiveTripId = state.tripId
+        currentRoundTripSessionId = state.roundTripSessionId.ifBlank { state.tripId }
+        assignedRoute = route
+        lockedActiveRoute = route
+        lockedActiveBus = state.busNumber.ifEmpty { binding.tvBusNumberInfo.text.toString().trim() }
+        activeTripIsMorning = state.isMorning
+        isReverseTripActive = false
+        isViewingReverseTrip = false
+        nextGlobalStopIndex = state.nextStopIndex
+        stopStates.clear()
+        state.stopStates.forEach { (index, value) ->
+            stopStates[index] = try { StopState.valueOf(value) } catch (_: Exception) { StopState.UPCOMING }
+        }
+        stopArrivalTimes.clear()
+        stopArrivalTimes.putAll(state.stopArrivalTimes)
+        currentLocation = stateLocation(state)
+        updateTripAddresses(route)
+        updateBottomSheetInfo()
+        Toast.makeText(this, "Forward trip completed. Start Navigation to begin the return trip.", Toast.LENGTH_LONG).show()
+    }
+
     private fun checkAndResumeActiveTrip() {
         if (hasCheckedActiveTripRecovery || isNavigating) return
         val driver = viewModel.currentDriver.value ?: return
-        val routes = RouteRepository.routeList.value
-        if (routes.isNullOrEmpty()) return
-
         val localTrip = TripRecoveryHelper.getActiveTrip(this)
         val activeState = TripRecoveryHelper.resolveConflict(localTrip, driver, this)
 
         if (activeState != null && TripRecoveryHelper.isTripValid(activeState, this)) {
+            if (isRecoveryOutsideCurrentWindow(activeState)) {
+                expireRecoveryForNextTripWindow(activeState.tripId)
+                hasCheckedActiveTripRecovery = true
+                return
+            }
+
+            val routes = RouteRepository.routeList.value
+            if (routes.isNullOrEmpty()) return
             val matchingRoute = routes.find {
                 (activeState.routeId.isNotEmpty() && it.id == activeState.routeId) ||
-                        (activeState.routeName.isNotEmpty() && it.routeName.equals(activeState.routeName, ignoreCase = true)) ||
-                        (!driver.route.isNullOrBlank() && it.routeName.equals(driver.route, ignoreCase = true))
+                (activeState.routeName.isNotEmpty() && it.routeName.equals(activeState.routeName, ignoreCase = true)) ||
+                (!driver.route.isNullOrBlank() && it.routeName.equals(driver.route, ignoreCase = true))
             }
             if (matchingRoute != null) {
+                val location = stateLocation(activeState)
+                val isReturnTrip = activeState.isReverseTripActive || activeState.tripDirection.equals("RETURN", true)
+                if (isReturnTrip && (isReturnCompleted(matchingRoute, activeState) || isNearSource(matchingRoute, location))) {
+                    Log.d("TripIntegrity", "TRIP_RECOVERY_RETURN_RESET: Finalizing completed return trip ${activeState.tripId} at source.")
+                    resetClosedTripState(activeState.tripId)
+                    hasCheckedActiveTripRecovery = true
+                    return
+                }
+
+                if (isForwardCompleted(matchingRoute, activeState) && activeState.isMorning &&
+                    currentTripPeriod() == TripPeriod.MORNING && isNearLastStop(matchingRoute, location)) {
+                    hasCheckedActiveTripRecovery = true
+                    restoreForwardWaitingForReturn(matchingRoute, activeState)
+                    return
+                }
+
                 hasCheckedActiveTripRecovery = true
                 resumeActiveTrip(matchingRoute, activeState)
                 return
@@ -2715,6 +2967,7 @@ class DriverDashboardActivity : AppCompatActivity() {
     private fun resumeActiveTrip(route: RouteModel, state: ActiveTripState) {
         Log.d("TripIntegrity", "TRIP_RESTORE: Resuming active trip: ${state.tripId}, route: ${route.routeName}, stopIndex: ${state.nextStopIndex}, direction: ${state.tripDirection}")
         currentActiveTripId = state.tripId
+        currentRoundTripSessionId = state.roundTripSessionId.ifBlank { state.tripId }
         assignedRoute = route
         lockedActiveRoute = route
         lockedActiveBus = state.busNumber.ifEmpty { binding.tvBusNumberInfo.text.toString().trim() }
@@ -2798,6 +3051,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         val state = ActiveTripState(
             tripId = tripId,
+            roundTripSessionId = currentRoundTripSessionId ?: tripId,
             driverId = driverId,
             routeId = route.id,
             routeName = route.routeName,
@@ -2831,10 +3085,80 @@ class DriverDashboardActivity : AppCompatActivity() {
             Log.d("TripIntegrity", "TRIP_COMPLETED: Finished trip $completedTripId")
         }
         currentActiveTripId = null
+        currentRoundTripSessionId = null
         lockedActiveRoute = null
         lockedActiveBus = null
         activeTripIsMorning = null
         TripRecoveryHelper.clearActiveTrip(this)
+    }
+
+    /** Clears an active recovery session after its configured TripWindow has ended. */
+    private fun expireRecoveryForNextTripWindow(expiredTripId: String) {
+        if (isNavigating) {
+            setNavigationMode(false, clearActiveTrip = false)
+        }
+        resetClosedTripState(expiredTripId)
+        Log.d("TripIntegrity", "TRIP_RECOVERY_EXPIRED: Cleared recovery state after its trip window ended: $expiredTripId")
+    }
+
+    /** Completes a finished Return leg so it cannot be restored as an active trip. */
+    private fun completeCurrentTrip() {
+        val completedTripId = currentActiveTripId.orEmpty()
+        if (isNavigating) {
+            setNavigationMode(false, clearActiveTrip = true)
+        } else {
+            clearCurrentActiveTripState()
+        }
+        resetClosedTripState(completedTripId)
+    }
+
+    /** Removes only active/recovery state; completed-trip history remains registered. */
+    private fun resetClosedTripState(closedTripId: String) {
+        if (closedTripId.isNotBlank()) {
+            TripRecoveryHelper.markTripCompleted(this, closedTripId)
+        }
+        TripRecoveryHelper.clearActiveTrip(this)
+
+        currentActiveTripId = null
+        currentRoundTripSessionId = null
+        lockedActiveRoute = null
+        lockedActiveBus = null
+        activeTripIsMorning = null
+        isReverseTripActive = false
+        isViewingReverseTrip = false
+        reverseTripCompleted = false
+        reverseStops = emptyList()
+        reverseForwardStopIndexes = emptyList()
+        forwardMarkerWasVisitedAtReturnStart.clear()
+        stopArrivalTimes.clear()
+        stopEtaTexts.clear()
+        stopStates.clear()
+        reverseStopArrivalTimes.clear()
+        reverseStopEtaTexts.clear()
+        reverseStopStates.clear()
+        attendancePromptedStops.clear()
+        returnStopDeviations.clear()
+        nextGlobalStopIndex = 0
+        navStartIndex = 0
+        lastArrivedStopIndex = -1
+        isCurrentlyAtStop = false
+        arrivedStopRouteSegmentIndex = null
+        departureCandidateIndex = -1
+        departureConfirmCount = 0
+        sourceArrivalRecordedForCurrentTrip = false
+        currentNavigationEtaText = null
+        currentNavPoints = emptyList()
+        fullNavigationPoints = emptyList()
+        clearTraveledRouteHistory()
+
+        assignedRoute?.let(::updateTripAddresses)
+        updateTripDirectionButton()
+        viewModel.currentDriver.value?.driverId?.let { driverId ->
+            FirebaseRepository.updateDriverTripDirection(driverId, "FORWARD")
+            FirebaseRepository.updateDriverRouteGeometry(
+                driverId, null, null, 0, emptyMap(), false, emptyMap(), emptyList()
+            )
+        }
     }
 
     /** Update the displayed endpoints whenever forward/return direction changes. */
@@ -3235,10 +3559,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             toggleNorthUpMode()
         }
 
-        binding.btnSearchMap.setOnClickListener {
-            ViewUtils.applyClickEffect(it)
-            Toast.makeText(this, "Search feature coming soon", Toast.LENGTH_SHORT).show()
-        }
+        // btnSearchMap removed
+            // ViewUtils.applyClickEffect(it)
+            // Toast.makeText(this, "Search feature coming soon", Toast.LENGTH_SHORT).show()
+        // }
 
         binding.btnSound.setOnClickListener {
             ViewUtils.applyClickEffect(it)
@@ -3272,7 +3596,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         binding.btnStartNavigation.setOnClickListener {
             ViewUtils.applyClickEffect(it)
-            if (isNavigating || currentActiveTripId != null) {
+            if (isNavigating) {
                 Toast.makeText(this, "An active trip is already in progress.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -3343,6 +3667,29 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         if (isResumingTrip) {
             val location = currentLocation
+            if (isRecoveryOutsideCurrentWindow()) {
+                expireRecoveryForNextTripWindow(currentActiveTripId.orEmpty())
+                handleStartNavigation(route)
+                return
+            }
+            if (isReturnCompleted(route)) {
+                completeCurrentTrip()
+                Toast.makeText(this, "Current trip is already completed.", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (isForwardCompleted(route)) {
+                when {
+                    activeTripIsMorning == true && currentTripPeriod() == TripPeriod.MORNING && isNearLastStop(route, location) -> {
+                        beginReverseTrip()
+                    }
+                    else -> Toast.makeText(
+                        this,
+                        "Completed trip is waiting for return at the last stop. It cannot be replaced from this location or time window.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                return
+            }
             if (location == null || !isOnOrNearAssignedRoute(route, location)) {
                 Toast.makeText(this, "Move back to your assigned route or a route stop to resume navigation.", Toast.LENGTH_LONG).show()
                 return
@@ -3351,6 +3698,16 @@ class DriverDashboardActivity : AppCompatActivity() {
             assignedRoute = route
             updateBottomSheetInfo()
             startNavigationAnimation()
+            return
+        }
+
+        if (currentTripPeriod() == TripPeriod.GAP) {
+            Toast.makeText(this, "Navigation can start only during a configured trip window.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (isCurrentTripWindowCompleted(route)) {
+            Toast.makeText(this, "Current trip is already completed.", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -3377,8 +3734,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             driverId = driverId,
             busNumber = busNum,
             routeName = route.routeName,
-            direction = if (isReverseTripActive) "RETURN" else "FORWARD"
+            direction = if (isReverseTripActive) "RETURN" else "FORWARD",
+            sessionPeriod = currentTripPeriod().name
         )
+        currentRoundTripSessionId = currentActiveTripId
         // A new forward navigation session gets one source-arrival/drop event.
         if (!isReverseTripActive) {
             activeTripIsMorning = isMorningTrip()
@@ -3421,8 +3780,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             driverId = driverId,
             busNumber = busNum,
             routeName = assignedRoute?.routeName ?: "",
-            direction = "RETURN"
+            direction = "RETURN",
+            sessionPeriod = if (activeTripIsMorning == true) "MORNING" else "EVENING"
         )
+        currentRoundTripSessionId = currentRoundTripSessionId ?: currentActiveTripId
         // Copying is important: the adapter updates StopItem.time, so reusing the
         // forward objects would overwrite the forward-trip display/history.
         reverseForwardStopIndexes = forwardStops.indices.reversed().toList()
@@ -3451,7 +3812,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         activeFallbackUtteranceId = null
         isReverseTripActive = true
         isViewingReverseTrip = true
-        activeTripIsMorning = false
+        // Return remains in the period selected when the forward leg started.
         viewModel.currentDriver.value?.driverId?.let {
             FirebaseRepository.updateDriverTripDirection(it, "RETURN")
         }
@@ -3526,8 +3887,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             driverId = driverId,
             busNumber = busNum,
             routeName = assignedRoute?.routeName ?: "",
-            direction = "FORWARD"
+            direction = "FORWARD",
+            sessionPeriod = currentTripPeriod().name
         )
+        currentRoundTripSessionId = currentActiveTripId
         voiceSessionId++
         speechApi?.cancel()
         voiceInstructionsPlayer?.clear()
@@ -3568,6 +3931,17 @@ class DriverDashboardActivity : AppCompatActivity() {
         val rvStops = binding.bottomSummaryCard.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvUpcomingStops)
         rvStops?.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
         rvStops?.adapter = stopsAdapter
+
+        binding.bottomSummaryCard.findViewById<View>(R.id.btnViewAllStops)?.setOnClickListener {
+            if (::bottomSheetBehavior.isInitialized) {
+                val nextState = if (bottomSheetBehavior.state == com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED) {
+                    com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
+                } else {
+                    com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                }
+                bottomSheetBehavior.state = nextState
+            }
+        }
     }
 
     private fun setupMapGestures() {
@@ -3666,7 +4040,7 @@ class DriverDashboardActivity : AppCompatActivity() {
         // begin together: competing camera animators caused the forward-start jump.
         // Forward and return now both enter this one explicit follow path.
         mapView?.viewport?.idle()
-        currentLocation?.let(::followLiveBusCamera)
+        lastPuckPosition?.let(::followLiveBusCamera)
         lastAppliedBusScale = -1f
         updateBusModelScaleForZoom()
     }
@@ -4136,8 +4510,9 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 infoBar.setBackgroundColor(Color.parseColor("#0D1B3E"))
                 layoutMapControls.visibility = View.VISIBLE
-                layoutMapControls.animate().translationY(-240f).setDuration(500).start()
-                btnRecenter.animate().translationY(-240f).setDuration(500).start()
+                val navOffset = -android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP, 236f, resources.displayMetrics)
+                layoutMapControls.animate().translationY(navOffset).setDuration(500).start()
+                btnRecenter.animate().translationY(navOffset).setDuration(500).start()
             } else {
                 if (clearActiveTrip) clearCurrentActiveTripState()
                 navigationUiActive = false
@@ -4411,17 +4786,24 @@ class DriverDashboardActivity : AppCompatActivity() {
             mapView?.location?.enabled = false
 
             if (isNavigating) {
-                setNavigationMode(false, reloadStyle)
+                // Turning duty off interrupts navigation but must not complete a
+                // recoverable round-trip session (for example after morning forward).
+                setNavigationMode(false, reloadStyle, clearActiveTrip = false)
             }
 
             mapboxNavigation?.stopTripSession()
 
-            stopArrivalTimes.clear()
-            stopStates.clear()
-            stopEtaTexts.clear()
-            nextGlobalStopIndex = 0
-            attendancePromptedStops.clear()
-            clearTraveledRouteHistory()
+            // Keep in-memory progress when a session is recoverable. The persisted
+            // copy saved above remains the restart source; a genuinely completed
+            // session has already cleared currentActiveTripId.
+            if (currentActiveTripId == null) {
+                stopArrivalTimes.clear()
+                stopStates.clear()
+                stopEtaTexts.clear()
+                nextGlobalStopIndex = 0
+                attendancePromptedStops.clear()
+                clearTraveledRouteHistory()
+            }
 
             viewModel.currentDriver.value?.driverId?.let { driverId ->
                 FirebaseRepository.updateDriverStatus(driverId, "Inactive")
@@ -4591,6 +4973,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     putExtra("DRIVER_NAME", driver?.name ?: "")
                     putExtra("TRIP_ID", tripId)
                     putExtra("TRIP_DIRECTION", if (isReverseTripActive) "RETURN" else "FORWARD")
+                    putExtra("IS_MORNING", isActiveTripMorning())
                 }
                 startActivity(intent)
                 overridePendingTransition(0, 0)

@@ -252,10 +252,15 @@ class EditBusDetailsActivity : AppCompatActivity() {
         // 2. Delete Button Click
         dialogBinding.btnDelete.setOnClickListener {
             utils.ViewUtils.applyClickEffect(it)
-            viewModel.deleteBusFromFleet(originalBusNumber)
-            Toast.makeText(this, "Delete successfully", Toast.LENGTH_SHORT).show()
+            viewModel.deleteBusFromFleet(originalBusNumber) { success ->
+                if (success) {
+                    Toast.makeText(this, "Bus deleted successfully", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this, "Failed to delete bus", Toast.LENGTH_SHORT).show()
+                }
+            }
             alertDialog.dismiss()
-            finish()
         }
 
         alertDialog.show()

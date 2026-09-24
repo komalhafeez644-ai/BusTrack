@@ -50,7 +50,7 @@ class EditAdminProfileActivity : AppCompatActivity() {
                 val empId = document.getString("employeeId") ?: "ADMIN-2024-001"
                 val dept = document.getString("department") ?: "Transport"
                 val phone = document.getString("phone") ?: "+92 300 1234567"
-                val email = document.getString("email") ?: "admin@gmail.com"
+                val email = document.getString("email") ?: auth.currentUser?.email ?: "admin@gmail.com"
                 
                 binding.etFullName.setText(fullName)
                 binding.etEmail.setText(email)

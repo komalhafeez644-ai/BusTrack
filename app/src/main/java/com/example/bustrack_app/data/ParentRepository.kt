@@ -53,12 +53,23 @@ class ParentRepository {
                 return Pair(false, "User not logged in")
             }
             
+            // Roll Number is the user-entered identifier. Resolve it to the existing
+            // student document key so no Firestore IDs or existing links are changed.
+            val studentDocument = db.collection("students")
+                .whereEqualTo("rollNumber", studentId)
+                .limit(1)
+                .get()
+                .await()
+                .documents
+                .firstOrNull()
+                ?: return Pair(false, "No student found with this Roll Number")
+            val studentDocumentId = studentDocument.id
             val requestId = db.collection("trackingRequests").document().id
             
             val request = hashMapOf(
                 "requestId" to requestId,
                 "parentId" to uid,
-                "studentId" to studentId,
+                "studentId" to studentDocumentId,
                 "status" to "PENDING",
                 "trackingEnabled" to false,
                 "trackingState" to "PENDING",
@@ -77,7 +88,7 @@ class ParentRepository {
             FirebaseRepository.sendNotification(
                 recipientRole = "admin",
                 title = "New Tracking Request",
-                message = "Parent $parentName has submitted a tracking request for student ID $studentId.",
+                message = "Parent $parentName has submitted a tracking request for Roll Number $studentId.",
                 type = "TRACKING_REQUEST",
                 relatedId = requestId
             )

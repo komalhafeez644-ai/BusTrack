@@ -19,11 +19,13 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.databinding.ActivityEveningAttendanceBinding
 import com.example.bustrack_app.models.AttendanceRecordModel
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import utils.ViewUtils
+import utils.AttendanceStatus
 import java.util.ArrayList
 
 class EveningAttendanceActivity : AppCompatActivity() {
@@ -53,6 +55,9 @@ class EveningAttendanceActivity : AppCompatActivity() {
         driverName = intent.getStringExtra("DRIVER_NAME") ?: ""
         tripId = intent.getStringExtra("TRIP_ID") ?: ""
         tripDirection = intent.getStringExtra("TRIP_DIRECTION") ?: "FORWARD"
+        // The existing toggle remains available; its initial state follows the
+        // active navigation session rather than a separate clock rule.
+        isMorning = intent.getBooleanExtra("IS_MORNING", true)
 
         setupUI()
         setupListeners()
@@ -66,6 +71,7 @@ class EveningAttendanceActivity : AppCompatActivity() {
         
         // Initial button text
         binding.btnSaveAttendance.text = if (isMorning) "SAVE UPDATE" else "SAVE ATTENDANCE"
+        binding.toggleGroup.check(if (isMorning) R.id.btnMorning else R.id.btnEvening)
     }
 
     private fun setupListeners() {
@@ -211,13 +217,17 @@ class EveningAttendanceActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = filteredList[position]
             holder.tvName.text = item.studentName
-            holder.tvId.text = "ID: ${item.studentId} • ${item.stop}"
+            val rollNumber = StudentRepository.studentList.value
+                ?.firstOrNull { it.id == item.studentId }
+                ?.rollNumber
+                .orEmpty()
+            holder.tvId.text = "${rollNumber.ifBlank { "N/A" }} • ${item.stop}"
             
             val rawStatus = if (isMorning) {
                 item.morningPickup
             } else {
                 // For evening, if drop is marked but pickup is still pending/school, show the drop status
-                if (item.eveningDrop.contains(":") || item.eveningDrop == "Absent" || item.eveningDrop == "Leave") {
+                if (item.eveningDrop.contains(":") || item.eveningDrop == "Absent" || AttendanceStatus.isShortLeave(item.eveningDrop)) {
                     item.eveningDrop
                 } else {
                     item.eveningPickup
@@ -228,7 +238,7 @@ class EveningAttendanceActivity : AppCompatActivity() {
             val displayStatus = when {
                 rawStatus.equals("Pending", true) || rawStatus.equals("--", true) || rawStatus.equals("Pending Drop", true) || rawStatus.isBlank() -> "Pending"
                 rawStatus.equals("Absent", true) -> "Absent"
-                rawStatus.equals("Leave", true) -> "Leave"
+                AttendanceStatus.isShortLeave(rawStatus) -> "Leave"
                 else -> "Present" // Any other value (like a time) is treated as Present
             }
             
@@ -257,7 +267,7 @@ class EveningAttendanceActivity : AppCompatActivity() {
 
             holder.btnLeave.setOnClickListener {
                 ViewUtils.applyClickEffect(it)
-                updateAttendance(item, "Leave")
+                updateAttendance(item, AttendanceStatus.SHORT_LEAVE)
             }
 
             holder.btnEdit.setOnClickListener {
@@ -267,21 +277,24 @@ class EveningAttendanceActivity : AppCompatActivity() {
         }
 
         private fun updateAttendance(item: AttendanceRecordModel, newStatus: String) {
+            val storedStatus = AttendanceStatus.forStorage(newStatus)
             val markTimestamp = System.currentTimeMillis()
-            val currentTime = if (newStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(markTimestamp)) else newStatus
-            val attendanceType = if (isMorning) "MORNING_PICKUP" else "EVENING_DROP"
-            val attendanceStatus = when (newStatus) {
-                "Present" -> if (isMorning) "PICKED_UP" else "DROPPED_OFF"
+            val currentTime = if (storedStatus == "Present") java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(markTimestamp)) else storedStatus
+            // This screen records the manual pickup at the college.  The later
+            // geofence event is the only code path that writes an Evening Drop.
+            val attendanceType = if (isMorning) "MORNING_PICKUP" else "EVENING_PICKUP"
+            val attendanceStatus = when (storedStatus) {
+                "Present" -> "PICKED_UP"
                 "Absent" -> "ABSENT"
-                "Leave" -> "LEAVE"
+                AttendanceStatus.SHORT_LEAVE -> "S_LEAVE"
                 else -> newStatus.uppercase(java.util.Locale.getDefault())
             }
 
             val updatedItem = if (isMorning) {
                 // Morning: Pickup is marked now, Drop is pending until bus reaches school.
                 item.copy(
-                    morningPickup = currentTime,
-                    morningDrop = if (newStatus == "Absent" || newStatus == "Leave") newStatus else (if (newStatus == "Pending") "--" else "Pending Drop"),
+                    morningPickup = preservedPickup(item.morningPickup, storedStatus, currentTime),
+                    morningDrop = if (storedStatus == "Absent" || AttendanceStatus.isShortLeave(storedStatus) || storedStatus == "Pending") "--" else pendingDrop(item.morningDrop),
                     busId = if (item.busId.isNotEmpty()) item.busId else this@EveningAttendanceActivity.busId,
                     routeId = if (item.routeId.isNotEmpty()) item.routeId else this@EveningAttendanceActivity.routeId,
                     stopId = if (item.stopId.isNotEmpty()) item.stopId else item.stop,
@@ -298,8 +311,8 @@ class EveningAttendanceActivity : AppCompatActivity() {
             } else {
                 // Evening: Pickup is marked now (at school), Drop is pending until bus reaches home stop.
                 item.copy(
-                    eveningPickup = currentTime,
-                    eveningDrop = if (newStatus == "Absent" || newStatus == "Leave") newStatus else (if (newStatus == "Pending") "--" else "Pending Drop"),
+                    eveningPickup = preservedPickup(item.eveningPickup, storedStatus, currentTime),
+                    eveningDrop = if (storedStatus == "Absent" || AttendanceStatus.isShortLeave(storedStatus) || storedStatus == "Pending") "--" else pendingDrop(item.eveningDrop),
                     busId = if (item.busId.isNotEmpty()) item.busId else this@EveningAttendanceActivity.busId,
                     routeId = if (item.routeId.isNotEmpty()) item.routeId else this@EveningAttendanceActivity.routeId,
                     stopId = if (item.stopId.isNotEmpty()) item.stopId else item.stop,
@@ -326,7 +339,7 @@ class EveningAttendanceActivity : AppCompatActivity() {
                     com.example.bustrack_app.data.FirebaseRepository.notifyParentsOfAttendance(
                         item.studentId,
                         item.studentName,
-                        newStatus,
+                        storedStatus,
                         item.date,
                         isMorning
                     )
@@ -340,15 +353,30 @@ class EveningAttendanceActivity : AppCompatActivity() {
             }
         }
 
+        /** A later edit must not replace the original successful pickup timestamp. */
+        private fun preservedPickup(existing: String, newStatus: String, replacement: String): String =
+            if (newStatus == "Present" && isRecordedPickup(existing)) existing else replacement
+
+        private fun isRecordedPickup(value: String): Boolean =
+            value.contains(":") || value.equals("Present", true) ||
+                    value.equals("School", true) || value.equals("En Route", true)
+
+        private fun pendingDrop(existing: String): String =
+            if (existing.contains(":")) existing else "Pending Drop"
+
         private fun updateStatusUI(holder: ViewHolder, status: String) {
             val displayStatus = when {
                 status.equals("Pending", true) -> "Pending"
                 status.equals("Absent", true) -> "Absent"
-                status.equals("Leave", true) -> "Leave"
+                AttendanceStatus.isShortLeave(status) -> "Leave"
                 else -> "Present"
             }
             
-            holder.tvStatusBadge.text = if (displayStatus == "Present" && !status.equals("Present", true)) status.uppercase() else displayStatus.uppercase()
+            holder.tvStatusBadge.text = when {
+                displayStatus == "Leave" -> AttendanceStatus.SHORT_LEAVE
+                displayStatus == "Present" && !status.equals("Present", true) -> status.uppercase()
+                else -> displayStatus.uppercase()
+            }
             
             if (displayStatus == "Present") {
                 holder.tvStatusBadge.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#DCFCE7"))

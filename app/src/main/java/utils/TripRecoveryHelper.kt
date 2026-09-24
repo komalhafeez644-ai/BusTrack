@@ -16,9 +16,14 @@ object TripRecoveryHelper {
     private const val PREFS_COMPLETED = "completed_trips_prefs"
     private const val KEY_ACTIVE_TRIP = "key_active_trip_state"
     private const val KEY_COMPLETED_IDS = "key_completed_trip_ids"
-    private const val TRIP_TIMEOUT_MS = 12 * 60 * 60 * 1000L // 12 hours
 
     private val gson = Gson()
+
+    private fun isMorningSession(tripId: String): Boolean = when {
+        tripId.contains("_MORNING_", ignoreCase = true) -> true
+        tripId.contains("_EVENING_", ignoreCase = true) -> false
+        else -> TripWindow.currentPeriod() == TripPeriod.MORNING
+    }
 
     /**
      * Generates a deterministic stable trip ID for a driver's trip session.
@@ -29,14 +34,16 @@ object TripRecoveryHelper {
         busNumber: String = "",
         routeName: String,
         direction: String,
-        timestamp: Long = System.currentTimeMillis()
+        timestamp: Long = System.currentTimeMillis(),
+        sessionPeriod: String = ""
     ): String {
         val date = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date(timestamp))
         val cleanRoute = routeName.trim().replace(" ", "_").replace("/", "_").replace("-", "_")
         val cleanDriver = driverId.trim().replace(" ", "_")
         val cleanBus = busNumber.trim().replace(" ", "_").replace("/", "_").replace("-", "_")
         val busPart = if (cleanBus.isNotEmpty()) "${cleanBus}_" else ""
-        return "TRIP_${cleanDriver}_${busPart}${cleanRoute}_${date}_${direction.uppercase()}"
+        val periodPart = sessionPeriod.trim().uppercase().takeIf { it.isNotEmpty() }?.let { "_${it}" }.orEmpty()
+        return "TRIP_${cleanDriver}_${busPart}${cleanRoute}_${date}${periodPart}_${direction.uppercase()}"
     }
 
     /**
@@ -130,7 +137,7 @@ object TripRecoveryHelper {
     }
 
     /**
-     * Validates whether a trip state is fresh, unfinished, not completed, and belongs to today.
+     * Validates whether a trip state is unfinished, not completed, and belongs to today.
      */
     fun isTripValid(state: ActiveTripState?, context: Context? = null): Boolean {
         if (state == null) return false
@@ -144,14 +151,8 @@ object TripRecoveryHelper {
             return false
         }
 
-        val now = System.currentTimeMillis()
-        val elapsed = now - state.lastUpdated
-        if (elapsed > TRIP_TIMEOUT_MS) {
-            Log.d(TAG, "TRIP_INVALIDATED: Trip expired: elapsed ${elapsed / 1000 / 60} minutes > 12h")
-            return false
-        }
-
         // Check if calendar date matches today
+        val now = System.currentTimeMillis()
         val todayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date(now))
         val tripDateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date(state.tripStartTime))
         if (todayStr != tripDateStr) {
@@ -248,12 +249,13 @@ object TripRecoveryHelper {
 
             val remoteState = ActiveTripState(
                 tripId = tripId,
+                roundTripSessionId = tripId,
                 driverId = remoteDriver.driverId,
                 routeId = remoteDriver.activeRouteId,
                 routeName = rName,
                 busNumber = remoteDriver.assignedBus.orEmpty(),
                 tripDirection = direction,
-                isMorning = direction.equals("FORWARD", true),
+                isMorning = isMorningSession(tripId),
                 isDutyEnabled = remoteDriver.status.equals("ON DUTY", true) || remoteDriver.status.equals("Active", true),
                 isNavigating = true,
                 tripStatus = "ACTIVE",

@@ -19,7 +19,6 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.ParentRepository
-import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.StudentModel
@@ -34,9 +33,6 @@ import com.google.android.material.textfield.TextInputLayout
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.mapbox.geojson.Point
-import com.mapbox.geojson.Feature
-import com.mapbox.geojson.FeatureCollection
-import com.mapbox.geojson.LineString
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
@@ -48,13 +44,6 @@ import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
-import com.mapbox.maps.extension.style.layers.addLayer
-import com.mapbox.maps.extension.style.layers.generated.lineLayer
-import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
-import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
-import com.mapbox.maps.extension.style.sources.addSource
-import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
-import com.mapbox.maps.extension.style.sources.getSource
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -89,6 +78,7 @@ class ParentDashboardActivity : AppCompatActivity() {
     private var unavailableDialog: Dialog? = null
     private var infoBottomSheetDialog: BottomSheetDialog? = null
     private var isUnavailablePopupDismissed = false
+    private var isLiveTrackingObserved = false
     private val studentListeners = mutableMapOf<String, ListenerRegistration>()
     private val approvedStudents = mutableMapOf<String, StudentModel>()
     private val driverMarkers = mutableMapOf<String, com.mapbox.maps.plugin.annotation.generated.PointAnnotation>()
@@ -97,9 +87,9 @@ class ParentDashboardActivity : AppCompatActivity() {
     // deleting+recreating every marker on every 1-3s Firestore update was the source of
     // the bus icon visibly flickering/blinking on the Parent dashboard map.
     private var driverPointAnnotationManager: com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager? = null
-    private val parentRouteSourceId = "parent-approved-routes-source"
-    private val parentRouteLayerId = "parent-approved-routes-layer"
-    private var lastApprovedActiveDrivers: List<DriverModel> = emptyList()
+    private var placeholderAnnotationManager: com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager? = null
+    private var isMapStyleReady = false
+    private var pendingActiveDrivers: List<DriverModel> = emptyList()
 
     private val busLocations = listOf(
         Point.fromLngLat(67.0011, 24.8607) to "Bus-01",
@@ -116,17 +106,12 @@ class ParentDashboardActivity : AppCompatActivity() {
         // Initialize Mapbox Map
         mapView = findViewById(R.id.mapView)
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
+            isMapStyleReady = true
             // Add bus icon to map style
             bitmapFromDrawableRes(this@ParentDashboardActivity, R.drawable.ic_marker_bus)?.let {
                 style.addImage("bus-icon", it)
             }
-            renderApprovedActiveRoutes(lastApprovedActiveDrivers)
-        }
-
-        // Route changes are reflected only for drivers which the parent is already
-        // authorized to track; this observer does not broaden tracking access.
-        RouteRepository.routeList.observe(this) {
-            renderApprovedActiveRoutes(lastApprovedActiveDrivers)
+            if (pendingActiveDrivers.isNotEmpty()) updateMapMarkers(pendingActiveDrivers)
         }
 
         // START DATA STREAM IMMEDIATELY
@@ -206,6 +191,12 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun observeLiveTracking() {
+        // Tracking-request snapshots can be delivered more than once.  LiveData keeps
+        // every distinct observer lambda, so registering here repeatedly caused the
+        // same location update to redraw/animate the Parent map multiple times.
+        if (isLiveTrackingObserved) return
+        isLiveTrackingObserved = true
+
         liveTrackingViewModel.activeDrivers.observe(this) { drivers ->
             updateMapMarkers(drivers)
         }
@@ -273,8 +264,13 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateMapMarkers(drivers: List<DriverModel>) {
-        lastApprovedActiveDrivers = drivers
-        renderApprovedActiveRoutes(drivers)
+        // The real-time snapshot may arrive before the Mapbox style and bus icon
+        // are installed. Retain it and render after style readiness, matching Admin.
+        pendingActiveDrivers = drivers
+        if (!isMapStyleReady) return
+
+        // Remove static empty-state buses once an approved live bus is rendered.
+        placeholderAnnotationManager?.deleteAll()
         // Reuse one PointAnnotationManager for the whole activity lifetime instead of
         // creating a new one on every update (was happening every 1-3s on every live
         // location push, a real source of visible flicker on its own).
@@ -363,10 +359,12 @@ class ParentDashboardActivity : AppCompatActivity() {
     }
 
     private fun setupPlaceholderAnnotations() {
-        lastApprovedActiveDrivers = emptyList()
-        renderApprovedActiveRoutes(emptyList())
-        val annotationApi = mapView?.annotations
-        val pointAnnotationManager = annotationApi?.createPointAnnotationManager() ?: return
+        if (!isMapStyleReady) return
+        val pointAnnotationManager = placeholderAnnotationManager
+            ?: mapView?.annotations?.createPointAnnotationManager()?.also {
+                placeholderAnnotationManager = it
+            }
+            ?: return
         pointAnnotationManager.deleteAll()
 
         busLocations.forEach { (point, busId) ->
@@ -390,49 +388,6 @@ class ParentDashboardActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Draws complete assigned routes for the already-filtered, approved active buses.
-     * It deliberately uses the stored route path rather than a bus-to-next-stop
-     * segment, so parents can see the whole journey. Return trips reverse a copied
-     * point list, leaving the shared forward route untouched.
-     */
-    private fun renderApprovedActiveRoutes(drivers: List<DriverModel>) {
-        val routes = RouteRepository.routeList.value.orEmpty()
-        val features = drivers.mapNotNull { driver ->
-            val route = routes.firstOrNull {
-                it.routeName == driver.route || it.routeCode == driver.route ||
-                        it.id == driver.route || it.busNo == driver.assignedBus
-            } ?: return@mapNotNull null
-            val forwardPoints = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
-            if (forwardPoints.size < 2) return@mapNotNull null
-            val journeyPoints = if (driver.tripDirection.equals("RETURN", true)) {
-                forwardPoints.asReversed()
-            } else {
-                forwardPoints
-            }
-            Feature.fromGeometry(LineString.fromLngLats(journeyPoints))
-        }
-        val collection = FeatureCollection.fromFeatures(features)
-
-        mapView?.mapboxMap?.getStyle { style ->
-            if (!style.styleSourceExists(parentRouteSourceId)) {
-                style.addSource(geoJsonSource(parentRouteSourceId) { featureCollection(collection) })
-            } else {
-                (style.getSource(parentRouteSourceId) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
-                    ?.featureCollection(collection)
-            }
-            if (!style.styleLayerExists(parentRouteLayerId)) {
-                style.addLayer(lineLayer(parentRouteLayerId, parentRouteSourceId) {
-                    lineColor("#2563EB")
-                    lineWidth(5.0)
-                    lineOpacity(0.85)
-                    lineCap(LineCap.ROUND)
-                    lineJoin(LineJoin.ROUND)
-                })
-            }
-        }
-    }
-
     private fun updateDriverCard(driver: DriverModel) {
         val card = findViewById<View>(R.id.driverCard)
         if (card?.visibility == View.GONE) {
@@ -443,20 +398,11 @@ class ParentDashboardActivity : AppCompatActivity() {
         }
 
         // Find student(s) for this bus/route
-        val passengerNames = approvedStudents.values
-            .filter { it.route == driver.route }
-            .joinToString(", ") { it.name }
-
         findViewById<TextView>(R.id.tvDriverName)?.text = driver.name
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "Route"}"
         
         val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
-        val statusText = if (passengerNames.isNotEmpty()) {
-            "Passenger: $passengerNames • $trip"
-        } else {
-            "Active Status: ${driver.status} • $trip"
-        }
-        findViewById<TextView>(R.id.tvRouteDetail)?.text = statusText
+        findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status} • $trip"
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
@@ -594,7 +540,7 @@ class ParentDashboardActivity : AppCompatActivity() {
         // RESTORE FORMATTING RULES
         FormUtils.setupCnicFormatting(etCnic)
         FormUtils.setupPhoneFormatting(etPhone)
-        FormUtils.setupStudentIdFormatting(etStudentId)
+        FormUtils.setupRollNumberFormatting(etStudentId)
 
         etParentName.addTextChangedListener(object : TextWatcher {
             private var isUpdating = false
@@ -626,8 +572,8 @@ class ParentDashboardActivity : AppCompatActivity() {
             
             if (etChildName.text.isNullOrEmpty()) { tilChildName.error = "Required"; isValid = false } else tilChildName.error = null
 
-            val studentId = etStudentId.text.toString()
-            if (studentId.length < 5 || !studentId.contains("-")) { tilStudentId.error = "Format: ABC-123"; isValid = false } else tilStudentId.error = null
+            val studentId = etStudentId.text.toString().trim()
+            if (!FormUtils.isValidRollNumber(studentId)) { tilStudentId.error = "Roll Number required"; isValid = false } else tilStudentId.error = null
 
             if (actvRelationship.text.isNullOrEmpty()) { tilRelationship.error = "Required"; isValid = false } else tilRelationship.error = null
 

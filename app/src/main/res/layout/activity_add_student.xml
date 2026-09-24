@@ -181,10 +181,10 @@
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Student ID"
+                        android:hint="Roll Number"
                         android:textColorHint="#666666"
                         app:hintTextColor="@color/primaryBlue"
-                        app:placeholderText="GCW-12345"
+                        app:placeholderText="Enter Roll Number"
                         app:placeholderTextColor="#D1D1D6"
                         app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
                         app:boxStrokeColor="@color/box_stroke_selector"
@@ -198,7 +198,6 @@
                             android:id="@+id/etEmployeeId"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:maxLength="10"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 

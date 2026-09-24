@@ -136,6 +136,13 @@ object FormUtils {
         })
     }
 
+    fun setupRollNumberFormatting(editText: EditText) {
+        // Roll Number is now a free-form text field.
+        // We remove existing restrictions to allow any combination of characters.
+    }
+
+    fun isValidRollNumber(value: String): Boolean = value.isNotBlank()
+
     /**
      * Formats Employee ID as ABC-123
      */
@@ -153,7 +160,7 @@ object FormUtils {
 
                 for (i in str.indices) {
                     formatted.append(str[i])
-                    if (i == 2 && str.length > 3) {
+                    if (i == 2  && str.length > 3) {
                         formatted.append("-")
                     }
                 }

@@ -58,7 +58,7 @@ class AddStudentActivity : AppCompatActivity() {
     }
 
     private fun setupFormFormatting() {
-        FormUtils.setupStudentIdFormatting(binding.etEmployeeId)
+        FormUtils.setupRollNumberFormatting(binding.etEmployeeId)
         FormUtils.setupTitleCaseInput(binding.etFullName)
         FormUtils.setupTitleCaseInput(binding.etParentName)
         FormUtils.setupPhoneFormatting(binding.etEmergencyContact)
@@ -92,7 +92,12 @@ class AddStudentActivity : AppCompatActivity() {
             "5th SEM",
             "6th SEM",
             "7th SEM",
-            "8th SEM"
+            "8th SEM",
+            "ICS",
+            "Pre-ENG",
+            "Pre-MED",
+            "Stats",
+            "Arts"
         )
         val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, semesters)
         binding.etSection.setAdapter(adapter)
@@ -165,8 +170,8 @@ class AddStudentActivity : AppCompatActivity() {
             binding.etFullName.error = "Name required"
             return false
         }
-        if (id.isEmpty()) {
-            binding.etEmployeeId.error = "ID required"
+        if (!FormUtils.isValidRollNumber(id)) {
+            binding.etEmployeeId.error = "Roll Number required"
             return false
         }
         if (!FormUtils.isValidPhone(phone)) {
@@ -206,6 +211,7 @@ class AddStudentActivity : AppCompatActivity() {
 
         val student = StudentModel(
             id = binding.etEmployeeId.text.toString().trim(),
+            rollNumber = binding.etEmployeeId.text.toString().trim(),
             name = binding.etFullName.text.toString().trim(),
             grade = combinedGrade,
             location = binding.etPickupAddress.text.toString().trim(),

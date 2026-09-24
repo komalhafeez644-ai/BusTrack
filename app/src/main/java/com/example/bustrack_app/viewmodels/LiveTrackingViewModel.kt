@@ -8,6 +8,8 @@ import com.example.bustrack_app.models.*
 import android.location.Location
 import java.text.SimpleDateFormat
 import java.util.*
+import utils.TripPeriod
+import utils.TripWindow
 
 class LiveTrackingViewModel : ViewModel() {
 
@@ -185,16 +187,15 @@ class LiveTrackingViewModel : ViewModel() {
         val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
         val records = todayAttendance.filter { it.route == routeName && it.date == today }
 
-        // Logic for Morning/Evening
-        val calendar = Calendar.getInstance()
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
-        val isMorning = hour < 14 // Before 2 PM is morning
+        // Use the same period definition as navigation and attendance.
+        val period = TripWindow.currentPeriod()
+        val isMorning = period == TripPeriod.MORNING
 
         if (isMorning) {
             // Morning: Count those marked Present (picked up)
             val presentCount = records.count { it.morningPickup.equals("Present", true) }
             driver.load = "$presentCount/$totalOnRoute"
-        } else {
+        } else if (period == TripPeriod.EVENING) {
             // Evening: Start with total attendance, subtract dropped
             val eveningAttendanceCount = records.count { it.eveningPickup.equals("Present", true) }
             val droppedCount = records.count { it.eveningDrop.equals("Dropped", true) || it.eveningDrop.equals("Present", true) } // Assuming "Dropped" means off the bus
@@ -203,6 +204,9 @@ class LiveTrackingViewModel : ViewModel() {
             // So load is (Evening Attendance) - (Dropped)
             val currentLoad = eveningAttendanceCount - droppedCount
             driver.load = "${if (currentLoad < 0) 0 else currentLoad}/$eveningAttendanceCount"
+        } else {
+            // The gap period has no inferred attendance period.
+            driver.load = "0/$totalOnRoute"
         }
     }
 

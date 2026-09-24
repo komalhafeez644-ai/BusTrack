@@ -95,9 +95,9 @@
     <FrameLayout
         android:id="@+id/bottomSheet"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         app:behavior_hideable="false"
-        app:behavior_peekHeight="260dp"
+        app:behavior_peekHeight="220dp"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
         <include layout="@layout/layout_navigation_bottom_sheet" />

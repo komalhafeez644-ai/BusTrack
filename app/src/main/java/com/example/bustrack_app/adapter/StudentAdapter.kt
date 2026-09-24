@@ -35,7 +35,7 @@ class StudentAdapter(
         fun bind(student: StudentModel) {
             itemBinding.txtStudentName.text = student.name
             itemBinding.txtGrade.text = student.grade
-            itemBinding.txtStudentId.text = "ID: ${student.id}"
+            itemBinding.txtStudentId.text = student.rollNumber.ifBlank { "N/A" }
 
             val route = student.route ?: ""
 

@@ -14,9 +14,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.StudentRepository
 import com.example.bustrack_app.models.AttendanceRecordModel
 import com.example.bustrack_app.viewmodels.AttendanceViewModel
 import utils.NavigationUtils
+import utils.AttendanceStatus
 import java.util.*
 
 class AttendanceActivity : AppCompatActivity() {
@@ -94,9 +96,13 @@ class AttendanceActivity : AppCompatActivity() {
         val spinnerEveningDrop = dialog.findViewById<Spinner>(R.id.spinnerEveningDrop)
         val btnSave = dialog.findViewById<Button>(R.id.btnSaveAttendance)
 
-        tvName.text = "${record.studentName} (${record.studentId})"
+        val rollNumber = StudentRepository.studentList.value
+            ?.firstOrNull { it.id == record.studentId }
+            ?.rollNumber
+            .orEmpty()
+        tvName.text = "${record.studentName} (${rollNumber.ifBlank { "N/A" }})"
 
-        val statusOptions = arrayOf("Pending", "Present", "Absent", "Skipped", "--")
+        val statusOptions = arrayOf("Pending", "Present", "Absent", AttendanceStatus.SHORT_LEAVE, "Skipped", "--")
         val statusAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, statusOptions)
         
         spinnerMorningPickup.adapter = statusAdapter
@@ -105,17 +111,17 @@ class AttendanceActivity : AppCompatActivity() {
         spinnerEveningDrop.adapter = statusAdapter
 
         // Set current values
-        spinnerMorningPickup.setSelection(statusOptions.indexOf(record.morningPickup).let { if (it == -1) 0 else it })
-        spinnerMorningDrop.setSelection(statusOptions.indexOf(record.morningDrop).let { if (it == -1) 0 else it })
-        spinnerEveningPickup.setSelection(statusOptions.indexOf(record.eveningPickup).let { if (it == -1) 0 else it })
-        spinnerEveningDrop.setSelection(statusOptions.indexOf(record.eveningDrop).let { if (it == -1) 0 else it })
+        spinnerMorningPickup.setSelection(statusOptions.indexOf(AttendanceStatus.forDisplay(record.morningPickup)).let { if (it == -1) 0 else it })
+        spinnerMorningDrop.setSelection(statusOptions.indexOf(AttendanceStatus.forDisplay(record.morningDrop)).let { if (it == -1) 0 else it })
+        spinnerEveningPickup.setSelection(statusOptions.indexOf(AttendanceStatus.forDisplay(record.eveningPickup)).let { if (it == -1) 0 else it })
+        spinnerEveningDrop.setSelection(statusOptions.indexOf(AttendanceStatus.forDisplay(record.eveningDrop)).let { if (it == -1) 0 else it })
 
         btnSave.setOnClickListener {
             val updatedRecord = record.copy(
-                morningPickup = spinnerMorningPickup.selectedItem.toString(),
-                morningDrop = spinnerMorningDrop.selectedItem.toString(),
-                eveningPickup = spinnerEveningPickup.selectedItem.toString(),
-                eveningDrop = spinnerEveningDrop.selectedItem.toString()
+                morningPickup = AttendanceStatus.forStorage(spinnerMorningPickup.selectedItem.toString()),
+                morningDrop = AttendanceStatus.forStorage(spinnerMorningDrop.selectedItem.toString()),
+                eveningPickup = AttendanceStatus.forStorage(spinnerEveningPickup.selectedItem.toString()),
+                eveningDrop = AttendanceStatus.forStorage(spinnerEveningDrop.selectedItem.toString())
             )
             viewModel.saveRecord(updatedRecord)
             dialog.dismiss()
@@ -273,15 +279,19 @@ class AttendanceActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = filteredList[position]
-            holder.tvStudentId.text = item.studentId
+            val rollNumber = StudentRepository.studentList.value
+                ?.firstOrNull { it.id == item.studentId }
+                ?.rollNumber
+                .orEmpty()
+            holder.tvStudentId.text = rollNumber.ifBlank { "N/A" }
             holder.tvName.text = item.studentName
             holder.tvRoute.text = item.route
             holder.tvStop.text = item.stop
             
-            holder.tvMorningPickup.text = item.morningPickup
-            holder.tvMorningDrop.text = item.morningDrop
-            holder.tvEveningPickup.text = item.eveningPickup
-            holder.tvEveningDrop.text = item.eveningDrop
+            holder.tvMorningPickup.text = AttendanceStatus.forDisplay(item.morningPickup)
+            holder.tvMorningDrop.text = AttendanceStatus.forDisplay(item.morningDrop)
+            holder.tvEveningPickup.text = AttendanceStatus.forDisplay(item.eveningPickup)
+            holder.tvEveningDrop.text = AttendanceStatus.forDisplay(item.eveningDrop)
             holder.tvDate.text = item.date
 
             // Avatar initial

@@ -70,7 +70,7 @@ class StudentDetailsActivity : AppCompatActivity() {
     private fun observeData() {
         viewModel.studentDetails.observe(this) { data ->
             binding.tvStudentName.text = data.name
-            binding.tvStudentId.text = "STUDENT ID: ${data.id}"
+            binding.tvStudentId.text = "ROLL NUMBER: ${data.rollNumber.ifBlank { "Not set" }}"
             binding.tvBadgeSemester.text = data.grade
             
             // Handle Unassigned cases for Transportation Details

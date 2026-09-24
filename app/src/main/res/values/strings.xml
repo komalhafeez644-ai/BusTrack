@@ -180,8 +180,8 @@
     <string name="child_name_label">Child Name</string>
     <string name="child_name_hint">Enter child\'s full name</string>
     <string name="relationship_label">Relationship with Child</string>
-    <string name="student_id_label">Student ID</string>
-    <string name="student_id_hint">Enter Student ID</string>
+    <string name="student_id_label">Roll Number</string>
+    <string name="student_id_hint">12345</string>
     <string name="select_relationship">Select Relationship</string>
     <string name="continue_label">Continue</string>
     <string name="request_submitted_title">Request Submitted!</string>

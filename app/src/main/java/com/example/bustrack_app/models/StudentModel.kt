@@ -2,6 +2,7 @@ package com.example.bustrack_app.models
 
 data class StudentModel(
     val id: String = "",                  // e.g., #SR-9921 / ST-2045
+    val rollNumber: String = "",           // Editable five-digit student roll number
     val name: String = "",                // e.g., Elena Rodriguez / Ali Hassan
     val grade: String = "",               // e.g., Grade 11 / BS IT 7th semester
     val location: String = "",            // e.g., Street #4, Sector 15

@@ -445,19 +445,6 @@
                     android:scaleType="centerInside"
                     android:src="@drawable/ic_compass" />
 
-                <!-- Search -->
-                <ImageButton
-                    android:id="@+id/btnSearchMap"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
-                    android:layout_marginBottom="12dp"
-                    android:background="@drawable/bg_map_button_theme"
-                    android:elevation="8dp"
-                    android:padding="16dp"
-                    android:scaleType="centerInside"
-                    android:src="@drawable/search"
-                    app:tint="@color/white" />
-
                 <!-- Sound -->
                 <ImageButton
                     android:id="@+id/btnSound"
@@ -533,12 +520,12 @@
         <FrameLayout
             android:id="@+id/bottomSummaryCard"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:background="@android:color/transparent"
             android:visibility="gone"
             tools:visibility="visible"
             app:behavior_hideable="true"
-            app:behavior_peekHeight="140dp"
+            app:behavior_peekHeight="220dp"
             app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
             <include layout="@layout/layout_navigation_bottom_sheet" />
         </FrameLayout>

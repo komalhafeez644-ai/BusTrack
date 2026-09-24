@@ -148,8 +148,7 @@ class ParentProfileActivity : AppCompatActivity() {
         val tilStudentId = view.findViewById<TextInputLayout>(R.id.tilStudentId)
         val btnAdd = view.findViewById<View>(R.id.btnAddChild)
 
-        // Reuse Student ID formatting
-        FormUtils.setupStudentIdFormatting(etStudentId)
+        FormUtils.setupRollNumberFormatting(etStudentId)
 
         btnAdd.setOnClickListener {
             ViewUtils.applyClickEffect(it)
@@ -162,8 +161,8 @@ class ParentProfileActivity : AppCompatActivity() {
                 isValid = false
             } else tilChildName.error = null
 
-            if (studentId.isEmpty() || studentId.length < 7) {
-                tilStudentId.error = "Enter valid Student ID (GCW-XXX)"
+            if (!FormUtils.isValidRollNumber(studentId)) {
+                tilStudentId.error = "Roll Number required"
                 isValid = false
             } else tilStudentId.error = null
 

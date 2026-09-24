@@ -2,20 +2,29 @@ package com.example.bustrack_app.ui.admin
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.bustrack_app.R
 import com.example.bustrack_app.adapter.StopAdapter
 import com.example.bustrack_app.databinding.ActivityRouteDetailBinding
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StopItem
 import com.example.bustrack_app.data.FirebaseRepository
+import com.example.bustrack_app.viewmodels.RouteViewModel
+import com.google.android.material.button.MaterialButton
 import ui.admin.RouteMapActivity
 import java.util.Locale
 
 class RouteDetailActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRouteDetailBinding
+    private val viewModel: RouteViewModel by viewModels()
     private var currentRoute: RouteModel? = null
     private lateinit var stopAdapter: StopAdapter
 
@@ -27,24 +36,10 @@ class RouteDetailActivity : AppCompatActivity() {
 
         // Get route ID from intent
         val routeId = intent.getStringExtra("ROUTE_ID")
-        currentRoute = com.example.bustrack_app.data.RouteRepository.routeList.value?.find { it.id == routeId }
         
-        if (currentRoute == null) {
-            currentRoute = com.example.bustrack_app.models.RouteModel(
-                id = "1",
-                routeCode = "05",
-                routeName = "Express North",
-                status = "ACTIVE",
-                busNo = "BUS-102",
-                driverName = "Ahmed Ali",
-                stopsCount = 8,
-                studentsCount = 48,
-                stopsList = mutableListOf(
-                    com.example.bustrack_app.models.StopItem("01", "Sunrise Apartments", "07:00 AM", 33.7000, 73.0600),
-                    com.example.bustrack_app.models.StopItem("02", "Green Park", "07:15 AM", 33.7100, 73.0700),
-                    com.example.bustrack_app.models.StopItem("03", "Library West Gate", "07:25 AM", 33.7200, 73.0800)
-                )
-            )
+        viewModel.routeList.observe(this) { routes ->
+            currentRoute = routes.find { it.id == routeId }
+            setupDataDisplay()
         }
 
         setupRecyclerView()
@@ -57,7 +52,12 @@ class RouteDetailActivity : AppCompatActivity() {
         }
 
         binding.btnBack.setOnClickListener { finish() }
-        setupDataDisplay()
+
+        binding.btnDeleteRoute.setOnClickListener {
+            currentRoute?.let { route ->
+                showDeleteConfirmationDialog(route)
+            }
+        }
 
         binding.btnSaveChanges.setOnClickListener {
             currentRoute?.let { route ->
@@ -88,6 +88,42 @@ class RouteDetailActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showDeleteConfirmationDialog(route: RouteModel) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_confirm_status, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        dialogView.findViewById<ImageView>(R.id.ivDialogIcon).setImageResource(R.drawable.warning)
+        dialogView.findViewById<ImageView>(R.id.ivDialogIcon).setColorFilter(android.graphics.Color.parseColor("#DC2626"))
+        dialogView.findViewById<TextView>(R.id.tvDialogTitle).text = "Delete Route?"
+        dialogView.findViewById<TextView>(R.id.tvDialogMessage).text = "Are you sure you want to permanently delete route '${route.routeName}'? This action cannot be undone."
+        
+        val btnConfirm = dialogView.findViewById<MaterialButton>(R.id.btnConfirm)
+        btnConfirm.text = "Delete"
+        btnConfirm.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#DC2626"))
+        
+        btnConfirm.setOnClickListener {
+            viewModel.deleteRoute(route.id) { success ->
+                if (success) {
+                    Toast.makeText(this, "Route deleted successfully", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this, "Failed to delete route", Toast.LENGTH_SHORT).show()
+                }
+            }
+            dialog.dismiss()
+        }
+
+        dialogView.findViewById<MaterialButton>(R.id.btnCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
     }
 
     private fun setupRecyclerView() {

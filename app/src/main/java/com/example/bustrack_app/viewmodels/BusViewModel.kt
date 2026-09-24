@@ -13,8 +13,8 @@ class BusViewModel : ViewModel() {
         BusRepository.updateBusDetails(busNumber, updatedBus)
     }
 
-    fun deleteBusFromFleet(busNumber: String) {
-        BusRepository.deleteBus(busNumber)
+    fun deleteBusFromFleet(busNumber: String, onComplete: (Boolean) -> Unit = {}) {
+        BusRepository.deleteBus(busNumber, onComplete)
     }
 
     fun addNewBus(newBus: BusModel) {

@@ -64,7 +64,7 @@
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Student ID -->
+        <!-- Roll Number -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilStudentId"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -80,14 +80,12 @@
             app:hintTextColor="@color/primary_blue"
             app:startIconDrawable="@drawable/badge"
             app:startIconTint="@color/text_secondary"
-            app:helperText="Example: GCW-ABC">
+            app:placeholderText="Enter Roll Number">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etStudentId"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textCapCharacters"
-                android:maxLength="7"
                 android:textColor="@color/text_primary"
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>

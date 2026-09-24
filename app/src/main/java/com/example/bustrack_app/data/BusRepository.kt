@@ -69,49 +69,116 @@ object BusRepository {
     }
 
     fun updateBusDetails(originalNumber: String, updatedBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
+        val isNumberChanged = originalNumber != updatedBus.busNumber
+
+        // 1. Cleanup assignments first if status is INACTIVE
         if (updatedBus.status == "INACTIVE") {
-            // Business Logic for INACTIVE status
             val currentBus = _busList.value?.find { it.busNumber == originalNumber }
-            
             currentBus?.let { bus ->
-                // 1. Release Driver: Hassan becomes available for another active bus
                 bus.driverName?.let { dName ->
                     DriverRepository.driverList.value?.find { it.name == dName }?.let { driver ->
                         DriverRepository.updateDriver(driver.copy(assignedBus = null, route = null))
                     }
                 }
-                
-                // 2. Release Route: Route becomes available for another active bus
                 bus.routeName?.let { rName ->
                     RouteRepository.routeList.value?.find { it.routeName == rName }?.let { route ->
                         RouteRepository.updateRoute(route.copy(busNo = "", driverName = ""))
                     }
                 }
             }
-            
-            // Clear assignments in the document itself to ensure consistency
-            val finalBus = updatedBus.copy(driverName = null, routeName = null)
-            busesCollection.document(originalNumber).set(finalBus)
-                .addOnSuccessListener { onComplete(true) }
-                .addOnFailureListener { onComplete(false) }
-        } else {
-            // For ACTIVE or other statuses, proceed with standard update
-            busesCollection.document(originalNumber).set(updatedBus)
-                .addOnSuccessListener { onComplete(true) }
-                .addOnFailureListener { onComplete(false) }
         }
+
+        // 2. Resolve duplicates and update the authoritative document
+        // We query by busNumber field to find any documents (potentially with random IDs) 
+        // that match the bus being updated.
+        busesCollection.whereEqualTo("busNumber", originalNumber).get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                
+                // Delete all existing documents that have this bus number
+                for (doc in snapshot.documents) {
+                    batch.delete(doc.reference)
+                }
+                
+                // Commit the deletions
+                batch.commit().addOnCompleteListener {
+                    // 3. Now save the authoritative document using busNumber as ID
+                    val finalBus = if (updatedBus.status == "INACTIVE") {
+                        updatedBus.copy(driverName = null, routeName = null)
+                    } else {
+                        updatedBus
+                    }
+                    
+                    busesCollection.document(updatedBus.busNumber).set(finalBus)
+                        .addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                }
+            }
+            .addOnFailureListener {
+                // Fallback to direct set if query fails
+                busesCollection.document(updatedBus.busNumber).set(updatedBus)
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { onComplete(false) }
+            }
     }
 
     fun deleteBus(busNumber: String, onComplete: (Boolean) -> Unit = {}) {
-        busesCollection.document(busNumber).delete()
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+        // 1. Cleanup assignments in other collections
+        val busToDelete = _busList.value?.find { it.busNumber == busNumber }
+        busToDelete?.let { bus ->
+            bus.driverName?.let { dName ->
+                DriverRepository.driverList.value?.find { it.name == dName }?.let { driver ->
+                    DriverRepository.updateDriver(driver.copy(assignedBus = null, route = null))
+                }
+            }
+            bus.routeName?.let { rName ->
+                RouteRepository.routeList.value?.find { it.routeName == rName }?.let { route ->
+                    RouteRepository.updateRoute(route.copy(busNo = "", driverName = ""))
+                }
+            }
+        }
+
+        // 2. Delete ALL documents matching this bus number to clean up any duplicates/ghosts
+        busesCollection.whereEqualTo("busNumber", busNumber).get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                for (doc in snapshot.documents) {
+                    batch.delete(doc.reference)
+                }
+                batch.commit()
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { onComplete(false) }
+            }
+            .addOnFailureListener {
+                // Fallback to direct ID-based delete
+                busesCollection.document(busNumber).delete()
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { onComplete(false) }
+            }
     }
 
     fun addBus(newBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
-        busesCollection.document(newBus.busNumber).set(newBus)
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+        // Find and delete any existing documents that have the same bus number
+        // but potentially different IDs to prevent duplicates.
+        busesCollection.whereEqualTo("busNumber", newBus.busNumber).get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                for (doc in snapshot.documents) {
+                    batch.delete(doc.reference)
+                }
+                batch.commit().addOnCompleteListener {
+                    // Now save the new bus with busNumber as ID
+                    busesCollection.document(newBus.busNumber).set(newBus)
+                        .addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                }
+            }
+            .addOnFailureListener {
+                // Fallback to direct set
+                busesCollection.document(newBus.busNumber).set(newBus)
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { onComplete(false) }
+            }
     }
 
     fun getBusByNumber(busNumber: String): BusModel? {

@@ -192,7 +192,7 @@
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Student ID -->
+        <!-- Roll Number -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilStudentId"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -200,7 +200,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/student_id_label"
-            app:placeholderText="ABC-123"
+            app:placeholderText="Enter Roll Number"
             app:placeholderTextColor="#D1D1D6"
             app:placeholderTextAppearance="@style/SubtleHintTextAppearance"
             app:boxCornerRadiusBottomEnd="12dp"
@@ -216,8 +216,6 @@
                 android:id="@+id/etStudentId"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textCapCharacters"
-                android:maxLength="8"
                 android:textColor="@color/text_primary"
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>

@@ -10,6 +10,7 @@ import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ItemAttendanceStudentCardBinding
 import com.example.bustrack_app.models.StudentModel
+import utils.AttendanceStatus
 import utils.ViewUtils
 
 class AttendanceStudentAdapter(
@@ -42,7 +43,7 @@ class AttendanceStudentAdapter(
     inner class ViewHolder(private val binding: ItemAttendanceStudentCardBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(student: StudentModel) {
             binding.tvStudentName.text = student.name
-            binding.tvStudentDetails.text = "ID: ${student.id} • ${student.grade}"
+            binding.tvStudentDetails.text = "${student.rollNumber.ifBlank { "N/A" }} • ${student.grade}"
 
             utils.ImageUtils.loadProfileImage(itemView.context, student.profileImageUrl, binding.ivStudent)
 
@@ -62,7 +63,7 @@ class AttendanceStudentAdapter(
 
             binding.btnLeave.setOnClickListener {
                 ViewUtils.applyClickEffect(it)
-                updateStatus(student, "Leave")
+                updateStatus(student, AttendanceStatus.SHORT_LEAVE)
             }
 
             binding.btnEdit.setOnClickListener {
@@ -81,7 +82,7 @@ class AttendanceStudentAdapter(
             val displayStatus = when {
                 status.equals("Pending", true) || status == "--" || status.isBlank() -> "Pending"
                 status.equals("Absent", true) -> "Absent"
-                status.equals("Leave", true) -> "Leave"
+                AttendanceStatus.isShortLeave(status) -> "Leave"
                 else -> "Present"
             }
 
@@ -93,7 +94,11 @@ class AttendanceStudentAdapter(
             } else {
                 binding.layoutMark.visibility = View.GONE
                 binding.layoutStatus.visibility = View.VISIBLE
-                binding.tvStatusBadge.text = if (displayStatus == "Present" && !status.equals("Present", true)) status.uppercase() else displayStatus.uppercase()
+                binding.tvStatusBadge.text = when {
+                    displayStatus == "Leave" -> AttendanceStatus.SHORT_LEAVE
+                    displayStatus == "Present" && !status.equals("Present", true) -> status.uppercase()
+                    else -> displayStatus.uppercase()
+                }
 
                 when (displayStatus) {
                     "Present" -> {

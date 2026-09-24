@@ -80,7 +80,7 @@ class SplashActivity : AppCompatActivity() {
                         .apply()
 
                     val isExempt = role == "driver" || role == "admin" || role == "principal" || 
-                        cleanEmail == "admin@gmail.com" || cleanEmail == "principal@gmail.com"
+                        cleanEmail == "admin@gmail.com" || cleanEmail == "barlasmaria2@gmail.com" || cleanEmail == "principal@gmail.com"
 
                     if (!isExempt && !currentUser.isEmailVerified) {
                         Firebase.auth.signOut()

@@ -353,12 +353,20 @@ object FirebaseRepository {
                         val isPresent = pickupStatus.contains(":") || pickupStatus.equals("Present", true) || pickupStatus.equals("School", true) || pickupStatus.equals("En Route", true)
 
                         val shouldUpdate = if (isMorning) {
-                            // In morning, all present students drop at the end (usually School)
-                            // We assume the caller only triggers this for the final stop.
-                            isPresent && (record.morningDrop == "--" || record.morningDrop == "Pending" || record.morningDrop == "En Route")
+                            // Morning Drop is one terminal source-geofence event.  It can only
+                            // complete a student who was picked up in the morning; never create
+                            // a drop for an absent/unmarked student.
+                            isPresent && (record.morningDrop == "--" ||
+                                    record.morningDrop.equals("Pending", true) ||
+                                    record.morningDrop.equals("Pending Drop", true) ||
+                                    record.morningDrop.equals("En Route", true))
                         } else {
-                            // In evening, only students assigned to this specific stop drop here
-                            isPresent && record.stop == stopName && (record.eveningDrop == "--" || record.eveningDrop == "Pending")
+                            // Evening Drop happens progressively at each student's own home
+                            // stop, and only after a successful Evening Pickup.
+                            isPresent && record.stop.equals(stopName, true) &&
+                                    (record.eveningDrop == "--" ||
+                                            record.eveningDrop.equals("Pending", true) ||
+                                            record.eveningDrop.equals("Pending Drop", true))
                         }
 
                         if (shouldUpdate) {
