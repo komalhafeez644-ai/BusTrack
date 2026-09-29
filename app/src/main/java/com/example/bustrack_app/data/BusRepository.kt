@@ -4,8 +4,8 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.example.bustrack_app.models.BusModel
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ktx.toObjects
 
 object BusRepository {
     private val db = FirebaseFirestore.getInstance()
@@ -26,7 +26,9 @@ object BusRepository {
             }
 
             if (snapshot != null) {
-                val buses = snapshot.toObjects<BusModel>()
+                val buses = snapshot.documents.mapNotNull { document ->
+                    document.toObject(BusModel::class.java)?.copy(firestoreDocumentId = document.id)
+                }
                 _busList.value = buses
                 Log.d("BusRepository", "Fetched ${buses.size} buses from Firestore")
             }
@@ -88,38 +90,47 @@ object BusRepository {
             }
         }
 
-        // 2. Resolve duplicates and update the authoritative document
-        // We query by busNumber field to find any documents (potentially with random IDs) 
-        // that match the bus being updated.
+        // Update the document already representing this bus. Recreating it under the
+        // bus number caused legacy/random-ID documents to survive failed queries and
+        // later appear as duplicate buses in the snapshot listener.
         busesCollection.whereEqualTo("busNumber", originalNumber).get()
             .addOnSuccessListener { snapshot ->
-                val batch = db.batch()
-                
-                // Delete all existing documents that have this bus number
-                for (doc in snapshot.documents) {
-                    batch.delete(doc.reference)
-                }
-                
-                // Commit the deletions
-                batch.commit().addOnCompleteListener {
-                    // 3. Now save the authoritative document using busNumber as ID
-                    val finalBus = if (updatedBus.status == "INACTIVE") {
-                        updatedBus.copy(driverName = null, routeName = null)
+                val existing = snapshot.documents
+                val updateExisting: (List<DocumentSnapshot>) -> Unit = { matches ->
+                    val target = matches.firstOrNull { it.id == updatedBus.firestoreDocumentId }
+                        ?: matches.firstOrNull()
+                    if (target == null) {
+                        onComplete(false)
                     } else {
-                        updatedBus
+                        val finalBus = if (updatedBus.status == "INACTIVE") {
+                            updatedBus.copy(driverName = null, routeName = null)
+                        } else updatedBus
+                        val batch = db.batch()
+                        batch.update(
+                            target.reference,
+                            "busNumber", finalBus.busNumber,
+                            "totalSeats", finalBus.totalSeats,
+                            "driverName", finalBus.driverName,
+                            "routeName", finalBus.routeName,
+                            "status", finalBus.status
+                        )
+                        matches.filter { it.id != target.id }.forEach { batch.delete(it.reference) }
+                        batch.commit()
+                            .addOnSuccessListener { onComplete(true) }
+                            .addOnFailureListener { onComplete(false) }
                     }
-                    
-                    busesCollection.document(updatedBus.busNumber).set(finalBus)
-                        .addOnSuccessListener { onComplete(true) }
+                }
+                if (existing.isNotEmpty()) {
+                    updateExisting(existing)
+                } else {
+                    busesCollection.document(updatedBus.firestoreDocumentId.ifBlank { originalNumber }).get()
+                        .addOnSuccessListener { existingById ->
+                            updateExisting(listOfNotNull(existingById.takeIf { it.exists() }))
+                        }
                         .addOnFailureListener { onComplete(false) }
                 }
             }
-            .addOnFailureListener {
-                // Fallback to direct set if query fails
-                busesCollection.document(updatedBus.busNumber).set(updatedBus)
-                    .addOnSuccessListener { onComplete(true) }
-                    .addOnFailureListener { onComplete(false) }
-            }
+            .addOnFailureListener { onComplete(false) }
     }
 
     fun deleteBus(busNumber: String, onComplete: (Boolean) -> Unit = {}) {
@@ -138,47 +149,45 @@ object BusRepository {
             }
         }
 
-        // 2. Delete ALL documents matching this bus number to clean up any duplicates/ghosts
+        // Delete every copy by its stored number and the legacy canonical document ID.
         busesCollection.whereEqualTo("busNumber", busNumber).get()
             .addOnSuccessListener { snapshot ->
                 val batch = db.batch()
-                for (doc in snapshot.documents) {
-                    batch.delete(doc.reference)
-                }
+                val documentIds = (snapshot.documents.map { it.id } +
+                    listOfNotNull(busToDelete?.firestoreDocumentId) + busNumber).toSet()
+                documentIds.forEach { batch.delete(busesCollection.document(it)) }
                 batch.commit()
                     .addOnSuccessListener { onComplete(true) }
                     .addOnFailureListener { onComplete(false) }
             }
-            .addOnFailureListener {
-                // Fallback to direct ID-based delete
-                busesCollection.document(busNumber).delete()
-                    .addOnSuccessListener { onComplete(true) }
-                    .addOnFailureListener { onComplete(false) }
-            }
+            .addOnFailureListener { onComplete(false) }
     }
 
     fun addBus(newBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
-        // Find and delete any existing documents that have the same bus number
-        // but potentially different IDs to prevent duplicates.
+        // Reuse an existing document (including legacy IDs) and remove any duplicate
+        // copies in the same batch. Only a genuinely new bus gets a new document.
         busesCollection.whereEqualTo("busNumber", newBus.busNumber).get()
             .addOnSuccessListener { snapshot ->
-                val batch = db.batch()
-                for (doc in snapshot.documents) {
-                    batch.delete(doc.reference)
-                }
-                batch.commit().addOnCompleteListener {
-                    // Now save the new bus with busNumber as ID
-                    busesCollection.document(newBus.busNumber).set(newBus)
-                        .addOnSuccessListener { onComplete(true) }
+                if (snapshot.documents.isNotEmpty()) {
+                    val target = snapshot.documents.first()
+                    val batch = db.batch()
+                    batch.set(target.reference, newBus.copy(firestoreDocumentId = ""))
+                    snapshot.documents.drop(1).forEach { batch.delete(it.reference) }
+                    batch.commit().addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                } else {
+                    busesCollection.document(newBus.busNumber).get()
+                        .addOnSuccessListener { existingById ->
+                            val reference = if (existingById.exists()) existingById.reference
+                                else busesCollection.document(newBus.busNumber)
+                            reference.set(newBus.copy(firestoreDocumentId = ""))
+                                .addOnSuccessListener { onComplete(true) }
+                                .addOnFailureListener { onComplete(false) }
+                        }
                         .addOnFailureListener { onComplete(false) }
                 }
             }
-            .addOnFailureListener {
-                // Fallback to direct set
-                busesCollection.document(newBus.busNumber).set(newBus)
-                    .addOnSuccessListener { onComplete(true) }
-                    .addOnFailureListener { onComplete(false) }
-            }
+            .addOnFailureListener { onComplete(false) }
     }
 
     fun getBusByNumber(busNumber: String): BusModel? {

@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.Window
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
@@ -20,6 +21,14 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAssignmentConfirmationBinding
     private lateinit var viewModel: AssignmentConfirmationViewModel
+    private var currentApplication: com.example.bustrack_app.models.ApplicationModel? = null
+    private val editAssignmentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            currentApplication = result.data?.getSerializableExtra("UPDATED_APPLICATION")
+                as? com.example.bustrack_app.models.ApplicationModel ?: currentApplication
+            refreshFromSource()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,16 +36,18 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         viewModel = ViewModelProvider(this).get(AssignmentConfirmationViewModel::class.java)
+        currentApplication = intent.getSerializableExtra("APPLICATION_DATA")
+            as? com.example.bustrack_app.models.ApplicationModel
 
         observeViewModel()
 
         // Get dynamic data from Intent
-        val application = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+        val application = currentApplication
         if (application != null) {
             // Populate UI with the system suggested data from previous screen
             binding.apply {
                 tvStudentName.text = application.studentName
-                tvStudentId.text = application.studentIdString
+                tvStudentId.text = "Roll Number: ${application.studentIdString.ifBlank { "Not set" }}"
                 tvBusNumber.text = if (application.assignedBus.isNotEmpty()) application.assignedBus else "Bus ${application.bestRoute.split("-").lastOrNull() ?: "42"}"
                 tvRouteCode.text = application.routeCode
                 tvRouteName.text = application.bestRoute
@@ -96,20 +107,20 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
             }
 
             // Open Edit Assignment Screen
-            val applicationData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+            val applicationData = currentApplication
             val intent = android.content.Intent(this, EditAssignmentActivity::class.java)
             intent.putExtra("APPLICATION_DATA", applicationData)
-            startActivity(intent)
+            editAssignmentLauncher.launch(intent)
             
             viewModel.editAssignment()
         }
     }
 
     private fun saveToRepository() {
-        val originalData = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+        val originalData = currentApplication
         originalData?.let {
             if (it.studentIdString.isEmpty()) {
-                Toast.makeText(this, "Error: Student ID missing", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error: Student Roll Number missing", Toast.LENGTH_SHORT).show()
                 return
             }
 
@@ -120,12 +131,7 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
                 return
             }
             
-            StudentRepository.assignRouteToStudent(
-                it.studentIdString,
-                it.bestRoute,
-                com.example.bustrack_app.data.RouteRepository.getBusForRoute(it.bestRoute),
-                it.nearestStop
-            ) { success ->
+            val onSaved: (Boolean) -> Unit = { success ->
                 if (success) {
                     showSuccessDialog()
                     viewModel.confirmAssignment()
@@ -133,14 +139,32 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
                     Toast.makeText(this, "Failed to save assignment in database", Toast.LENGTH_LONG).show()
                 }
             }
+            if (it.studentDocumentId.isNotBlank()) {
+                StudentRepository.assignRouteToStudent(
+                    it.studentDocumentId,
+                    it.bestRoute,
+                    com.example.bustrack_app.data.RouteRepository.getBusForRoute(it.bestRoute),
+                    it.nearestStop,
+                    onSaved
+                )
+            } else {
+                StudentRepository.assignRouteToStudentByRollNumber(
+                    it.studentIdString,
+                    it.bestRoute,
+                    com.example.bustrack_app.data.RouteRepository.getBusForRoute(it.bestRoute),
+                    it.nearestStop,
+                    onSaved
+                )
+            }
         }
     }
 
     private fun refreshFromSource() {
-        val application = intent.getSerializableExtra("APPLICATION_DATA") as? com.example.bustrack_app.models.ApplicationModel
+        val application = currentApplication
         
         application?.let {
             binding.tvStudentName.text = it.studentName
+            binding.tvStudentId.text = "Roll Number: ${it.studentIdString.ifBlank { "Not set" }}"
             binding.tvBusNumber.text = if (it.assignedBus.isNotEmpty()) it.assignedBus else "Bus ${it.bestRoute.split("-").lastOrNull() ?: "42"}"
             binding.tvRouteCode.text = it.routeCode
             binding.tvRouteName.text = it.bestRoute

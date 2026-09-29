@@ -17,6 +17,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.data.FirebaseRepository
@@ -24,9 +25,11 @@ import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StudentModel
 import com.example.bustrack_app.viewmodels.TrackingApprovalViewModel
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import utils.ViewUtils
+import kotlinx.coroutines.launch
 
 class TrackingApprovalDetailActivity : AppCompatActivity() {
 
@@ -39,7 +42,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
     
     private var requestId: String? = null
     private var parentId: String? = null
-    private var studentId: String? = null
+    private var rollNumber: String? = null
     private var currentStatus: String = "PENDING"
     private var currentTrackingEnabled: Boolean = false
     private var currentTrackingState: String = ""
@@ -53,7 +56,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
 
         requestId = intent.getStringExtra("REQUEST_ID")
         parentId = intent.getStringExtra("PARENT_ID")
-        studentId = intent.getStringExtra("STUDENT_ID")
+        rollNumber = intent.getStringExtra("ROLL_NUMBER")
         currentStatus = intent.getStringExtra("STATUS")?.uppercase() ?: "PENDING"
 
         findViewById<View>(R.id.btnBack).setOnClickListener { 
@@ -69,8 +72,8 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
 
         setupObservers()
         
-        if (parentId != null && studentId != null) {
-            viewModel.loadDetails(parentId!!, studentId!!)
+        if (parentId != null && rollNumber != null) {
+            viewModel.loadDetails(parentId!!, rollNumber!!)
         }
 
         setupClickListeners()
@@ -98,7 +101,34 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleApprove() {
+    private fun handleApprove(approveAnyway: Boolean = false) {
+        val requestedRollNumber = rollNumber.orEmpty()
+        if (!approveAnyway) {
+            lifecycleScope.launch {
+                val existingEnabledRequest = try {
+                    FirebaseRepository.findEnabledTrackingRequestByRollNumber(requestedRollNumber)
+                } catch (error: Exception) {
+                    Toast.makeText(
+                        this@TrackingApprovalDetailActivity,
+                        "Could not verify current tracking status. Please try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                if (existingEnabledRequest != null) {
+                    showTrackingAlreadyEnabledDialog(existingEnabledRequest, requestedRollNumber)
+                } else {
+                    approveRequestNow()
+                }
+            }
+            return
+        }
+
+        approveRequestNow()
+    }
+
+    private fun approveRequestNow() {
         val student = viewModel.studentData.value
         if (student == null) {
             Toast.makeText(this, "Loading student data. Please wait.", Toast.LENGTH_SHORT).show()
@@ -116,7 +146,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
                             title = "Tracking Request Approved",
                             message = "Your tracking request has been approved. You can now track your child's bus on route $assignedRoute.",
                             type = "TRACKING_APPROVED",
-                            relatedId = studentId ?: ""
+                            relatedId = rollNumber ?: ""
                         )
                     }
                     showSuccessDialog("Tracking Enabled", "Parent tracking access has been enabled for the student's assigned route.")
@@ -131,6 +161,35 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
         }
     }
 
+    private fun showTrackingAlreadyEnabledDialog(
+        existingRequest: com.example.bustrack_app.models.TrackingRequestModel,
+        requestedRollNumber: String
+    ) {
+        val parentName = existingRequest.parentName.ifBlank { "Unknown parent" }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_tracking_already_enabled, null)
+        dialogView.findViewById<TextView>(R.id.tvExistingParentName).text = parentName
+        dialogView.findViewById<TextView>(R.id.tvExistingRollNumber).text = requestedRollNumber
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .create()
+
+        dialogView.findViewById<Button>(R.id.btnCancelDuplicateApproval).setOnClickListener {
+            dialog.dismiss()
+        }
+        dialogView.findViewById<Button>(R.id.btnApproveAnyway).setOnClickListener {
+            dialog.dismiss()
+            handleApprove(approveAnyway = true)
+        }
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
     private fun handleReject() {
         requestId?.let { id ->
             viewModel.updateTrackingRequest(id, "REJECTED", false, "REJECTED", Firebase.auth.currentUser?.uid ?: "admin") { success ->
@@ -141,7 +200,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
                             title = "Tracking Request Rejected",
                             message = "Your tracking request was not approved. Please contact the college administration for details.",
                             type = "TRACKING_REJECTED",
-                            relatedId = studentId ?: ""
+                            relatedId = rollNumber ?: ""
                         )
                     }
                     Toast.makeText(this, "Request Rejected. Parent will be notified.", Toast.LENGTH_SHORT).show()
@@ -194,7 +253,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
                                 title = "Tracking Access Revoked",
                                 message = "Your tracking access has been revoked by the administration.",
                                 type = "TRACKING_REVOKED",
-                                relatedId = studentId ?: ""
+                                relatedId = rollNumber ?: ""
                             )
                         }
                         Toast.makeText(this, "Request moved to Rework (Historical Record)", Toast.LENGTH_SHORT).show()
@@ -281,7 +340,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
             if (currentStudent != null) {
                 addStudentCard(container, currentStudent, currentStatus, isLoading)
             } else {
-                val mockChild = StudentModel(id = studentId ?: "Unknown")
+                val mockChild = StudentModel(id = rollNumber ?: "Unknown", rollNumber = rollNumber.orEmpty())
                 addStudentCard(container, mockChild, currentStatus, isLoading)
             }
         }
@@ -292,7 +351,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
             if (student != null) {
                 addStudentCard(container, student, currentStatus, isLoading)
             } else {
-                val mockChild = StudentModel(id = studentId ?: "Unknown")
+                val mockChild = StudentModel(id = rollNumber ?: "Unknown", rollNumber = rollNumber.orEmpty())
                 addStudentCard(container, mockChild, currentStatus, isLoading)
             }
         }
@@ -321,7 +380,7 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
         val btnUpdate = cardView.findViewById<Button>(R.id.btnUpdateRoute)
 
         tvName.text = if (student.name.isEmpty()) (if (isLoading) "Loading..." else "Unknown Student") else student.name
-        tvId.text = "ID: ${student.id}"
+        tvId.text = "Roll Number: ${student.rollNumber.ifBlank { rollNumber.orEmpty() }}"
 
         val studentExists = student.name.isNotEmpty()
 

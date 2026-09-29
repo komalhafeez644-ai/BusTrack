@@ -6,6 +6,7 @@ data class TrackingRequestModel(
     val requestId: String = "",
     val parentId: String = "",
     val studentId: String = "",
+    val rollNumber: String = "",
     val status: String = "PENDING", // PENDING, APPROVED, REWORK, REJECTED
     val trackingEnabled: Boolean = false,
     val trackingState: String = "", // ENABLED, DISABLED, REVOKED

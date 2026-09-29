@@ -18,13 +18,13 @@ class TrackingApprovalViewModel : ViewModel() {
     private val _isLoadingStudent = MutableLiveData<Boolean>(false)
     val isLoadingStudent: LiveData<Boolean> get() = _isLoadingStudent
 
-    fun loadDetails(parentId: String, studentId: String) {
+    fun loadDetails(parentId: String, rollNumber: String) {
         _isLoadingStudent.value = true
         FirebaseRepository.fetchParent(parentId) {
             _parentData.postValue(it)
         }
         
-        FirebaseRepository.fetchStudentById(studentId) {
+        FirebaseRepository.fetchStudentByRollNumber(rollNumber) {
             _studentData.postValue(it)
             _isLoadingStudent.postValue(false)
         }

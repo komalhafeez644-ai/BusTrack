@@ -1,6 +1,7 @@
 package utils
 
 import android.net.Uri
+import android.content.Context
 import android.util.Log
 import com.cloudinary.android.MediaManager
 import com.cloudinary.android.callback.ErrorInfo
@@ -14,10 +15,15 @@ object StorageUtils {
     /**
      * Uploads an image to Cloudinary using the 'BusTrack' unsigned preset and returns the secure HTTPS URL
      */
-    fun uploadImage(folder: String, uri: Uri, onResult: (String?) -> Unit) {
+    fun uploadImage(
+        folder: String,
+        uri: Uri,
+        immediateContext: Context? = null,
+        onResult: (String?) -> Unit
+    ) {
         Log.d("Cloudinary", "Starting upload to folder: $folder")
 
-        MediaManager.get().upload(uri)
+        val request = MediaManager.get().upload(uri)
             .option("folder", folder)
             .unsigned("BusTrack")
             .callback(object : UploadCallback {
@@ -30,7 +36,7 @@ object StorageUtils {
                 }
 
                 override fun onSuccess(requestId: String, resultData: Map<*, *>) {
-                    val url = resultData["secure_url"] as? String
+                    val url = (resultData["secure_url"] as? String)?.takeIf { it.startsWith("https://") }
                     Log.d("Cloudinary", "Upload successful: $url")
                     onResult(url)
                 }
@@ -44,6 +50,9 @@ object StorageUtils {
                     Log.d("Cloudinary", "Upload rescheduled")
                 }
             })
-            .dispatch()
+
+        // A foreground profile edit should not wait through the background queue's
+        // retry backoff (2 minutes by default) before the user receives a result.
+        if (immediateContext != null) request.startNow(immediateContext) else request.dispatch()
     }
 }

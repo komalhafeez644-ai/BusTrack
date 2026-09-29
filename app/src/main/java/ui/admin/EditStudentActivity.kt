@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,11 +25,13 @@ class EditStudentActivity : AppCompatActivity() {
     private var selectedImageUri: Uri? = null
     private var selectedLat: Double = 0.0
     private var selectedLng: Double = 0.0
+    private var addressWithCoordinates: String = ""
 
     private lateinit var imgStudentEdit: ShapeableImageView
     private lateinit var etEditStudentId: EditText
     private lateinit var etEditFullName: EditText
     private lateinit var spinnerEditGrade: AutoCompleteTextView
+    private lateinit var spinnerEditSemester: AutoCompleteTextView
     private lateinit var etEditParentName: EditText
     private lateinit var etEditEmergencyContact: EditText
     private lateinit var etEditPickupAddress: EditText
@@ -46,11 +50,12 @@ class EditStudentActivity : AppCompatActivity() {
     private val pickLocationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val address = result.data?.getStringExtra("SELECTED_ADDRESS")
-            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
-            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
+            addressWithCoordinates = address.orEmpty()
             address?.let {
                 etEditPickupAddress.setText(it)
             }
+            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
+            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
         }
     }
 
@@ -72,6 +77,8 @@ class EditStudentActivity : AppCompatActivity() {
         studentId = intent.getStringExtra("STUDENT_ID")
         
         setupGradeSpinner()
+        setupSemesterSpinner()
+        setupAddressCoordinateTracking()
         setupClickListeners()
         setupFormFormatting()
         
@@ -86,11 +93,25 @@ class EditStudentActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupAddressCoordinateTracking() {
+        etEditPickupAddress.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (s.toString().trim() != addressWithCoordinates) {
+                    selectedLat = 0.0
+                    selectedLng = 0.0
+                }
+            }
+        })
+    }
+
     private fun initViews() {
         imgStudentEdit = findViewById(R.id.imgStudentEdit)
         etEditStudentId = findViewById(R.id.etEditStudentId)
         etEditFullName = findViewById(R.id.etEditFullName)
         spinnerEditGrade = findViewById(R.id.spinnerEditGrade)
+        spinnerEditSemester = findViewById(R.id.spinnerEditSemester)
         etEditParentName = findViewById(R.id.etEditParentName)
         etEditEmergencyContact = findViewById(R.id.etEditEmergencyContact)
         etEditPickupAddress = findViewById(R.id.etEditPickupAddress)
@@ -113,7 +134,10 @@ class EditStudentActivity : AppCompatActivity() {
         studentData?.let {
             etEditStudentId.setText(it.rollNumber)
             etEditFullName.setText(it.name)
-            spinnerEditGrade.setText(it.grade, false)
+            addressWithCoordinates = it.location
+            val (grade, semester) = utils.StudentEducationOptions.split(it.grade)
+            spinnerEditGrade.setText(grade, false)
+            spinnerEditSemester.setText(semester, false)
             etEditParentName.setText(it.fatherName)
             etEditEmergencyContact.setText(it.phoneNumber)
             etEditPickupAddress.setText(it.location)
@@ -150,9 +174,13 @@ class EditStudentActivity : AppCompatActivity() {
     }
 
     private fun setupGradeSpinner() {
-        val grades = arrayOf("Grade 9", "Grade 10", "Grade 11", "Grade 12", "BS IT 7th semester")
-        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, grades)
+        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, StudentEducationOptions.grades)
         spinnerEditGrade.setAdapter(adapter)
+    }
+
+    private fun setupSemesterSpinner() {
+        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, StudentEducationOptions.semesters)
+        spinnerEditSemester.setAdapter(adapter)
     }
 
     private fun setupRouteAndStopSpinners() {
@@ -294,7 +322,11 @@ class EditStudentActivity : AppCompatActivity() {
             val updatedStudent = oldData.copy(
                 rollNumber = etEditStudentId.text.toString().trim(),
                 name = etEditFullName.text.toString().trim(),
-                grade = spinnerEditGrade.text.toString(),
+                grade = StudentEducationOptions.combine(
+                    oldData.grade,
+                    spinnerEditGrade.text.toString(),
+                    spinnerEditSemester.text.toString()
+                ),
                 fatherName = etEditParentName.text.toString().trim(),
                 phoneNumber = etEditEmergencyContact.text.toString().trim(),
                 location = etEditPickupAddress.text.toString().trim(),

@@ -27,9 +27,8 @@ class TrackDriverViewModel : ViewModel() {
 
     val assignedRoute: LiveData<RouteModel?> = targetDriver.switchMap { driver ->
         RouteRepository.routeList.map { routes ->
-            if (driver != null) {
-                routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus || it.id == driver.route }
-            } else null
+            driver?.assignedBus?.takeIf { it.isNotBlank() && !it.equals("Not Assigned", true) }
+                ?.let { busNo -> routes.find { it.busNo.equals(busNo, ignoreCase = true) } }
         }
     }
 

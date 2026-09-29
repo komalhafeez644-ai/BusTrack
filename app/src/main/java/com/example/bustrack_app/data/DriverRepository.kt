@@ -48,19 +48,38 @@ object DriverRepository {
                 }
             }
 
-            // 2. Delete from Auth (users collection) - We need the UID
-            db.collection("users").whereEqualTo("email", driver?.email).get()
-                .addOnSuccessListener { users ->
-                    users.documents.firstOrNull()?.id?.let { uid ->
-                        db.collection("users").document(uid).delete()
-                    }
-                }
-
-            // 3. Delete from drivers collection
-            driversCollection.document(driverId).delete()
-                .addOnSuccessListener { onComplete(true) }
-                .addOnFailureListener { onComplete(false) }
-        }
+            // Await removal of the Firestore user profile as well as the driver
+            // document. The previous fire-and-forget email lookup could race a
+            // refresh and leave the profile available to recreate a driver record.
+            val usersCollection = db.collection("users")
+            val email = driver?.email?.trim().orEmpty()
+            val uid = driver?.uid?.trim().orEmpty().ifEmpty { driverId }
+            val finishDelete: (
+                List<com.google.firebase.firestore.DocumentSnapshot>,
+                List<com.google.firebase.firestore.DocumentSnapshot>
+            ) -> Unit = { drivers, users ->
+                val batch = db.batch()
+                (listOf(snapshot.reference) + drivers.map { it.reference } + users.map { it.reference } +
+                    usersCollection.document(uid))
+                    .distinctBy { it.path }
+                    .forEach(batch::delete)
+                batch.commit()
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { onComplete(false) }
+            }
+            val finishWithUsers: (List<com.google.firebase.firestore.DocumentSnapshot>) -> Unit = { drivers ->
+                if (email.isNotEmpty()) {
+                    usersCollection.whereEqualTo("email", email).get()
+                        .addOnSuccessListener { finishDelete(drivers, it.documents) }
+                        .addOnFailureListener { onComplete(false) }
+                } else finishDelete(drivers, emptyList())
+            }
+            if (email.isNotEmpty()) {
+                driversCollection.whereEqualTo("email", email).get()
+                    .addOnSuccessListener { finishWithUsers(it.documents) }
+                    .addOnFailureListener { onComplete(false) }
+            } else finishWithUsers(emptyList())
+        }.addOnFailureListener { onComplete(false) }
     }
 
     fun addDriver(newDriver: DriverModel, onComplete: (Boolean) -> Unit = {}) {
@@ -70,7 +89,7 @@ object DriverRepository {
     }
 
     fun updateDriver(updatedDriver: DriverModel, onComplete: (Boolean) -> Unit = {}) {
-        driversCollection.document(updatedDriver.driverId.ifEmpty { updatedDriver.id }).set(updatedDriver)
+        driversCollection.document(updatedDriver.driverId.ifBlank { updatedDriver.id }).set(updatedDriver)
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { onComplete(false) }
     }

@@ -90,7 +90,12 @@ class ManageBusesActivity : AppCompatActivity() {
                         iconRes = if (isChecked) R.drawable.directions_bus else R.drawable.warning,
                         confirmText = if (isChecked) "Enable" else "Disable",
                         onConfirm = {
-                            viewModel.updateBusDetails(bus.busNumber, bus.copy(status = if (isChecked) "ACTIVE" else "INACTIVE"))
+                            viewModel.updateBusDetails(bus.busNumber, bus.copy(status = if (isChecked) "ACTIVE" else "INACTIVE")) { success ->
+                                if (!success) {
+                                    busAdapter.notifyDataSetChanged()
+                                    Toast.makeText(this, "Failed to update bus. Please try again.", Toast.LENGTH_LONG).show()
+                                }
+                            }
                         },
                         onCancel = {
                             // Revert switch UI
@@ -207,9 +212,14 @@ class ManageBusesActivity : AppCompatActivity() {
                     status = if (routeValue != null) "ACTIVE" else "UNASSIGNED"
                 )
 
-                viewModel.addNewBus(newBus)
-                Toast.makeText(this, "Bus Added Successfully!", Toast.LENGTH_SHORT).show()
-                bottomSheetDialog.dismiss()
+                viewModel.addNewBus(newBus) { success ->
+                    if (success) {
+                        Toast.makeText(this, "Bus Added Successfully!", Toast.LENGTH_SHORT).show()
+                        bottomSheetDialog.dismiss()
+                    } else {
+                        Toast.makeText(this, "Failed to save bus. Please try again.", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
 
@@ -234,7 +244,7 @@ class ManageBusesActivity : AppCompatActivity() {
                         }
                     }
                 }
-                DriverRepository.updateDriver(driver.copy(assignedBus = busNo, route = finalRoute.ifEmpty { null }))
+                DriverRepository.updateDriver(driver.copy(assignedBus = busNo, route = null))
             }
         }
 

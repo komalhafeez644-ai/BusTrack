@@ -84,11 +84,6 @@ class EveningAttendanceActivity : AppCompatActivity() {
             finish()
         }
 
-        binding.btnCalendar.setOnClickListener {
-            ViewUtils.applyClickEffect(it)
-            Toast.makeText(this, "Calendar selection coming soon", Toast.LENGTH_SHORT).show()
-        }
-
         binding.toggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (isChecked) {
                 isMorning = checkedId == R.id.btnMorning

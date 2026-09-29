@@ -5,6 +5,8 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.ktx.toObject
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Source
+import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 
@@ -76,9 +78,38 @@ object FirebaseRepository {
         }
     }
 
+    fun fetchStudentByRollNumber(rollNumber: String, onResult: (StudentModel?) -> Unit) {
+        db.collection("students")
+            .whereEqualTo("rollNumber", rollNumber.trim())
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                onResult(snapshot.documents.firstOrNull()?.toObject<StudentModel>())
+            }
+            .addOnFailureListener { onResult(null) }
+    }
+
     fun saveDriver(driver: DriverModel, onComplete: (Boolean) -> Unit) {
-        db.collection("drivers").document(driver.driverId).set(driver)
+        db.collection("drivers").document(driver.driverId.ifBlank { driver.id }).set(driver)
             .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
+    fun clearDriverNavigationState(driverId: String) {
+        if (driverId.isBlank()) return
+        db.collection("drivers").document(driverId).update(
+            mapOf(
+                "isNavigating" to false,
+                "activeTripId" to "",
+                "activeRouteId" to "",
+                "activeRouteName" to "",
+                "currentRoutePolyline" to "",
+                "traveledPolyline" to "",
+                "traveledRouteSegments" to emptyList<String>(),
+                "nextStopIndex" to 0,
+                "stopArrivalTimes" to emptyMap<String, String>(),
+                "stopEtaTimes" to emptyMap<String, String>()
+            )
+        )
     }
 
     fun updateDriverLocation(driverId: String, lat: Double, lng: Double) {
@@ -1016,6 +1047,63 @@ object FirebaseRepository {
             }
     }
 
+    /** Notify only approved parents linked to this student after a manual assignment edit. */
+    fun notifyParentsOfStudentAssignment(
+        studentDocumentId: String,
+        rollNumber: String,
+        studentName: String,
+        routeName: String,
+        busNumber: String,
+        stopName: String
+    ) {
+        val requestCollection = db.collection("trackingRequests")
+        val normalizedRoll = rollNumber.trim()
+        val queryCount = (if (studentDocumentId.isNotBlank()) 1 else 0) + (if (normalizedRoll.isNotBlank()) 1 else 0)
+        if (queryCount == 0) return
+
+        val matchedRequests = linkedMapOf<String, TrackingRequestModel>()
+        var completedQueries = 0
+        fun finishQuery(snapshot: com.google.firebase.firestore.QuerySnapshot?) {
+            snapshot?.documents.orEmpty().forEach { document ->
+                val request = document.toObject(TrackingRequestModel::class.java) ?: return@forEach
+                if (request.status.equals("APPROVED", ignoreCase = true) && request.trackingEnabled && request.parentId.isNotBlank()) {
+                    matchedRequests[request.parentId] = request
+                }
+            }
+            completedQueries++
+            if (completedQueries == queryCount) {
+                matchedRequests.keys.forEach { parentId ->
+                    val id = "ASSIGNMENT_${studentDocumentId.ifBlank { normalizedRoll }}_${System.currentTimeMillis()}_$parentId"
+                    sendNotification(
+                        id = id,
+                        recipientId = parentId,
+                        title = "${studentName.ifBlank { "Your child" }}'s transport updated",
+                        message = "${studentName.ifBlank { "Your child" }} is assigned to $routeName, bus ${busNumber.ifBlank { "not assigned" }}, pickup stop $stopName.",
+                        type = NotificationModel.TYPE_ROUTE_UPDATE,
+                        relatedId = studentDocumentId.ifBlank { normalizedRoll }
+                    )
+                }
+            }
+        }
+
+        if (studentDocumentId.isNotBlank()) {
+            requestCollection.whereEqualTo("studentId", studentDocumentId).get()
+                .addOnSuccessListener(::finishQuery)
+                .addOnFailureListener { error ->
+                    android.util.Log.e("FirebaseRepo", "Could not load assignment tracking requests by student document", error)
+                    finishQuery(null)
+                }
+        }
+        if (normalizedRoll.isNotBlank()) {
+            requestCollection.whereEqualTo("rollNumber", normalizedRoll).get()
+                .addOnSuccessListener(::finishQuery)
+                .addOnFailureListener { error ->
+                    android.util.Log.e("FirebaseRepo", "Could not load assignment tracking requests by roll number", error)
+                    finishQuery(null)
+                }
+        }
+    }
+
     /**
      * Stop arrival notification: notifies parents of students assigned to a specific stop
      * that the bus has arrived. Includes deduplication for the current trip.
@@ -1120,6 +1208,55 @@ object FirebaseRepository {
             val list = snapshot?.documents?.mapNotNull { it.toObject<TrackingRequestModel>() } ?: emptyList()
             onResult(list)
         }
+    }
+
+    /** Reads current enabled tracking by Roll Number for the Admin approve-time check. */
+    suspend fun findEnabledTrackingRequestByRollNumber(rollNumber: String): TrackingRequestModel? {
+        val normalizedRollNumber = rollNumber.trim().uppercase()
+        if (normalizedRollNumber.isBlank()) return null
+
+        val requests = db.collection("trackingRequests")
+        // Read from the server at the moment Admin presses Approve. This includes
+        // legacy enabled requests whose Roll Number was not copied onto the
+        // request document when they were first submitted.
+        val trackingEnabledSnapshot = requests
+            .whereEqualTo("trackingEnabled", true)
+            .get(Source.SERVER)
+            .await()
+        val enabledStateSnapshot = requests
+            .whereEqualTo("trackingState", "ENABLED")
+            .get(Source.SERVER)
+            .await()
+        val enabledDocuments = (trackingEnabledSnapshot.documents + enabledStateSnapshot.documents)
+            .distinctBy { it.id }
+
+        for (document in enabledDocuments) {
+            val request = document.toObject<TrackingRequestModel>() ?: continue
+
+            // New requests carry Roll Number directly. For older approved
+            // requests, studentId is only the stored link to the student record;
+            // resolve that record and compare its Roll Number, never the key.
+            val storedRollNumber = request.rollNumber.trim().ifBlank {
+                val legacyStudentLink = request.studentId.trim()
+                if (legacyStudentLink.isBlank()) "" else {
+                    db.collection("students").document(legacyStudentLink)
+                        .get(Source.SERVER)
+                        .await()
+                        .getString("rollNumber")
+                        .orEmpty()
+                        .trim()
+                }
+            }
+            val resolvedRequest = request.copy(rollNumber = storedRollNumber)
+            if (TrackingApprovalPolicy.findEnabledRequestForRollNumber(
+                    listOf(resolvedRequest),
+                    normalizedRollNumber
+                ) != null
+            ) {
+                return resolvedRequest
+            }
+        }
+        return null
     }
 
     fun updateTrackingRequest(

@@ -7,7 +7,7 @@
     android:textColor="@color/primaryDark"
     android:textSize="15sp"
     android:textStyle="normal"
-    android:background="@android:color/transparent"
+    android:background="@drawable/bg_spinner_dropdown_item"
     android:foreground="?attr/selectableItemBackground"
     android:ellipsize="end"
     android:maxLines="1"

@@ -219,6 +219,15 @@
                             android:text="Route Detail"
                             android:textColor="@color/lightGray"
                             android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvLastSynced"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Last synced: --"
+                            android:textColor="@color/lightGray"
+                            android:textSize="11sp" />
                     </LinearLayout>
 
                     <ImageView

@@ -3,9 +3,9 @@ package com.example.bustrack_app.data
 import android.util.Log
 import com.example.bustrack_app.models.ParentModel
 import com.example.bustrack_app.models.TrackingRequestModel
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
@@ -46,49 +46,55 @@ class ParentRepository {
         }
     }
 
-    suspend fun submitTrackingRequest(studentId: String, parentName: String, phone: String, relationship: String): Pair<Boolean, String?> {
+    suspend fun submitTrackingRequest(rollNumber: String, parentName: String, phone: String, relationship: String): Pair<Boolean, String?> {
         return try {
             val uid = auth.currentUser?.uid
             if (uid == null) {
                 return Pair(false, "User not logged in")
             }
-            
-            // Roll Number is the user-entered identifier. Resolve it to the existing
-            // student document key so no Firestore IDs or existing links are changed.
-            val studentDocument = db.collection("students")
-                .whereEqualTo("rollNumber", studentId)
-                .limit(1)
-                .get()
-                .await()
-                .documents
-                .firstOrNull()
-                ?: return Pair(false, "No student found with this Roll Number")
-            val studentDocumentId = studentDocument.id
-            val requestId = db.collection("trackingRequests").document().id
-            
-            val request = hashMapOf(
-                "requestId" to requestId,
-                "parentId" to uid,
-                "studentId" to studentDocumentId,
-                "status" to "PENDING",
-                "trackingEnabled" to false,
-                "trackingState" to "PENDING",
-                "isSeenByAdmin" to false,
-                "submittedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                "parentName" to parentName,
-                "phone" to phone,
-                "relationship" to relationship
-            )
-            
-            db.collection("trackingRequests").document(requestId)
-                .set(request)
-                .await()
+
+            val normalizedRollNumber = rollNumber.trim().uppercase()
+            // Keep the existing student-document link used by Parent Profile,
+            // Student Attendance, and live tracking. Roll Number remains the
+            // matching key saved separately on each tracking request.
+            val studentDocumentId = try {
+                db.collection("students")
+                    .whereEqualTo("rollNumber", normalizedRollNumber)
+                    .limit(1)
+                    .get()
+                    .await()
+                    .documents
+                    .firstOrNull()
+                    ?.id
+            } catch (lookupError: Exception) {
+                Log.w("ParentRepository", "Student Roll Number lookup failed; preserving request with Roll Number key", lookupError)
+                null
+            } ?: normalizedRollNumber
+            val requestRef = db.collection("trackingRequests").document()
+            val requestId = requestRef.id
+            requestRef.set(
+                mapOf(
+                    "requestId" to requestId,
+                    "parentId" to uid,
+                    // Existing child/attendance screens link through this document key.
+                    "studentId" to studentDocumentId,
+                    "rollNumber" to normalizedRollNumber,
+                    "status" to "PENDING",
+                    "trackingEnabled" to false,
+                    "trackingState" to "PENDING",
+                    "isSeenByAdmin" to false,
+                    "submittedAt" to FieldValue.serverTimestamp(),
+                    "parentName" to parentName,
+                    "phone" to phone,
+                    "relationship" to relationship
+                )
+            ).await()
 
             // Notify Admin of new tracking request requiring review
             FirebaseRepository.sendNotification(
                 recipientRole = "admin",
                 title = "New Tracking Request",
-                message = "Parent $parentName has submitted a tracking request for Roll Number $studentId.",
+                message = "Parent $parentName has submitted a tracking request for Roll Number $rollNumber.",
                 type = "TRACKING_REQUEST",
                 relatedId = requestId
             )

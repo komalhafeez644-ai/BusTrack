@@ -189,7 +189,8 @@ class ManageStudentActivity : AppCompatActivity() {
             parentName = s.fatherName,
             latitude = s.latitude,
             longitude = s.longitude,
-            studentIdString = s.id
+            studentIdString = s.rollNumber,
+            studentDocumentId = s.id
         )
     }
 }

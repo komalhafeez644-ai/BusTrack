@@ -115,9 +115,14 @@ class EditBusDetailsActivity : AppCompatActivity() {
                     status = intentStatus
                 )
 
-                viewModel.updateBusDetails(originalBusNumber, updatedBus)
-                Toast.makeText(this, "Bus & Route updated successfully!", Toast.LENGTH_SHORT).show()
-                finish()
+                viewModel.updateBusDetails(originalBusNumber, updatedBus) { success ->
+                    if (success) {
+                        Toast.makeText(this, "Bus & Route updated successfully!", Toast.LENGTH_SHORT).show()
+                        finish()
+                    } else {
+                        Toast.makeText(this, "Failed to update bus. Please refresh and try again.", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
 
@@ -193,7 +198,7 @@ class EditBusDetailsActivity : AppCompatActivity() {
                     }
                 }
                 // Now assign to this bus
-                DriverRepository.updateDriver(driver.copy(assignedBus = busNo, route = finalRoute.ifEmpty { null }))
+                DriverRepository.updateDriver(driver.copy(assignedBus = busNo, route = null))
             }
         }
 

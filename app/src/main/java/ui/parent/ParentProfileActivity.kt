@@ -172,11 +172,9 @@ class ParentProfileActivity : AppCompatActivity() {
                     
                     // Reuse existing parent data from ViewModel
                     val parent = viewModel.parentData.value
-                    val admin = viewModel.adminData.value
-                    
-                    if (parent != null && admin != null) {
+                    if (parent != null) {
                         val (success, error) = parentRepository.submitTrackingRequest(
-                            studentId = studentId,
+                            rollNumber = studentId,
                             parentName = parent.name,
                             phone = parent.phone,
                             relationship = parent.relationship

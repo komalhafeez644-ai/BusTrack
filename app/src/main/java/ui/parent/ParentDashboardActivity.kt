@@ -90,11 +90,8 @@ class ParentDashboardActivity : AppCompatActivity() {
     private var placeholderAnnotationManager: com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager? = null
     private var isMapStyleReady = false
     private var pendingActiveDrivers: List<DriverModel> = emptyList()
-
-    private val busLocations = listOf(
-        Point.fromLngLat(67.0011, 24.8607) to "Bus-01",
-        Point.fromLngLat(67.0599, 24.8716) to "Bus-08"
-    )
+    private var isCollegeDefaultCameraSet = false
+    private val collegeDefaultPoint = Point.fromLngLat(73.0478, 33.5977)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +109,7 @@ class ParentDashboardActivity : AppCompatActivity() {
                 style.addImage("bus-icon", it)
             }
             if (pendingActiveDrivers.isNotEmpty()) updateMapMarkers(pendingActiveDrivers)
+            else setupPlaceholderAnnotations()
         }
 
         // START DATA STREAM IMMEDIATELY
@@ -268,6 +266,11 @@ class ParentDashboardActivity : AppCompatActivity() {
         // are installed. Retain it and render after style readiness, matching Admin.
         pendingActiveDrivers = drivers
         if (!isMapStyleReady) return
+        if (drivers.isEmpty()) {
+            setupPlaceholderAnnotations()
+        } else {
+            isCollegeDefaultCameraSet = false
+        }
 
         // Remove static empty-state buses once an approved live bus is rendered.
         placeholderAnnotationManager?.deleteAll()
@@ -367,24 +370,11 @@ class ParentDashboardActivity : AppCompatActivity() {
             ?: return
         pointAnnotationManager.deleteAll()
 
-        busLocations.forEach { (point, busId) ->
-            val options = PointAnnotationOptions()
-                .withPoint(point)
-                .withIconImage("bus-icon")
-                .withIconSize(1.2)
-                .withTextField(busId)
-            pointAnnotationManager.create(options)
-        }
-
-        // Center camera on the first placeholder bus (Rawalpindi area) with smooth animation
-        if (busLocations.isNotEmpty()) {
-            mapView?.mapboxMap?.flyTo(
-                CameraOptions.Builder()
-                    .center(busLocations[0].first)
-                    .zoom(12.0)
-                    .build(),
-                MapAnimationOptions.mapAnimationOptions { duration(1500) }
+        if (!isCollegeDefaultCameraSet) {
+            mapView?.mapboxMap?.setCamera(
+                CameraOptions.Builder().center(collegeDefaultPoint).zoom(15.0).build()
             )
+            isCollegeDefaultCameraSet = true
         }
     }
 
@@ -403,11 +393,17 @@ class ParentDashboardActivity : AppCompatActivity() {
         
         val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status} • $trip"
+        val locationUpdatedAt = driver.locationTimestamp.takeIf { it > 0L } ?: driver.lastUpdated
+        findViewById<TextView>(R.id.tvLastSynced)?.text = "Last synced: ${formatSyncTime(locationUpdatedAt)}"
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
         findViewById<TextView>(R.id.tvLoad)?.text = driver.load
     }
+
+    private fun formatSyncTime(timestamp: Long): String =
+        if (timestamp > 0L) java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        else "--"
 
     private fun setupUI() {
         // Make Header Profile Clickable
@@ -583,8 +579,15 @@ class ParentDashboardActivity : AppCompatActivity() {
                     val parentModel = ParentModel(name = etParentName.text.toString(), cnic = etCnic.text.toString(), phone = etPhone.text.toString(), relationship = actvRelationship.text.toString())
                     val (saveProfileSuccess, _) = parentRepository.saveParentData(parentModel)
                     if (saveProfileSuccess) {
-                        val (requestSuccess, _) = parentRepository.submitTrackingRequest(studentId = etStudentId.text.toString(), parentName = etParentName.text.toString(), phone = etPhone.text.toString(), relationship = actvRelationship.text.toString())
-                        if (requestSuccess) bottomSheetDialog.dismiss() else it.isEnabled = true
+                        val (requestSuccess, requestError) = parentRepository.submitTrackingRequest(rollNumber = etStudentId.text.toString(), parentName = etParentName.text.toString(), phone = etPhone.text.toString(), relationship = actvRelationship.text.toString())
+                        if (requestSuccess) {
+                            bottomSheetDialog.dismiss()
+                        } else {
+                            it.isEnabled = true
+                            if (!requestError.isNullOrBlank()) {
+                                Toast.makeText(this@ParentDashboardActivity, "Error: $requestError", Toast.LENGTH_LONG).show()
+                            }
+                        }
                     } else it.isEnabled = true
                 }
             }

@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -24,16 +26,18 @@ class AddStudentActivity : AppCompatActivity() {
     private var selectedImageUri: Uri? = null
     private var selectedLat: Double = 0.0
     private var selectedLng: Double = 0.0
+    private var addressWithCoordinates: String = ""
 
     // Location Picker Launcher
     private val pickLocationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val address = result.data?.getStringExtra("SELECTED_ADDRESS")
-            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
-            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
+            addressWithCoordinates = address.orEmpty()
             address?.let {
                 binding.etPickupAddress.setText(it)
             }
+            selectedLat = result.data?.getDoubleExtra("LATITUDE", 0.0) ?: 0.0
+            selectedLng = result.data?.getDoubleExtra("LONGITUDE", 0.0) ?: 0.0
         }
     }
 
@@ -53,8 +57,22 @@ class AddStudentActivity : AppCompatActivity() {
 
         setupGradeSpinner()
         setupSemesterSpinner()
+        setupAddressCoordinateTracking()
         setupFormFormatting()
         setupClickListeners()
+    }
+
+    private fun setupAddressCoordinateTracking() {
+        binding.etPickupAddress.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (s.toString().trim() != addressWithCoordinates) {
+                    selectedLat = 0.0
+                    selectedLng = 0.0
+                }
+            }
+        })
     }
 
     private fun setupFormFormatting() {
@@ -65,41 +83,12 @@ class AddStudentActivity : AppCompatActivity() {
     }
 
     private fun setupGradeSpinner() {
-        val grades = arrayOf(
-            "11th",
-            "12th",
-            "BS English",
-            "BS Urdu",
-            "BS Islamic Studies",
-            "BS Economics",
-            "BS Mathematics",
-            "BS Botany",
-            "BS Information Technology (IT)",
-            "BS Applied Psychology",
-            "BS Political Science",
-            "BBA (Bachelor of Business Administration)"
-        )
-        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, grades)
+        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, utils.StudentEducationOptions.grades)
         binding.spinnerGrade.setAdapter(adapter)
     }
 
     private fun setupSemesterSpinner() {
-        val semesters = arrayOf(
-            "1st SEM",
-            "2nd SEM",
-            "3rd SEM",
-            "4th SEM",
-            "5th SEM",
-            "6th SEM",
-            "7th SEM",
-            "8th SEM",
-            "ICS",
-            "Pre-ENG",
-            "Pre-MED",
-            "Stats",
-            "Arts"
-        )
-        val adapter = ArrayAdapter(this, com.example.bustrack_app.R.layout.spinner_dropdown_item, semesters)
+        val adapter = ArrayAdapter(this, R.layout.spinner_dropdown_item, utils.StudentEducationOptions.semesters)
         binding.etSection.setAdapter(adapter)
     }
 
@@ -262,7 +251,8 @@ class AddStudentActivity : AppCompatActivity() {
             parentName = s.fatherName,
             latitude = s.latitude,
             longitude = s.longitude,
-            studentIdString = s.id
+            studentIdString = s.rollNumber,
+            studentDocumentId = s.id
         )
     }
 }

@@ -20,8 +20,11 @@ data class ApplicationModel(
     val distance: String = "0.8km away",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    /** Legacy property name; stores the student-facing Roll Number, never the document key. */
     val studentIdString: String = "",
     val assignedBus: String = "",
     val assignedDriver: String = "",
-    val routeCode: String = ""
+    val routeCode: String = "",
+    /** Firestore document key; kept separate from the user-facing roll number. */
+    val studentDocumentId: String = ""
 ) : Serializable

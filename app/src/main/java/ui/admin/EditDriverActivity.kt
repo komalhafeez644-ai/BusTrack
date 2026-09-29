@@ -57,7 +57,7 @@ class EditDriverActivity : AppCompatActivity() {
             // Set initial bus and route
             val initialBus = it.assignedBus ?: "Select Bus"
             binding.menuEditBus.setText(initialBus, false)
-            binding.txtRouteValue.text = it.route ?: "No Route Assigned"
+            binding.txtRouteValue.text = "No Route Assigned"
             
             // If bus is already assigned, fetch the route from repository for consistency
             if (it.assignedBus != null) {
@@ -207,7 +207,8 @@ class EditDriverActivity : AppCompatActivity() {
                 phone = binding.etPhone.text.toString().trim(),
                 email = binding.etEmail.text.toString().trim(),
                 assignedBus = finalBus,
-                route = finalRouteValue,
+                // The route is derived from the selected bus and is not stored on the driver.
+                route = null,
                 profileImageUrl = imageUrl
             )
             

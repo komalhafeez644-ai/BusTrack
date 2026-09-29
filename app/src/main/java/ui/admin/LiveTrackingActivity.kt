@@ -258,7 +258,6 @@ class LiveTrackingActivity : AppCompatActivity() {
             pendingDrivers = drivers
             if (drivers.isEmpty()) {
                 findViewById<View>(R.id.driverCard).visibility = View.GONE
-                if (isMapStyleReady) showUnavailableDialog()
             } else {
                 unavailableDialog?.dismiss()
                 unavailableDialog = null
@@ -269,6 +268,17 @@ class LiveTrackingActivity : AppCompatActivity() {
 
         viewModel.selectedDriver.observe(this) { driver ->
             updateDriverCard(driver)
+        }
+
+        viewModel.trackingStatus.observe(this) { status ->
+            when (status) {
+                "OFF_DUTY" -> showUnavailableDialog()
+                "AVAILABLE" -> {
+                    unavailableDialog?.dismiss()
+                    unavailableDialog = null
+                    isUnavailablePopupDismissed = false
+                }
+            }
         }
     }
 
@@ -498,11 +508,17 @@ class LiveTrackingActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
         val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status} • $trip"
+        val locationUpdatedAt = driver.locationTimestamp.takeIf { it > 0L } ?: driver.lastUpdated
+        findViewById<TextView>(R.id.tvLastSynced)?.text = "Last synced: ${formatSyncTime(locationUpdatedAt)}"
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
         findViewById<TextView>(R.id.tvLoad)?.text = driver.load
     }
+
+    private fun formatSyncTime(timestamp: Long): String =
+        if (timestamp > 0L) java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        else "--"
 
     override fun onResume() {
         super.onResume()

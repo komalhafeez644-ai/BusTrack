@@ -13,6 +13,8 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivityEditDriverProfileBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import utils.StorageUtils
@@ -25,11 +27,14 @@ class EditDriverProfileActivity : AppCompatActivity() {
     private val auth = FirebaseAuth.getInstance()
     private var selectedImageUri: Uri? = null
     private var isImageRemoved = false
+    private var driverDocumentId: String? = null
 
     // Gallery Picker
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             selectedImageUri = it
+            binding.imgProfile.setPadding(0, 0, 0, 0)
+            binding.imgProfile.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
             utils.ImageUtils.loadPreviewImage(this, it, binding.imgProfile)
         }
     }
@@ -67,6 +72,7 @@ class EditDriverProfileActivity : AppCompatActivity() {
     }
 
     private fun fillFields(document: com.google.firebase.firestore.DocumentSnapshot) {
+        driverDocumentId = document.id
         val name = document.getString("name") ?: ""
         val driverId = document.getString("id") ?: ""
         val phone = document.getString("phone") ?: ""
@@ -127,49 +133,53 @@ class EditDriverProfileActivity : AppCompatActivity() {
         binding.btnSave.isEnabled = false
         Toast.makeText(this, "Uploading image...", Toast.LENGTH_SHORT).show()
         
-        StorageUtils.uploadImage("driver_profiles", selectedImageUri!!) { url ->
-            if (url != null) {
-                saveDataToFirestore(url)
-            } else {
-                binding.btnSave.isEnabled = true
-                Toast.makeText(this, "Upload failed", Toast.LENGTH_SHORT).show()
+        StorageUtils.uploadImage(
+            folder = "driver_profiles",
+            uri = selectedImageUri!!,
+            immediateContext = this,
+            onResult = { url ->
+                runOnUiThread {
+                    if (url != null) {
+                        saveDataToFirestore(url)
+                    } else {
+                        binding.btnSave.isEnabled = true
+                        Toast.makeText(this, "Upload failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
-        }
+        )
     }
 
     private fun saveDataToFirestore(imageUrl: String?) {
-        val email = auth.currentUser?.email?.trim()?.lowercase() ?: return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            binding.btnSave.isEnabled = true
+            Toast.makeText(this, "Please sign in again to update your profile.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val targetDriverDocumentId = driverDocumentId
+        if (targetDriverDocumentId.isNullOrBlank()) {
+            binding.btnSave.isEnabled = true
+            Toast.makeText(this, "Profile is still loading. Please try again.", Toast.LENGTH_SHORT).show()
+            return
+        }
         
         val newName = binding.etFullName.text.toString().trim()
         val newPhone = binding.etPhone.text.toString().trim()
 
+        binding.btnSave.isEnabled = false
         lifecycleScope.launch {
             try {
-                // 1. Update 'users' collection
-                val userUpdate = mutableMapOf<String, Any>(
-                    "fullName" to newName,
-                    "phone" to newPhone
-                )
+                // Patch only profile fields; use the document ID captured when this
+                // profile was loaded instead of querying every driver again on Save.
+                val driverUpdate = mutableMapOf<String, Any>("name" to newName, "phone" to newPhone)
+                if (imageUrl != null) driverUpdate["profileImageUrl"] = imageUrl
+
+                val userUpdate = mutableMapOf<String, Any>("fullName" to newName, "phone" to newPhone)
                 if (imageUrl != null) userUpdate["profileImageUrl"] = imageUrl
-                
-                db.collection("users").document(uid).update(userUpdate).await()
-
-                // 2. Update 'drivers' collection
-                val driverQuery = db.collection("drivers").get().await()
-                val driverDoc = driverQuery.documents.find { 
-                    it.getString("email")?.trim()?.lowercase() == email 
-                }
-
-                if (driverDoc != null) {
-                    val driverUpdate = mutableMapOf<String, Any>(
-                        "name" to newName,
-                        "phone" to newPhone
-                    )
-                    if (imageUrl != null) driverUpdate["profileImageUrl"] = imageUrl
-                    
-                    db.collection("drivers").document(driverDoc.id).update(driverUpdate).await()
-                }
+                val driverWrite = db.collection("drivers").document(targetDriverDocumentId).update(driverUpdate)
+                val userWrite = db.collection("users").document(uid).set(userUpdate, SetOptions.merge())
+                Tasks.whenAll(driverWrite, userWrite).await()
 
                 Toast.makeText(this@EditDriverProfileActivity, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
                 finish()

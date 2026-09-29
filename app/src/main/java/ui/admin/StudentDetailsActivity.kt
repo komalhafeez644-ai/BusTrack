@@ -153,7 +153,8 @@ class StudentDetailsActivity : AppCompatActivity() {
                     parentName = student.fatherName,
                     latitude = student.latitude,
                     longitude = student.longitude,
-                    studentIdString = student.id
+                    studentIdString = student.rollNumber,
+                    studentDocumentId = student.id
                 ))
                 startActivity(intent)
             }

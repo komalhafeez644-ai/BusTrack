@@ -185,30 +185,70 @@
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Grade / Semester"
-                        android:textColorHint="#666666"
-                        app:hintTextColor="@color/primaryBlue"
-                        app:expandedHintEnabled="false"
-                        app:boxStrokeColor="#0A1D37"
-                        app:endIconTint="#0A1D37"
-                        app:boxCornerRadiusTopStart="12dp"
-                        app:boxCornerRadiusTopEnd="12dp"
-                        app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp"
+                        android:orientation="horizontal"
                         android:layout_marginBottom="16dp">
-                        <AutoCompleteTextView
-                            android:id="@+id/spinnerEditGrade"
-                            android:layout_width="match_parent"
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/tilEditGrade"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:textColor="#1C1C1E"
-                            android:paddingVertical="16dp"
-                            android:popupBackground="@android:color/white"/>
-                    </com.google.android.material.textfield.TextInputLayout>
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            android:hint="Grade"
+                            android:textColorHint="#666666"
+                            app:hintTextColor="@color/primaryBlue"
+                            app:expandedHintEnabled="false"
+                            app:boxStrokeColor="#0A1D37"
+                            app:endIconTint="#0A1D37"
+                            app:boxCornerRadiusTopStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusBottomEnd="12dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/spinnerEditGrade"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="none"
+                                android:background="@null"
+                                android:dropDownSelector="?attr/selectableItemBackground"
+                                android:textColor="#1C1C1E"
+                                android:paddingVertical="16dp"
+                                android:popupBackground="@android:color/white" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/tilEditSemester"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:hint="Semester"
+                            android:textColorHint="#666666"
+                            app:hintTextColor="@color/primaryBlue"
+                            app:expandedHintEnabled="false"
+                            app:boxStrokeColor="#0A1D37"
+                            app:endIconTint="#0A1D37"
+                            app:boxCornerRadiusTopStart="12dp"
+                            app:boxCornerRadiusTopEnd="12dp"
+                            app:boxCornerRadiusBottomStart="12dp"
+                            app:boxCornerRadiusBottomEnd="12dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/spinnerEditSemester"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="none"
+                                android:background="@null"
+                                android:dropDownSelector="?attr/selectableItemBackground"
+                                android:textColor="#1C1C1E"
+                                android:paddingVertical="16dp"
+                                android:popupBackground="@android:color/white" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -265,7 +305,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="phone"
-                            android:maxLength="11"
+                            android:maxLength="12"
                             android:textColor="#1C1C1E"/>
                     </com.google.android.material.textfield.TextInputLayout>
 

@@ -45,13 +45,25 @@ class TrackingRequestsActivity : AppCompatActivity() {
         rvRequests.layoutManager = LinearLayoutManager(this)
         
         adapter = TrackingRequestAdapter(emptyList()) { request ->
-            val intent = Intent(this, TrackingApprovalDetailActivity::class.java)
-            intent.putExtra("REQUEST_ID", request.requestId)
-            intent.putExtra("PARENT_ID", request.parentId)
-            intent.putExtra("STUDENT_ID", request.studentId)
-            intent.putExtra("PARENT_NAME", request.parentName)
-            intent.putExtra("STATUS", request.status)
-            startActivity(intent)
+            val openApproval = { resolvedRollNumber: String ->
+                val intent = Intent(this, TrackingApprovalDetailActivity::class.java)
+                intent.putExtra("REQUEST_ID", request.requestId)
+                intent.putExtra("PARENT_ID", request.parentId)
+                intent.putExtra("ROLL_NUMBER", resolvedRollNumber)
+                intent.putExtra("PARENT_NAME", request.parentName)
+                intent.putExtra("STATUS", request.status)
+                startActivity(intent)
+            }
+            val rollNumber = request.rollNumber.trim()
+            if (rollNumber.isNotEmpty()) {
+                openApproval(rollNumber)
+            } else {
+                // Older requests stored only their student document link. Resolve
+                // its Roll Number before opening the approve screen.
+                com.example.bustrack_app.data.FirebaseRepository.fetchStudentById(request.studentId) { student ->
+                    openApproval(student?.rollNumber?.takeIf { it.isNotBlank() } ?: request.studentId)
+                }
+            }
         }
         rvRequests.adapter = adapter
 
@@ -218,7 +230,8 @@ class TrackingRequestsActivity : AppCompatActivity() {
             // Dynamically add student info to the card
             holder.containerChildren.removeAllViews()
             val childView = LayoutInflater.from(holder.itemView.context).inflate(R.layout.layout_child_request_item, holder.containerChildren, false)
-            childView.findViewById<TextView>(R.id.tvStudentInfo).text = "Student ID: ${request.studentId}"
+            val rollNumber = request.rollNumber.ifBlank { request.studentId }
+            childView.findViewById<TextView>(R.id.tvStudentInfo).text = "Roll Number: $rollNumber"
             
             val tvRoute = childView.findViewById<TextView>(R.id.tvEnabledRoute)
             tvRoute.visibility = View.GONE

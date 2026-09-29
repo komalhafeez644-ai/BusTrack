@@ -64,7 +64,9 @@ class DriverDashboardViewModel : ViewModel() {
         } ?: return
         _currentDriver.value = driver
         val bus = buses.find { it.busNumber == driver.assignedBus }
-        val route = routes.find { it.routeName == driver.route || it.busNo == driver.assignedBus }
+        // A driver has no independent route assignment: the route belongs to their bus.
+        val assignedBus = driver.assignedBus?.takeIf { it.isNotBlank() && !it.equals("Not Assigned", true) }
+        val route = assignedBus?.let { busNo -> routes.find { it.busNo.equals(busNo, true) } }
 
         // Filter students by route name or bus number
         val studentsInRoute = students.filter { 
@@ -75,7 +77,7 @@ class DriverDashboardViewModel : ViewModel() {
         _dashboardData.value = DriverDashboardModel(
             driverName = driver.name,
             busNumber = driver.assignedBus ?: "Not Assigned",
-            currentRoute = route?.routeName ?: driver.route ?: "No Route",
+            currentRoute = route?.routeName ?: if (assignedBus == null) "No Bus Assigned" else "No Route Assigned",
             capacity = if (bus != null) "${bus.totalSeats} Seats" else "N/A",
             stopsAssigned = route?.stopsList?.size ?: 0,
             stopsCount = "${route?.stopsList?.size ?: 0}",

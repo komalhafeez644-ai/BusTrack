@@ -32,10 +32,13 @@ object ImageUtils {
 
         Glide.with(context)
             .load(transformedUrl)
+            // Cloudinary URLs can be reused by account presets; profile photos should
+            // reflect the latest Firestore URL immediately in lists and profile pages.
+            .diskCacheStrategy(DiskCacheStrategy.NONE)
+            .skipMemoryCache(true)
             .placeholder(R.drawable.ic_person)
             .error(R.drawable.ic_person)
             .circleCrop()
-            .diskCacheStrategy(DiskCacheStrategy.ALL)
             .into(imageView)
     }
 

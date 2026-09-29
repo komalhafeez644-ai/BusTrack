@@ -38,16 +38,6 @@
             app:layout_constraintStart_toEndOf="@id/btnBack"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <ImageView
-            android:id="@+id/btnNotification"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/notifications"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/primaryBlue" />
-
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- MAPBOX MAP -->
@@ -104,7 +94,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif"
-                    android:text="Optimal match for Student ID:\n#SF-2045"
+                    android:text="Optimal match for Roll Number:\n#SF-2045"
                     android:textColor="@color/lightGray"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -252,7 +242,7 @@
                 android:layout_marginTop="24dp"
                 android:backgroundTint="@color/primaryDark"
                 android:fontFamily="sans-serif-medium"
-                android:text="Confirm Assignment"
+                android:text="Next"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
                 android:textSize="16sp"

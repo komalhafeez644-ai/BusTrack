@@ -83,25 +83,22 @@ class LiveTrackingViewModel : ViewModel() {
 
             _allDriversForSearch.value = filteredDrivers
 
-            val currentTime = System.currentTimeMillis()
-            val active = filteredDrivers.filter {
-                val isOnDuty = it.status.equals("Active", true) || it.status.equals("ACTIVE", true) || it.status.equals("On Duty", true)
-                val hasAssignedBus = !it.assignedBus.isNullOrEmpty()
-
-                // Bus track-able hone ke liye sirf On Duty hona chahiye + valid, recent
-                // location + assigned bus zaroori hai. On Duty aur
-                // Navigation do independent states hain.
-                isOnDuty && hasAssignedBus && it.latitude != 0.0 && it.longitude != 0.0
-                        && (currentTime - it.lastUpdated) < 1800000 // 30 mins window for emulator/testing
+            val onDutyDrivers = filteredDrivers.filter {
+                it.status.equals("Active", true) || it.status.equals("ACTIVE", true) || it.status.equals("On Duty", true)
             }
 
-            // Check availability if in Parent Mode
-            if (isParentMode) {
-                if (active.isEmpty()) {
-                    _trackingStatus.value = "OFF_DUTY"
-                } else {
-                    _trackingStatus.value = "AVAILABLE"
-                }
+            // Availability dialogs represent duty state only. A driver can be on
+            // duty before starting navigation, and the first GPS fix may arrive a
+            // moment after the status write.
+            _trackingStatus.value = if (onDutyDrivers.isEmpty()) "OFF_DUTY" else "AVAILABLE"
+
+            val active = onDutyDrivers.filter {
+                val hasAssignedBus = !it.assignedBus.isNullOrEmpty()
+
+                // Navigation is independent of live GPS. Keep the latest known
+                // point visible while on duty; GPS updates continue before and
+                // after navigation starts.
+                hasAssignedBus && it.latitude != 0.0 && it.longitude != 0.0
             }
 
             // These fields are computed by DriverDashboard's navigation session and

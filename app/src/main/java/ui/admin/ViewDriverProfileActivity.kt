@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.DriverRepository
+import com.example.bustrack_app.data.RouteRepository
 import com.example.bustrack_app.models.DriverModel
 import com.google.android.material.button.MaterialButton
 import utils.ViewUtils
@@ -27,6 +28,7 @@ class ViewDriverProfileActivity : AppCompatActivity() {
 
         // DYNAMIC DATA RECEIVE
         driverData = intent.getSerializableExtra("driver_data") as? DriverModel
+        driverData?.let(::bindData)
 
         setupClickListeners()
     }
@@ -35,7 +37,9 @@ class ViewDriverProfileActivity : AppCompatActivity() {
         super.onResume()
         // Refresh from Repository
         driverData?.let { current ->
-            val updated = DriverRepository.driverList.value?.find { it.id == current.id }
+            val updated = DriverRepository.driverList.value?.find {
+                it.driverId == current.driverId || it.uid == current.uid || it.id == current.id
+            }
             updated?.let {
                 driverData = it
                 bindData(it)
@@ -58,8 +62,11 @@ class ViewDriverProfileActivity : AppCompatActivity() {
         txtCnic.text = driver.cnic
         txtPhone.text = driver.phone
         txtEmail.text = driver.email
-        txtRoute.text = driver.route ?: "Not Assigned"
-        txtBus.text = driver.assignedBus ?: "Not Assigned"
+        val busNo = driver.assignedBus?.takeIf { it.isNotBlank() && !it.equals("Not Assigned", true) }
+        txtBus.text = busNo ?: "Not Assigned"
+        txtRoute.text = busNo?.let { assignedBus ->
+            RouteRepository.routeList.value?.find { it.busNo.equals(assignedBus, true) }?.routeName
+        } ?: "No Route Assigned"
 
         utils.ImageUtils.loadProfileImage(this, driver.profileImageUrl, imgAvatar)
     }

@@ -9,15 +9,15 @@ class BusViewModel : ViewModel() {
 
     val busList: LiveData<List<BusModel>> = BusRepository.busList
 
-    fun updateBusDetails(busNumber: String, updatedBus: BusModel) {
-        BusRepository.updateBusDetails(busNumber, updatedBus)
+    fun updateBusDetails(busNumber: String, updatedBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
+        BusRepository.updateBusDetails(busNumber, updatedBus, onComplete)
     }
 
     fun deleteBusFromFleet(busNumber: String, onComplete: (Boolean) -> Unit = {}) {
         BusRepository.deleteBus(busNumber, onComplete)
     }
 
-    fun addNewBus(newBus: BusModel) {
-        BusRepository.addBus(newBus)
+    fun addNewBus(newBus: BusModel, onComplete: (Boolean) -> Unit = {}) {
+        BusRepository.addBus(newBus, onComplete)
     }
 }

@@ -82,6 +82,8 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private var isMapStyleReady = false
     private var pendingDrivers: List<DriverModel> = emptyList()
     private var hasInitializedTrackingCamera = false
+    private var isCollegeDefaultCameraSet = false
+    private val collegeDefaultPoint = Point.fromLngLat(73.0478, 33.5977)
     private var markerUpdateGeneration = 0L
     private var busGeoJsonSource: com.mapbox.maps.extension.style.sources.generated.GeoJsonSource? = null
 
@@ -119,14 +121,8 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             val bitmap = bitmapFromDrawableRes(this@PrincipalDashboardActivity, R.drawable.ic_marker_bus)
             bitmap?.let { style.addImage("bus-icon", it) }
 
-            // Default center on FG Post Graduate College, Saddar (Rawalpindi)
-            val defaultPoint = Point.fromLngLat(73.0478, 33.5977)
-            mapView?.mapboxMap?.setCamera(
-                CameraOptions.Builder()
-                    .center(defaultPoint)
-                    .zoom(15.0)
-                    .build()
-            )
+            // Match Admin's inactive map center and zoom.
+            centerOnCollegeWhenInactive()
 
             // ROOT-CAUSE FIX (Principal marker click / Bottom Card) - identical defect to
             // Admin's LiveTrackingActivity: buses are drawn via modelLayer/symbolLayer on a
@@ -278,9 +274,10 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     private fun observeLiveTracking() {
         liveTrackingViewModel.activeDrivers.observe(this) { drivers ->
             pendingDrivers = drivers.orEmpty()
+            if (drivers.isNullOrEmpty()) centerOnCollegeWhenInactive()
+            else isCollegeDefaultCameraSet = false
             if (drivers == null || drivers.isEmpty()) {
                 findViewById<View>(R.id.driverCard)?.visibility = View.GONE
-                showUnavailableDialog()
             } else {
                 unavailableDialog?.dismiss()
                 unavailableDialog = null
@@ -292,6 +289,25 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         liveTrackingViewModel.selectedDriver.observe(this) { driver ->
             updateDriverCard(driver)
         }
+
+        liveTrackingViewModel.trackingStatus.observe(this) { status ->
+            when (status) {
+                "OFF_DUTY" -> showUnavailableDialog()
+                "AVAILABLE" -> {
+                    unavailableDialog?.dismiss()
+                    unavailableDialog = null
+                    isUnavailablePopupDismissed = false
+                }
+            }
+        }
+    }
+
+    private fun centerOnCollegeWhenInactive() {
+        if (!isMapStyleReady || isCollegeDefaultCameraSet) return
+        mapView?.mapboxMap?.setCamera(
+            CameraOptions.Builder().center(collegeDefaultPoint).zoom(15.0).build()
+        )
+        isCollegeDefaultCameraSet = true
     }
 
     private fun showUnavailableDialog() {
@@ -526,11 +542,17 @@ class PrincipalDashboardActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvBusRouteInfo)?.text = "Bus #${driver.assignedBus ?: "N/A"} • ${driver.route ?: "No Route"}"
         val trip = if (driver.tripDirection.equals("RETURN", true)) "Return Trip" else "Forward Trip"
         findViewById<TextView>(R.id.tvRouteDetail)?.text = "Active Status: ${driver.status} • $trip"
+        val locationUpdatedAt = driver.locationTimestamp.takeIf { it > 0L } ?: driver.lastUpdated
+        findViewById<TextView>(R.id.tvLastSynced)?.text = "Last synced: ${formatSyncTime(locationUpdatedAt)}"
 
         findViewById<TextView>(R.id.tvEta)?.text = driver.eta
         findViewById<TextView>(R.id.tvSpeed)?.text = "${driver.speed.toInt()} km/h"
         findViewById<TextView>(R.id.tvLoad)?.text = driver.load
     }
+
+    private fun formatSyncTime(timestamp: Long): String =
+        if (timestamp > 0L) java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        else "--"
 
     private fun observeProfileData() {
         profileViewModel.adminData.observe(this) { user ->

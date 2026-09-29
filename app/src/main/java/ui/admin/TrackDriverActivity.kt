@@ -287,7 +287,12 @@ class TrackDriverActivity : AppCompatActivity() {
                 override fun onMoveBegin(detector: MoveGestureDetector) {
                     Log.d("CAMERA_DEBUG", "onMoveBegin fired: cameraModeBefore=$currentCameraMode " +
                             "isRecenterAnimationInProgress=$isRecenterAnimationInProgress lifecycle=onMoveBegin")
-                    if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
+                    // Mapbox can report the tail of a programmatic Recenter easeTo
+                    // as a move-begin event. Keep follow enabled during that short
+                    // animation; only an actual user pan should leave follow mode.
+                    if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW &&
+                        !isRecenterAnimationInProgress
+                    ) {
                         currentCameraMode = TrackingCameraMode.ROUTE_OVERVIEW
                         isRecenterAnimationInProgress = false
                     }
@@ -443,24 +448,23 @@ class TrackDriverActivity : AppCompatActivity() {
                         driver.status.equals("ACTIVE", true) ||
                         driver.status.equals("On Duty", true)
 
-                val currentTime = System.currentTimeMillis()
-                val isDataRecent = (currentTime - driver.lastUpdated) < 1800000 // 30 mins window
-
                 // Live location is published while a driver is On Duty; navigation
                 // state only controls route guidance and must not block a fresh GPS
                 // position from reaching this viewer. This matches the Admin overview,
                 // Parent, and Principal tracking feeds.
-                if (isStatusActive && isDataRecent &&
-                    driver.latitude != 0.0 && driver.longitude != 0.0) {
+                if (isStatusActive) {
                     unavailableDialog?.dismiss()
                     unavailableDialog = null
                     isUnavailablePopupDismissed = false
-                    updateUI(driver)
+                    if (driver.latitude != 0.0 && driver.longitude != 0.0) {
+                        updateUI(driver)
+                    }
                 } else {
                     showUnavailableDialog()
                 }
             } else {
-                showUnavailableDialog()
+                unavailableDialog?.dismiss()
+                unavailableDialog = null
             }
         }
 
@@ -557,6 +561,10 @@ class TrackDriverActivity : AppCompatActivity() {
         }
     }
 
+    private fun formatSyncTime(timestamp: Long): String =
+        if (timestamp > 0L) java.text.SimpleDateFormat("h:mm a", Locale.getDefault()).format(java.util.Date(timestamp))
+        else "--"
+
     private fun updateUI(driver: DriverModel) {
         try {
             updateTrackingStatusHeader(driver)
@@ -573,6 +581,10 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvBusIdSheet)?.text = driver.assignedBus ?: "BUS-101"
                 it.findViewById<TextView>(R.id.tvRouteSheet)?.text = driver.route ?: "Route"
                 it.findViewById<TextView>(R.id.tvDriverNameSheet)?.text = driver.name
+                val locationUpdatedAt = driver.locationTimestamp.takeIf { timestamp -> timestamp > 0L }
+                    ?: driver.lastUpdated
+                it.findViewById<TextView>(R.id.tvLastSyncedSheet)?.text =
+                    "Last synced: ${formatSyncTime(locationUpdatedAt)}"
 
                 // Reverse geocoding is asynchronous and cached below. Calling
                 // Geocoder.getFromLocation() on every Firestore update blocked the
