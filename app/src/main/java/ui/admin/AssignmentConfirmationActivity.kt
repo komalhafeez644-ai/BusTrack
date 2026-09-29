@@ -182,6 +182,11 @@ class AssignmentConfirmationActivity : AppCompatActivity() {
         val btnDone = dialog.findViewById<MaterialButton>(R.id.btnDone)
         btnDone.setOnClickListener {
             dialog.dismiss()
+            val dashboardIntent = android.content.Intent(this, AdminDashboardActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(dashboardIntent)
             finish()
         }
 

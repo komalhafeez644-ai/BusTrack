@@ -7,6 +7,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.GravityCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.drawerlayout.widget.DrawerLayout
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.FirebaseRepository
@@ -16,6 +17,7 @@ import com.google.firebase.ktx.Firebase
 import ui.admin.*
 import ui.parent.*
 import ui_authentication.LoginActivity
+import kotlinx.coroutines.launch
 
 object NavigationUtils {
 
@@ -127,6 +129,21 @@ object NavigationUtils {
         val navAttendance = activity.findViewById<LinearLayout>(R.id.navAttendance)
         val navRequests = activity.findViewById<LinearLayout>(R.id.navRequests)
         val navAlerts = activity.findViewById<LinearLayout>(R.id.navAlerts)
+        val unreadDot = activity.findViewById<View>(R.id.viewAlertsUnreadDot)
+        unreadDot?.visibility = View.GONE
+
+        // Keep the Alerts indicator live on every screen that shares this navigation bar.
+        val uid = Firebase.auth.currentUser?.uid
+        val lifecycleOwner = activity as? androidx.lifecycle.LifecycleOwner
+        if (uid != null && lifecycleOwner != null) {
+            FirebaseRepository.unreadCount.observe(lifecycleOwner) { count ->
+                unreadDot?.visibility = if (count > 0) View.VISIBLE else View.GONE
+            }
+            lifecycleOwner.lifecycleScope.launch {
+                val role = com.example.bustrack_app.data.AuthRepository().getCurrentUserRole()
+                FirebaseRepository.startUnreadCountListener(uid, role)
+            }
+        }
 
         // Reset all states first to ensure a clean UI
         val navs = listOf(navDashboard, navLiveTracking, navAttendance, navRequests, navAlerts)

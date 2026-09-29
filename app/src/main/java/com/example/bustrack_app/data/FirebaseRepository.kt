@@ -772,6 +772,12 @@ object FirebaseRepository {
         message: String,
         type: String = "GENERAL",
         relatedId: String = "",
+        driverName: String = "",
+        busNumber: String = "",
+        routeName: String = "",
+        parentName: String = "",
+        parentPhone: String = "",
+        parentRollNumber: String = "",
         onComplete: (Boolean) -> Unit = {}
     ) {
         if (recipientId.isNullOrBlank() && recipientRole.isNullOrBlank()) {
@@ -789,6 +795,12 @@ object FirebaseRepository {
             "message" to message,
             "type" to type,
             "relatedId" to relatedId,
+            "driverName" to driverName,
+            "busNumber" to busNumber,
+            "routeName" to routeName,
+            "parentName" to parentName,
+            "parentPhone" to parentPhone,
+            "parentRollNumber" to parentRollNumber,
             "isRead" to false,
             "timestamp" to com.google.firebase.Timestamp.now()
         )
@@ -867,43 +879,53 @@ object FirebaseRepository {
     }
 
     fun markAllNotificationsRead(notificationIds: List<String>, onComplete: (Boolean) -> Unit = {}) {
-        if (notificationIds.isEmpty()) {
+        val uniqueIds = notificationIds.distinct()
+        if (uniqueIds.isEmpty()) {
             onComplete(true)
             return
         }
-        val batch = db.batch()
-        notificationIds.forEach { id ->
-            batch.update(db.collection("notifications").document(id), "isRead", true)
+
+        val chunks = uniqueIds.chunked(500)
+        fun commitChunk(index: Int) {
+            if (index >= chunks.size) {
+                onComplete(true)
+                return
+            }
+            val batch = db.batch()
+            chunks[index].forEach { id ->
+                batch.update(db.collection("notifications").document(id), "isRead", true)
+            }
+            batch.commit()
+                .addOnSuccessListener { commitChunk(index + 1) }
+                .addOnFailureListener { onComplete(false) }
         }
-        batch.commit()
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+        commitChunk(0)
     }
 
     private val unreadListeners = mutableListOf<ListenerRegistration>()
     private val _unreadCount = androidx.lifecycle.MutableLiveData<Int>()
     val unreadCount: androidx.lifecycle.LiveData<Int> get() = _unreadCount
+    private var unreadSubscriptionKey: String? = null
 
     fun startUnreadCountListener(uid: String, role: String) {
-        if (unreadListeners.isNotEmpty()) return // Already listening
+        val subscriptionKey = "$uid:$role"
+        if (unreadSubscriptionKey == subscriptionKey && unreadListeners.isNotEmpty()) return
+        stopUnreadCountListener()
+        unreadSubscriptionKey = subscriptionKey
+        _unreadCount.postValue(0)
 
-        val query = db.collection("notifications")
-            .whereEqualTo("isRead", false)
-            .where(com.google.firebase.firestore.Filter.or(
-                com.google.firebase.firestore.Filter.equalTo("recipientId", uid),
-                com.google.firebase.firestore.Filter.equalTo("recipientRole", role)
-            ))
-
-        val reg = query.addSnapshotListener { snapshot, _ ->
-            _unreadCount.postValue(snapshot?.size() ?: 0)
-        }
-
-        unreadListeners.add(reg)
+        // Derive the badge from the same merged notification feed used by the inbox.
+        // This keeps recipient and role broadcasts, deduplication, and read state aligned.
+        unreadListeners.addAll(listenToNotifications(uid, role) { notifications ->
+            _unreadCount.postValue(notifications.count { !it.isRead })
+        })
     }
 
     fun stopUnreadCountListener() {
         unreadListeners.forEach { it.remove() }
         unreadListeners.clear()
+        unreadSubscriptionKey = null
+        _unreadCount.postValue(0)
     }
 
     /**
@@ -982,7 +1004,10 @@ object FirebaseRepository {
             title = "Bus On Duty: $busNo",
             message = "Driver $driverName (Bus $busNo, Route: $routeName) is now On Duty and navigation is active.",
             type = NotificationModel.TYPE_TRIP_STARTED,
-            relatedId = routeName
+            relatedId = routeName,
+            driverName = driverName,
+            busNumber = busNo,
+            routeName = routeName
         )
 
         // 2. Notify Principal (Role broadcast)
@@ -993,7 +1018,10 @@ object FirebaseRepository {
             title = "Bus On Duty: $busNo",
             message = "Bus $busNo on Route $routeName (Driver: $driverName) has gone on duty.",
             type = NotificationModel.TYPE_TRIP_STARTED,
-            relatedId = routeName
+            relatedId = routeName,
+            driverName = driverName,
+            busNumber = busNo,
+            routeName = routeName
         )
 
         // 3. Notify ONLY approved parents connected to this assigned route

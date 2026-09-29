@@ -166,18 +166,6 @@
                             android:textStyle="bold"
                             android:layout_centerVertical="true"/>
 
-                        <com.google.android.material.switchmaterial.SwitchMaterial
-                            android:id="@+id/switchTransportStatus"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_alignParentEnd="true"
-                            android:layout_centerVertical="true"
-                            android:checked="true"
-                            app:trackTint="@color/switch_track_selector"
-                            app:thumbTint="@color/white"
-                            android:visibility="gone"
-                            tools:visibility="visible"/>
-
                         <View
                             android:id="@+id/viewVerticalBar"
                             android:layout_width="0dp"

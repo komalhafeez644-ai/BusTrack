@@ -95,6 +95,15 @@
                             android:textSize="11sp"
                             android:textStyle="bold"
                             android:layout_marginTop="2dp" />
+
+                        <TextView
+                            android:id="@+id/tvDetailTime"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Time unavailable"
+                            android:textColor="#7F1D1D"
+                            android:textSize="12sp" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -135,6 +144,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardTransportDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -259,7 +269,7 @@
         android:orientation="vertical"
         android:padding="16dp"
         android:background="#FFFFFF"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toTopOf="@id/bottomNavInclude">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnContactDriver"

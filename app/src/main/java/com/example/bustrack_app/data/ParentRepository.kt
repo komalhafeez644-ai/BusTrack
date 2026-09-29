@@ -96,7 +96,10 @@ class ParentRepository {
                 title = "New Tracking Request",
                 message = "Parent $parentName has submitted a tracking request for Roll Number $rollNumber.",
                 type = "TRACKING_REQUEST",
-                relatedId = requestId
+                relatedId = requestId,
+                parentName = parentName,
+                parentPhone = phone,
+                parentRollNumber = normalizedRollNumber
             )
 
             Pair(true, null)

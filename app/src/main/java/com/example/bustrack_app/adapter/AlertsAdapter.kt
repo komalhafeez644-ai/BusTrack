@@ -33,6 +33,7 @@ class AlertsAdapter(
         fun bind(alert: TransportAlert) {
             binding.tvAlertTitle.text = alert.title
             binding.tvAlertSubtitle.text = alert.subtitle
+            binding.tvTime.text = alert.timeText
             binding.ivAlertIcon.setImageResource(alert.iconResId)
             binding.tvTagText.text = alert.type
 

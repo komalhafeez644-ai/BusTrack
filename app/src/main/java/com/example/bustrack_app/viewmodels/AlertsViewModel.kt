@@ -21,6 +21,7 @@ import utils.FormUtils
 class AlertsViewModel : ViewModel() {
 
     private var allAlerts: List<TransportAlert> = emptyList()
+    private var unreadNotificationIds: List<String> = emptyList()
     private var listeners: List<ListenerRegistration> = emptyList()
 
     private val _alerts = MutableLiveData<List<TransportAlert>>()
@@ -40,15 +41,18 @@ class AlertsViewModel : ViewModel() {
             listeners = FirebaseRepository.listenToNotifications(uid, role) { notifications ->
                 allAlerts = notifications.map { it.toTransportAlert() }
                 _alerts.value = allAlerts
-                
-                // Track unseen count for badges (optional: could expose as LiveData)
-                _unseenCount.value = notifications.count { !it.isRead }
+                unreadNotificationIds = notifications.filter { !it.isRead }.map { it.id }.filter { it.isNotBlank() }
+                _unseenCount.postValue(unreadNotificationIds.size)
             }
         }
     }
 
     private val _unseenCount = MutableLiveData<Int>()
     val unseenCount: LiveData<Int> get() = _unseenCount
+
+    fun markAllAsRead(onComplete: (Boolean) -> Unit) {
+        FirebaseRepository.markAllNotificationsRead(unreadNotificationIds, onComplete)
+    }
 
     private fun com.example.bustrack_app.models.NotificationModel.toTransportAlert(): TransportAlert {
         val (tag, icon) = when {
@@ -71,8 +75,17 @@ class AlertsViewModel : ViewModel() {
                 "GENERAL" to android.R.drawable.ic_menu_manage
             else -> "GENERAL" to android.R.drawable.ic_dialog_info
         }
-        val subtitleWithTime = "${this.message}\n${FormUtils.timeAgo(this.timestamp)}"
-        return TransportAlert(this.title, subtitleWithTime, tag, icon, this.id)
+        return TransportAlert(
+            title = this.title,
+            subtitle = this.message,
+            type = tag,
+            iconResId = icon,
+            id = this.id,
+            timeText = FormUtils.timeAgo(this.timestamp),
+            notificationKind = this.type,
+            relatedId = this.relatedId,
+            parentPhone = this.parentPhone
+        )
     }
 
     // Show all

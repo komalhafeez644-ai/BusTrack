@@ -31,6 +31,9 @@ data class NotificationModel(
     val driverName: String = "",
     val driverEmail: String = "",
     val driverPhone: String = "",
+    val parentName: String = "",
+    val parentPhone: String = "",
+    val parentRollNumber: String = "",
     val busNumber: String = "",
     val routeName: String = "",
     val alertType: String = "",      // "Road Block", "Heavy Traffic", "Accident", "Bus Breakdown", "Fuel Issue", "Bad Weather", "Student Emergency", "Police Check", "Wrong Route", "Other"
@@ -86,7 +89,9 @@ data class NotificationModel(
             val parsedDate = parseDate(doc.get("timestamp"))
 
             return NotificationModel(
-                id = doc.getString("id")?.takeIf { it.isNotBlank() } ?: docId,
+                // Use the Firestore document key for writes such as mark-as-read.
+                // The optional "id" field can be stale or differ from the document key.
+                id = docId,
                 recipientId = doc.getString("recipientId") ?: "",
                 recipientRole = doc.getString("recipientRole") ?: "",
                 title = doc.getString("title") ?: "",
@@ -100,6 +105,9 @@ data class NotificationModel(
                 driverName = doc.getString("driverName") ?: "",
                 driverEmail = doc.getString("driverEmail") ?: "",
                 driverPhone = doc.getString("driverPhone") ?: "",
+                parentName = doc.getString("parentName") ?: "",
+                parentPhone = doc.getString("parentPhone") ?: "",
+                parentRollNumber = doc.getString("parentRollNumber") ?: "",
                 busNumber = doc.getString("busNumber") ?: "",
                 routeName = doc.getString("routeName") ?: "",
                 alertType = doc.getString("alertType") ?: "",

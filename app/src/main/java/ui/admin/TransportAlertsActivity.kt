@@ -53,12 +53,17 @@ class TransportAlertsActivity : AppCompatActivity() {
         if (hideAdminChrome) {
             binding.btnBack.setImageResource(R.drawable.ic_menu)
             binding.btnBack.contentDescription = "Open menu"
+            binding.btnMarkAllReadAction.visibility = View.GONE
         }
 
         // RECYCLER
         adapter = AlertsAdapter(emptyList()) { alert ->
             if (alert.id.isNotBlank()) {
-                com.example.bustrack_app.data.FirebaseRepository.markNotificationRead(alert.id)
+                com.example.bustrack_app.data.FirebaseRepository.markNotificationRead(alert.id) { success ->
+                    if (!success && !isFinishing) {
+                        android.widget.Toast.makeText(this, "Could not mark alert as read. Please try again.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             val intent = Intent(this, AlertDetailActivity::class.java)
             intent.putExtra("NOTIFICATION_ID", alert.id)
@@ -66,6 +71,9 @@ class TransportAlertsActivity : AppCompatActivity() {
             intent.putExtra("ALERT_SUBTITLE", alert.subtitle)
             intent.putExtra("ALERT_TYPE", alert.type)
             intent.putExtra("ALERT_ICON", alert.iconResId)
+            intent.putExtra("NOTIFICATION_KIND", alert.notificationKind)
+            intent.putExtra("RELATED_ID", alert.relatedId)
+            intent.putExtra("PARENT_PHONE", alert.parentPhone)
             startActivity(intent)
         }
 
@@ -78,6 +86,23 @@ class TransportAlertsActivity : AppCompatActivity() {
         // VIEWMODEL OBSERVE
         viewModel.alerts.observe(this) { list ->
             adapter.update(list)
+        }
+
+        viewModel.unseenCount.observe(this) { count ->
+            if (!hideAdminChrome) {
+                binding.btnMarkAllReadAction.visibility = if (count > 0) View.VISIBLE else View.GONE
+            }
+        }
+        binding.btnMarkAllReadAction.setOnClickListener {
+            utils.ViewUtils.applyClickEffect(it)
+            viewModel.markAllAsRead { success ->
+                if (isFinishing || isDestroyed) return@markAllAsRead
+                android.widget.Toast.makeText(
+                    this,
+                    if (success) "All alerts marked as read." else "Could not mark alerts as read. Please try again.",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
         }
 
         // ✅ CHIPS FILTER

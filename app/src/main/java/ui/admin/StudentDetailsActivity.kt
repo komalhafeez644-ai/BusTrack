@@ -3,6 +3,7 @@ package ui.admin
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -57,8 +58,6 @@ class StudentDetailsActivity : AppCompatActivity() {
             binding.btnEditDetails.visibility = View.GONE
             binding.btnDeleteStudent.visibility = View.GONE
             binding.btnAssignRouteAction.visibility = View.GONE
-            binding.switchTransportStatus.isEnabled = false
-            // Optional: Hide the label "Transport Status" switch container if needed
         }
     }
 
@@ -86,8 +85,6 @@ class StudentDetailsActivity : AppCompatActivity() {
 
                 binding.tvStatusBadge.text = "UNASSIGNED"
                 binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#EF4444"))
-                binding.switchTransportStatus.visibility = View.GONE
-
                 binding.btnAssignRouteAction.visibility = View.VISIBLE
             } else {
                 binding.tvRouteName.text = data.route
@@ -100,9 +97,6 @@ class StudentDetailsActivity : AppCompatActivity() {
                 binding.tvBusNumber.setTextColor(Color.BLACK)
 
                 // Status Logic
-                binding.switchTransportStatus.visibility = View.VISIBLE
-                binding.switchTransportStatus.isChecked = data.isActive
-                
                 if (data.isActive) {
                     binding.tvStatusBadge.text = "ACTIVE"
                     binding.tvStatusBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#22C55E")) // Green
@@ -132,8 +126,16 @@ class StudentDetailsActivity : AppCompatActivity() {
         }
 
         binding.ivCallAction.setOnClickListener {
-            val phoneNum = binding.tvPhoneNumber.text.toString()
-            Toast.makeText(this, "Calling Parent: $phoneNum", Toast.LENGTH_SHORT).show()
+            val phoneNum = binding.tvPhoneNumber.text.toString().trim()
+            if (phoneNum.isBlank() || phoneNum.equals("Not available", ignoreCase = true)) {
+                Toast.makeText(this, "Parent phone number is not available.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            try {
+                startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", phoneNum, null)))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Unable to open phone dialer: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.btnAssignRouteAction.setOnClickListener {
@@ -172,17 +174,6 @@ class StudentDetailsActivity : AppCompatActivity() {
             showDeleteConfirmationDialog()
         }
 
-        binding.switchTransportStatus.setOnCheckedChangeListener { _, isChecked ->
-            viewModel.studentDetails.value?.let { student ->
-                val updatedStudent = student.copy(isActive = isChecked)
-                StudentRepository.updateStudent(updatedStudent) { success ->
-                    if (success) {
-                        // The observer will update the UI
-                        Toast.makeText(this, "Status updated to ${if (isChecked) "Active" else "Inactive"}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
     }
 
     private fun showDeleteConfirmationDialog() {
