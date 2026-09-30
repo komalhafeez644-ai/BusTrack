@@ -20,7 +20,6 @@ class EditDriverViewModel : ViewModel() {
         )
     }
 
-    // FIXED: Added email argument signatures to match current dynamic model constraints
     fun updateDriver(name: String, cnic: String, route: String, phone: String, email: String) {
         val currentDriver = driverData.value
         currentDriver?.let {

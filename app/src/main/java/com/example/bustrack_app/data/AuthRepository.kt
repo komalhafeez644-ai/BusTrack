@@ -1,6 +1,7 @@
 package com.example.bustrack_app.data
 
 import android.util.Log
+import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
@@ -10,6 +11,15 @@ import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
 
 class AuthRepository {
+
+    companion object {
+        fun passwordResetActionCodeSettings(): ActionCodeSettings =
+            ActionCodeSettings.newBuilder()
+                .setUrl("https://bustrackapp-1a6c98c0.firebaseapp.com")
+                .setAndroidPackageName("com.example.bustrack_app", false, null)
+                .setHandleCodeInApp(true)
+                .build()
+    }
 
     private val auth = Firebase.auth
     private val db = Firebase.firestore
@@ -144,7 +154,7 @@ class AuthRepository {
     suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
         val cleanEmail = email.trim().lowercase()
         return try {
-            auth.sendPasswordResetEmail(cleanEmail).await()
+            auth.sendPasswordResetEmail(cleanEmail, passwordResetActionCodeSettings()).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("AuthRepo", "Password Reset Error: ${e.message}")

@@ -33,7 +33,7 @@ class AlertsViewModel : ViewModel() {
 
     private fun listenToRealAlerts() {
         val uid = Firebase.auth.currentUser?.uid ?: return
-        // Reused by both Admin and Principal (Task 3/5) - resolve the actual signed-in
+        // Resolve the signed-in user's role for Admin and Principal views.
         // role instead of hardcoding "admin", so the exact same screen/ViewModel serves
         // both without a second implementation.
         viewModelScope.launch {

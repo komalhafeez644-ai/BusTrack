@@ -216,15 +216,15 @@ object FormUtils {
         return cleanPhone.length == 11 && cleanPhone.startsWith("03")
     }
 
-    /**
-     * Password must be at least 8 characters and contain both letters and numbers.
-     */
-    fun isValidPassword(password: String): Boolean {
-        if (password.length < 8) return false
-        val hasLetter = password.any { it.isLetter() }
-        val hasDigit = password.any { it.isDigit() }
-        return hasLetter && hasDigit
+    fun passwordValidationError(password: String): String? = when {
+        password.isEmpty() -> "Password is required"
+        password.length < 8 -> "Password must be at least 8 characters"
+        !password.any { it.isUpperCase() } -> "Password must contain at least 1 uppercase letter"
+        !password.any { it.isDigit() } -> "Password must contain at least 1 number"
+        else -> null
     }
+
+    fun isValidPassword(password: String): Boolean = passwordValidationError(password) == null
 
     /**
      * Formats a timestamp as a short relative string ("2m ago", "3h ago", "5d ago")

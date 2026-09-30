@@ -124,83 +124,44 @@ class TrackDriverActivity : AppCompatActivity() {
     private var geocodeGeneration = 0L
     private val GEOCODE_MIN_DISTANCE_METERS = 50f
 
-    // ROOT-CAUSE FIX (globe flash on Track Driver + Recenter zoom jump):
-    // The old code guessed whether the camera was "still at the globe" by
-    // comparing the camera center to exactly (0.0, 0.0). That heuristic
-    // silently failed whenever the MapView's own default/XML camera wasn't
-    // precisely (0,0) - the automatic instant-jump branch never ran, the
-    // camera only ever nudged its center (never its zoom) on live updates,
-    // and the globe/overview stayed on screen until Recenter was pressed.
-    // Separately, Recenter used flyTo() while every live-follow update used
-    // easeTo() - two different animator types fighting over the same camera
-    // plugin, which is what produced the "zooms in very close, then
-    // auto-adjusts smaller" jump. hasCenteredOnDriver + isRecenterAnimationInProgress
-    // below make both paths explicit and mutually exclusive, and
-    // recenterOnDriver() is now the single place that drives the camera to
-    // the tracking zoom/pitch, using easeTo() everywhere.
+    // Keep the tracking map centered on the driver.
     private val TRACKING_ZOOM = 17.0
     private val TRACKING_PITCH = 60.0
     private val RECENTER_ANIMATION_DURATION_MS = 900L
     private var hasCenteredOnDriver = false
     // Do not show Mapbox's default world/globe camera before the first valid
-    // driver position is ready. The map is revealed only after it is focused.
     private var isFirstDriverMapFrameReady = false
     private var isRecenterAnimationInProgress = false
     private val recenterAnimationHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingRecenterAnimationReset: Runnable? = null
 
-    // Display-only map matching: GPS stays authoritative for every route, stop and
-    // Firestore calculation. A normal 5-20m GPS offset is snapped only for the marker
-    // shown on the Admin map; a real off-route bus is deliberately left untouched.
     private val DISPLAY_ROAD_SNAP_THRESHOLD_METERS = 30.0
 
-    // 3D bus model orientation/scale — kept identical to DriverDashboardActivity so the
-    // bus renders the same way for Parent/Admin/Principal as it does for the Driver.
-    // Static base correction: X=0, Y=0 (no roll offset), Z=90 (asset-forward correction).
-    // Only the Z-axis bearing term is added dynamically as the bus moves/turns.
+    // 3D bus model orientation/scale
     private val BUS_MODEL_ROLL_OFFSET_X_DEG = 0.0
     private val BUS_MODEL_ROLL_OFFSET_Y_DEG = 0.0
     private val BUS_MODEL_BASE_Z_DEG = 90.0
-    // Vertical (Z-axis) lift only — the route/casing line layers were rendering on top of
-    // the bus model at Z=0. Ground-referenced elevation lift makes the model draw above
-    // the route surface without touching rotation, scale, or the route layers themselves.
+
     private val BUS_MODEL_ELEVATION_METERS = 3.0
     private var lastAppliedBusScale = -1f
     private var lastFollowCameraTarget: Point? = null
-    // Firestore normally delivers a fresh live point every second. Finish each
-    // follow transition before the next one arrives so the map always settles
-    // on the newest bus position instead of remaining in an older animation.
-    // Firestore can receive small coordinate changes while a parked bus is
-    // stationary. They are valid position updates, but not valid direction data.
+    // Firestore normally delivers a fresh live point every second.
     private val MIN_SPEED_FOR_TRACKING_BEARING_UPDATE_KPH = 2.9
     private var lastValidTrackingBearing: Float? = null
     private val busScaleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingBusScaleUpdate: Runnable? = null
-    // Bounds used only inside computeBusModelScale()'s intermediate "apparent size"
-    // term - this is the same clamp that was already here before and gives the
-    // bus its normal, correct on-screen look at everyday zoom levels.
+
     private val MIN_BUS_MODEL_SCALE = 1.7f
     private val MAX_BUS_MODEL_SCALE = 2.0f
     private val BUS_MODEL_SCALE_REFERENCE_ZOOM = 17.0
     private val BUS_MODEL_SCALE_REFERENCE_VALUE = 1.0f
     private val BUS_MODEL_SCALE_COMPENSATION_FACTOR = 0.5
     private val BUS_MODEL_PITCH_COMPENSATION_FLOOR = 0.35
-    // FIX (bus kept growing/shrinking with no limit past a point): the zoom value
-    // that feeds the size formula below is now clamped to this range before the
-    // calculation runs. Any zoom level inside [MIN_ZOOM_FOR_BUS_SCALE,
-    // MAX_ZOOM_FOR_BUS_SCALE] (which includes TRACKING_ZOOM = 17, used on Recenter)
-    // is completely unaffected - the exact same formula/output as before runs for
-    // it, so the normal/default bus size and its gradual zoom-in/zoom-out change
-    // are untouched. Only once you zoom out past MIN_ZOOM_FOR_BUS_SCALE, or zoom in
-    // past MAX_ZOOM_FOR_BUS_SCALE, does the size stop growing/shrinking further -
-    // it holds at whatever value it had at that boundary zoom level. Tune these two
-    // numbers if you want the "stops changing" point to kick in earlier or later.
+    // Keep bus scaling within the supported zoom range.
     private val MIN_ZOOM_FOR_BUS_SCALE = 13.0
     private val MAX_ZOOM_FOR_BUS_SCALE = 20.0
 
-    // Mirrors DriverDashboardActivity.computeBusModelScale() exactly (same formula
-    // as originally, only the zoom clamp above is new) so the bus appears the same
-    // apparent size on Parent/Admin/Principal screens as on the Driver's own.
+
     private fun computeBusModelScale(zoom: Double, pitch: Double = 0.0): Float {
         val pitchCompensation = 1.0 / kotlin.math.cos(Math.toRadians(pitch))
             .coerceAtLeast(BUS_MODEL_PITCH_COMPENSATION_FLOOR)
@@ -238,9 +199,7 @@ class TrackDriverActivity : AppCompatActivity() {
             updateBusModelScaleForZoom()
         }
         pendingBusScaleUpdate = runnable
-        // Do not mutate the style on every animation frame; tracking updates and
-        // camera animations otherwise contend for the UI/render threads and make
-        // this screen hang.
+
         busScaleHandler.postDelayed(runnable, 150L)
     }
 
@@ -272,24 +231,18 @@ class TrackDriverActivity : AppCompatActivity() {
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest)?.let { style.addImage("stop-icon", it) }
                 bitmapFromDrawableRes(this, R.drawable.ic_marker_dest_grey)?.let { style.addImage("stop-icon-grey", it) }
 
-                // A styled map is useful immediately. Do not keep it hidden until
-                // a later driver/route snapshot has completed its own work.
+
                 mapView?.visibility = View.VISIBLE
                 mapView?.animate()?.alpha(1f)?.setDuration(180)?.start()
                 observeViewModel()
             }
 
-            // A viewer's pan/pinch must win over incoming tracking updates. Without
-            // this, the 650 ms follow animation can restart while the user is
-            // zooming, making the gesture feel stuck or jittery. Recenter is the
-            // explicit way to resume follow.
+
             mapView?.gestures?.addOnMoveListener(object : OnMoveListener {
                 override fun onMoveBegin(detector: MoveGestureDetector) {
                     Log.d("CAMERA_DEBUG", "onMoveBegin fired: cameraModeBefore=$currentCameraMode " +
                             "isRecenterAnimationInProgress=$isRecenterAnimationInProgress lifecycle=onMoveBegin")
-                    // Mapbox can report the tail of a programmatic Recenter easeTo
-                    // as a move-begin event. Keep follow enabled during that short
-                    // animation; only an actual user pan should leave follow mode.
+
                     if (currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW &&
                         !isRecenterAnimationInProgress
                     ) {
@@ -355,19 +308,9 @@ class TrackDriverActivity : AppCompatActivity() {
                 bottomSheetBehavior.state = nextState
             }
 
-            // ROOT-CAUSE FIX: this bottom sheet layout is shared with
-            // DriverDashboardActivity's bottomSummaryCard, which is where
-            // btnStartReturnTrip's click listener and the reverse-trip logic
-            // (beginReverseTrip(), FirebaseRepository.updateDriverTripDirection)
-            // actually live. Neither this Activity nor LiveTrackingActivity ever
-            // wire up that button, so on this screen it was just an inert but
-            // visible control - confusing for a Parent/Admin/Principal viewer,
-            // who should never be able to trigger a driver-only trip-direction
-            // change anyway. Hide it here rather than in the layout XML, since
-            // the same XML is still needed as-is for the driver's own dashboard.
+            // Hide driver-only trip controls from viewers.
             bottomSheet.findViewById<View>(R.id.btnStartReturnTrip)?.visibility = View.GONE
-            // This sheet is shared with the Driver dashboard, where the cross
-            // ends navigation. A viewer must not see that driver-only action.
+
             bottomSheet.findViewById<View>(R.id.btnCloseNav)?.visibility = View.GONE
 
             bottomSheet.findViewById<View>(R.id.btnViewRoute)?.setOnClickListener {
@@ -448,10 +391,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         driver.status.equals("ACTIVE", true) ||
                         driver.status.equals("On Duty", true)
 
-                // Live location is published while a driver is On Duty; navigation
-                // state only controls route guidance and must not block a fresh GPS
-                // position from reaching this viewer. This matches the Admin overview,
-                // Parent, and Principal tracking feeds.
+                // Live location is published while a driver is On Duty
                 if (isStatusActive) {
                     unavailableDialog?.dismiss()
                     unavailableDialog = null
@@ -472,16 +412,12 @@ class TrackDriverActivity : AppCompatActivity() {
             route?.let { assignedRoute ->
                 val driver = viewModel.targetDriver.value
                 val route = routeForCurrentTrip(assignedRoute, driver)
-                // Direction is part of the rendered route identity: the assigned
-                // Firestore route itself does not change when a driver returns.
+
                 val routeIdentity = "${assignedRoute.id}:${driver?.tripDirection ?: "FORWARD"}"
                 if (currentRouteId != routeIdentity) {
                     currentRouteId = routeIdentity
                     drawInitialRoute(route)
                     // Populate stops list immediately even if driver hasn't moved,
-                    // using the same Driver-authoritative reconstruction as
-                    // everywhere else. If driver data hasn't loaded yet, every
-                    // stop just shows "Upcoming" with nothing highlighted.
                     driver?.let { applyDriverStopState(route, it) }
                         ?: run {
                             route.stopsList.forEach { stop -> stop.time = "TBD" }
@@ -498,7 +434,6 @@ class TrackDriverActivity : AppCompatActivity() {
         if (!driver?.tripDirection.equals("RETURN", ignoreCase = true)) return route
 
         // Use a copy so the shared repository's forward route is never mutated.
-        // Return stop-map indices are already persisted in return order by DriverDashboard.
         return route.copy(
             stopsList = route.stopsList.asReversed().map { it.copy() }.toMutableList(),
             pathPoints = route.pathPoints.asReversed().toMutableList(),
@@ -586,18 +521,13 @@ class TrackDriverActivity : AppCompatActivity() {
                 it.findViewById<TextView>(R.id.tvLastSyncedSheet)?.text =
                     "Last synced: ${formatSyncTime(locationUpdatedAt)}"
 
-                // Reverse geocoding is asynchronous and cached below. Calling
-                // Geocoder.getFromLocation() on every Firestore update blocked the
-                // map thread and let stale address results overwrite newer ones.
+                // Reverse geocoding is asynchronous and cached below.
                 val locationName = lastResolvedLocationLabel
                 it.findViewById<TextView>(R.id.tvCurrentLocSheet)?.text =
                     lastResolvedAddress ?: "Finding current address..."
                 requestAddressIfNeeded(driver)
 
                 // Update Live Stats in Bottom Sheet
-                // The top card is the remaining duration to the first upcoming stop.
-                // Per-stop stopEtaTimes intentionally contain clock times for the list,
-                // so they must not replace this duration value.
                 val upcomingStopEta = driver.stopEtaTimes[driver.nextStopIndex.toString()]
                 val etaValue = when {
                     !driver.eta.isNullOrEmpty() -> driver.eta
@@ -614,8 +544,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
                 if (driver.latitude == 0.0 || driver.longitude == 0.0) return@let
                 val rawPointForUpdate = Point.fromLngLat(driver.longitude, driver.latitude)
-                // Capture before the asynchronous style callback. The field is
-                // advanced below for the next Firestore update.
+
                 val previousRawPointForUpdate = previousRawPoint
                 val previousDisplayPointForUpdate = renderedDriverPoint ?: previousPoint
                 val targetPoint = displayPointForDriver(driver)
@@ -628,10 +557,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 lastDriverFixTimestamp = maxOf(lastDriverFixTimestamp, incomingFixTimestamp)
                 val renderGeneration = ++sourceGeneration
 
-                // Set the real camera before creating the model layer. Previously
-                // the layer was created at the default globe zoom (huge model),
-                // then the camera moved to the driver and the scale corrected a
-                // moment later. That was the visible large-bus -> smaller-bus jump.
+                // Set the real camera before creating the model layer.
                 if (!hasCenteredOnDriver && currentCameraMode == TrackingCameraMode.DRIVER_FOLLOW) {
                     mapView?.mapboxMap?.setCamera(
                         CameraOptions.Builder()
@@ -655,9 +581,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     driverGeoJsonSource?.geometry(previousDisplayPointForUpdate ?: renderedDriverPoint ?: targetPoint)
 
                     if (!style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
-                        // Base orientation/scale matches DriverDashboardActivity's LocationPuck3D
-                        // setup exactly: modelRotation X=0, Y=0, Z=90 (asset-forward correction),
-                        // and the same zoom-compensated scale formula (ModelScaleMode.MAP).
+
                         val initialZoom = mapView?.mapboxMap?.cameraState?.zoom ?: BUS_MODEL_SCALE_REFERENCE_ZOOM
                         val initialPitch = mapView?.mapboxMap?.cameraState?.pitch ?: 0.0
                         val initialScale = computeBusModelScale(initialZoom, initialPitch)
@@ -669,10 +593,6 @@ class TrackDriverActivity : AppCompatActivity() {
                             modelScale(listOf(initialScale.toDouble(), initialScale.toDouble(), initialScale.toDouble()))
                             modelScaleMode(ModelScaleMode.MAP)
                             modelRotation(listOf(BUS_MODEL_ROLL_OFFSET_X_DEG, BUS_MODEL_ROLL_OFFSET_Y_DEG, BUS_MODEL_BASE_Z_DEG))
-                            // Z-axis lift so the model draws above the route/casing line
-                            // layers instead of underneath them; X/Y stay untouched.
-                            // (modelElevationReference isn't available in this SDK version —
-                            // modelTranslation's Z component alone provides the lift.)
                             modelTranslation(listOf(0.0, 0.0, BUS_MODEL_ELEVATION_METERS))
                         })
                     }
@@ -718,8 +638,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         }
                     }
 
-                    // A delayed style callback from an older snapshot must not pull
-                    // the marker back after a newer fix has already been rendered.
+
                     if (renderGeneration == sourceGeneration) {
                         val start = renderedDriverPoint ?: previousDisplayPointForUpdate ?: targetPoint
                         if (start.latitude() != targetPoint.latitude() || start.longitude() != targetPoint.longitude()) {
@@ -731,9 +650,7 @@ class TrackDriverActivity : AppCompatActivity() {
 
                     if (!isFirstDriverMapFrameReady) {
                         isFirstDriverMapFrameReady = true
-                        // The camera is already focused before this point. Fade the
-                        // first valid map frame in instead of abruptly swapping the
-                        // default globe frame for the tracking frame.
+
                         mapView?.visibility = View.VISIBLE
                         mapView?.animate()?.alpha(1f)?.setDuration(220)?.start()
                     }
@@ -750,13 +667,6 @@ class TrackDriverActivity : AppCompatActivity() {
                 updateRouteSplitting(rawPoint, route, driver)
 
                 // Stop status is derived ONLY from the Driver Module's authoritative,
-                // persisted state (driver.stopArrivalTimes + driver.nextStopIndex) -
-                // see applyDriverStopState() below. No independent distance/time based
-                // arrival detection is performed here anymore; the old code ran its
-                // own 150m-radius check that could disagree with the Driver's actual
-                // 80m arrival / 70m departure geofence (with a 3-fix confirm
-                // threshold), which was the root cause of stop statuses not matching
-                // the Driver Module in real time.
                 applyDriverStopState(route, driver)
             }
 
@@ -779,7 +689,7 @@ class TrackDriverActivity : AppCompatActivity() {
         }
     }
 
-    /** One cached, latest-only address pipeline for all trip directions. */
+
     private fun requestAddressIfNeeded(driver: DriverModel) {
         if (driver.latitude == 0.0 || driver.longitude == 0.0) return
         val location = android.location.Location("track-driver").apply {
@@ -821,7 +731,6 @@ class TrackDriverActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (isFinishing || isDestroyed || generation != geocodeGeneration) return@withContext
                 // A geocoder response is optional. Keep a valid live location
-                // visible even when reverse geocoding is temporarily unavailable.
                 lastResolvedAddress = address ?: String.format(
                     Locale.getDefault(), "%.5f, %.5f", location.latitude, location.longitude
                 )
@@ -833,16 +742,7 @@ class TrackDriverActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Single entry point for moving the camera onto the tracked bus at the
-     * standard tracking zoom/pitch. Used only by the Recenter button. Uses
-     * easeTo() (same animator type as the live-follow updates in updateUI())
-     * instead of the old flyTo() - mixing flyTo's fly-curve animator with
-     * easeTo's linear one on the same camera is what caused the reported
-     * "zooms in very close, then auto-adjusts smaller" jump. The
-     * Recenter targets the currently rendered bus position. The live renderer
-     * then keeps camera and marker together on each subsequent animation frame.
-     */
+
     private fun recenterOnDriver(target: Point) {
         Log.d("CAMERA_DEBUG", "recenterOnDriver (manual): cameraModeBefore=$currentCameraMode " +
                 "cameraBefore=$lastFollowCameraTarget targetBusLocation=$target")
@@ -925,46 +825,7 @@ class TrackDriverActivity : AppCompatActivity() {
         return (current + diff * 0.4f + 360f) % 360f
     }
 
-    /**
-     * Single source of truth for stop status in this Activity (used by Admin's
-     * LiveTracking -> Track Driver flow, Parent's Track Driver flow, and
-     * Principal's Track Driver flow - they all share this Activity).
-     *
-     * Mirrors DriverDashboardActivity.observeViewModel()'s own persisted-state
-     * reconstruction exactly:
-     *  - "Skipped"                -> stop.time = "Skipped"
-     *  - a recorded arrival time  -> stop.time = "Arrived: <time>" (kept forever,
-     *                                 whether the stop is the live one or already
-     *                                 passed - the adapter renders every index
-     *                                 other than liveArrivedIndex that already has
-     *                                 an "Arrived:" time as PASSED)
-     *  - the current next stop,
-     *    not yet arrived          -> stop.time reflects driver.eta (the same
-     *                                 value already shown to Parent/Principal/Admin
-     *                                 as the driver's live ETA), so this stop's
-     *                                 upcoming ETA always matches what everyone
-     *                                 else sees for the driver
-     *  - any other upcoming stop  -> "TBD" (no per-stop ETA is currently
-     *                                 synced to Firestore for stops beyond the
-     *                                 immediate next one - see audit note).
-     *                                 NOTE: this MUST be "TBD", not "Upcoming" -
-     *                                 NavigationStopsAdapter's display-format
-     *                                 branch does a raw `stop.time.contains("min")`
-     *                                 check to detect duration-style ETA strings,
-     *                                 and "Upcoming" contains the substring "min"
-     *                                 (co-MIN-g), which used to make it fall into
-     *                                 that branch and render as "ETA: Upcoming".
-     *                                 "TBD" is caught by the adapter's very first
-     *                                 branch instead and renders cleanly as
-     *                                 "ETA: --". Keep this in sync with
-     *                                 DriverDashboardActivity, which already uses
-     *                                 "TBD" for the same fallback.
-     *
-     * liveArrivedIndex is only set when the Driver has arrived at nextStopIndex
-     * but has not yet departed it (i.e. an arrival time is recorded for that
-     * exact index) - identical to isCurrentlyAtStop/lastArrivedStopIndex on the
-     * Driver side.
-     */
+
     private fun applyDriverStopState(route: RouteModel, driver: DriverModel) {
         val stops = route.stopsList
         val nextIdx = driver.nextStopIndex
@@ -976,12 +837,7 @@ class TrackDriverActivity : AppCompatActivity() {
             stop.time = when {
                 arrival == "Skipped" -> "Skipped"
                 arrival != null -> "Arrived: $arrival"
-                // driver.stopEtaTimes mirrors the Driver Module's own per-stop
-                // stopEtaTexts map (added alongside stopArrivalTimes in
-                // FirebaseRepository.updateDriverLiveState), so every upcoming
-                // stop gets the exact same "ETA: h:mm a" text the Driver itself
-                // shows - not just the immediate next one. "TBD" (not "Upcoming")
-                // is used as the fallback - see kdoc above.
+                // Use the Driver Dashboard ETA for every upcoming stop.
                 else -> driver.stopEtaTimes[index.toString()] ?: "TBD"
             }
         }
@@ -1004,9 +860,7 @@ class TrackDriverActivity : AppCompatActivity() {
     private fun drawInitialRoute(route: RouteModel) {
         if (route.pathPoints.isEmpty()) return
 
-        // Stop list state is populated by applyDriverStopState(), called right
-        // after this by the assignedRoute observer - not here, to avoid briefly
-        // flashing every stop as "NEXT" via the old status convention.
+
 
         mapView?.mapboxMap?.getStyle { style ->
             try {
@@ -1042,8 +896,7 @@ class TrackDriverActivity : AppCompatActivity() {
                         lineJoin(LineJoin.ROUND)
                         lineCap(LineCap.ROUND)
                     }
-                    // If the bus model arrived first, insert route layers beneath it
-                    // rather than letting the later route draw over the vehicle.
+
                     if (style.styleLayerExists(DRIVER_MODEL_LAYER_ID)) {
                         style.addLayerBelow(traveledLayer, DRIVER_MODEL_LAYER_ID)
                     } else {
@@ -1137,7 +990,6 @@ class TrackDriverActivity : AppCompatActivity() {
     private fun updateRouteSplitting(currentPos: Point, route: RouteModel, driver: DriverModel) {
         try {
             // 1. Dynamic Rerouting Logic (Single Source of Truth)
-            // If the driver has uploaded a dynamic navigation route, use it!
             if (!driver.currentRoutePolyline.isNullOrEmpty()) {
                 val dynamicUpcoming = LineString.fromPolyline(driver.currentRoutePolyline!!, 6)
 
@@ -1146,8 +998,7 @@ class TrackDriverActivity : AppCompatActivity() {
                     (style.getSource(ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                         ?.geometry(dynamicUpcoming)
 
-                    // New driver clients persist independent road-matched segments so a
-                    // relocation renders a real gap rather than a straight cross-city line.
+
                     if (driver.traveledRouteSegments.isNotEmpty()) {
                         val segments = driver.traveledRouteSegments.mapNotNull { encoded ->
                             runCatching { LineString.fromPolyline(encoded, 6) }.getOrNull()
@@ -1158,7 +1009,7 @@ class TrackDriverActivity : AppCompatActivity() {
                                 ?.geometry(geometry)
                         }
                     } else if (!driver.traveledPolyline.isNullOrEmpty()) {
-                        // Legacy fallback for trips stored before segmented history.
+
                         val dynamicTraveled = LineString.fromPolyline(driver.traveledPolyline!!, 6)
                         (style.getSource(TRAVELED_ROUTE_SOURCE_ID) as? com.mapbox.maps.extension.style.sources.generated.GeoJsonSource)
                             ?.geometry(dynamicTraveled)
@@ -1167,12 +1018,10 @@ class TrackDriverActivity : AppCompatActivity() {
                             ?.geometry(LineString.fromLngLats(emptyList()))
                     }
                 }
-                return // Dynamic logic completes here
+                return
             }
 
             // 2. Smart Rerouting Fallback (Recalculate Bus -> Stop)
-            // If the bus has deviated from the assigned route or navigation isn't started yet,
-            // recalculate a fresh road-matched path from the bus's current location to the next pending stop.
             val globalNextIdx = driver.nextStopIndex.coerceIn(0, route.stopsList.size - 1)
             val nextStop = route.stopsList[globalNextIdx]
             val destination = Point.fromLngLat(nextStop.longitude, nextStop.latitude)
@@ -1215,7 +1064,7 @@ class TrackDriverActivity : AppCompatActivity() {
                 })
             }
 
-            // For history in fallback mode, draw from original start point to current bus position
+            //  draw from original start point to current bus position
             val fullPath = route.pathPoints.map { Point.fromLngLat(it.longitude, it.latitude) }
             if (fullPath.size >= 2) {
                 val splitIndex = findClosestPathIndex(currentPos, fullPath)

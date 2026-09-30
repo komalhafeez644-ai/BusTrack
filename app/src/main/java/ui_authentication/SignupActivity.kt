@@ -11,6 +11,7 @@ import com.example.bustrack_app.R
 import com.example.bustrack_app.databinding.ActivitySignupBinding
 import com.example.bustrack_app.utils.Resource
 import com.example.bustrack_app.viewmodels.SignupViewModel
+import utils.FormUtils
 import utils.ViewUtils
 
 class SignupActivity : AppCompatActivity() {
@@ -59,18 +60,9 @@ class SignupActivity : AppCompatActivity() {
             isValid = false
         }
 
-        // 2. Password validation (Minimum 8 chars, at least 1 uppercase, at least 1 number)
-        if (pass.isEmpty()) {
-            binding.tilPassword.error = "Password is required"
-            isValid = false
-        } else if (pass.length < 8) {
-            binding.tilPassword.error = "Password must be at least 8 characters"
-            isValid = false
-        } else if (!pass.any { it.isUpperCase() }) {
-            binding.tilPassword.error = "Password must contain at least 1 uppercase letter"
-            isValid = false
-        } else if (!pass.any { it.isDigit() }) {
-            binding.tilPassword.error = "Password must contain at least 1 number"
+        // 2. Password validation
+        FormUtils.passwordValidationError(pass)?.let {
+            binding.tilPassword.error = it
             isValid = false
         }
 

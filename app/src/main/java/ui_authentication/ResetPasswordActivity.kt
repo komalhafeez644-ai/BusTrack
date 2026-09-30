@@ -22,6 +22,7 @@ import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import utils.FormUtils
 import utils.ViewUtils
 
 class ResetPasswordActivity : AppCompatActivity() {
@@ -117,21 +118,8 @@ class ResetPasswordActivity : AppCompatActivity() {
         tilConfirmPassword.error = null
 
         var isValid = true
-
-        // 1. Minimum 8 characters
-        if (newPass.isEmpty()) {
-            tilNewPassword.error = "Password is required"
-            isValid = false
-        } else if (newPass.length < 8) {
-            tilNewPassword.error = "Password must be at least 8 characters"
-            isValid = false
-        } else if (!newPass.any { it.isUpperCase() }) {
-            // 2. At least 1 uppercase letter
-            tilNewPassword.error = "Password must contain at least 1 uppercase letter"
-            isValid = false
-        } else if (!newPass.any { it.isDigit() }) {
-            // 3. At least 1 number
-            tilNewPassword.error = "Password must contain at least 1 number"
+        FormUtils.passwordValidationError(newPass)?.let {
+            tilNewPassword.error = it
             isValid = false
         }
 

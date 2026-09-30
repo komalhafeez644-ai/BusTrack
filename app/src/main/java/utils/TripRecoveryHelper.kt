@@ -163,13 +163,7 @@ object TripRecoveryHelper {
         return true
     }
 
-    /**
-     * Resolves local active-trip state against remote Firestore driver state.
-     * Implements strict conflict resolution:
-     * 1. Never overwrites a newer local stop index with a stale remote stop index (no moving backwards).
-     * 2. Never restores a completed/cancelled trip.
-     * 3. Retains local active trip when offline or remote is uninitialized.
-     */
+    /** Merges saved and remote trip progress without restoring completed trips. */
     fun resolveConflict(
         localState: ActiveTripState?,
         remoteDriver: DriverModel?,

@@ -20,10 +20,7 @@ import com.example.bustrack_app.R
 import utils.ViewUtils
 import utils.AttendanceStatus
 
-/**
- * Attendance Bottom Sheet shown to the driver when the geofence/arrival logic in
- * DriverDashboardActivity detects the bus has reached a stop.
- */
+/** Attendance sheet shown when the bus reaches a stop. */
 class AttendanceBottomSheet : BottomSheetDialogFragment() {
 
     private var stopId: String = ""

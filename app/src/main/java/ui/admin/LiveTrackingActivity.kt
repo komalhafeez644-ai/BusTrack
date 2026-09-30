@@ -95,8 +95,7 @@ class LiveTrackingActivity : AppCompatActivity() {
         }
 
         mapView = findViewById(R.id.mapView)
-        // Start observing immediately. The latest snapshot is retained until the
-        // style is ready, rather than waiting for a second Firestore update.
+        // Start observing immediately and keep the latest snapshot for the loaded map.
         observeViewModel()
         mapView?.mapboxMap?.loadStyle(Style.MAPBOX_STREETS) { style ->
             isMapStyleReady = true
@@ -118,17 +117,7 @@ class LiveTrackingActivity : AppCompatActivity() {
                     .build()
             )
 
-            // ROOT-CAUSE FIX (Admin marker click / Bottom Card):
-            // The bus vehicles are rendered as a modelLayer + symbolLayer bound to a
-            // GeoJSON source (see updateMarkers() below) - they are NOT PointAnnotation
-            // objects. pointAnnotationManager.addClickListener() only fires for taps on
-            // annotations created via that manager, and no such annotation is ever created
-            // for a bus (driverMarkers map is declared but never populated). So the old
-            // listener below could never fire for a real tap on a visible bus, which is why
-            // the online vehicle appeared but tapping it did nothing (no Bottom Card, no
-            // Track Driver). We hit-test the actual rendered layers instead and match the
-            // "driverId" feature property that updateMarkers() already attaches to each
-            // feature, which is also more robust than the old lat/lng epsilon comparison.
+            // Detect taps on rendered bus markers.
             mapView?.gestures?.addOnMapClickListener { point ->
                 val screenCoordinate = mapView?.mapboxMap?.pixelForCoordinate(point)
                 if (screenCoordinate != null) {

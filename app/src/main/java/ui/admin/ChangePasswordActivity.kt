@@ -21,6 +21,7 @@ import utils.ViewUtils
 import ui.parent.ParentDashboardActivity
 import ui.driver.DriverDashboardActivity
 import ui.principal.PrincipalDashboardActivity
+import utils.FormUtils
 
 class ChangePasswordActivity : AppCompatActivity() {
 
@@ -63,8 +64,9 @@ class ChangePasswordActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            if (newPass.length < 6) {
-                Toast.makeText(this, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+            val passwordError = FormUtils.passwordValidationError(newPass)
+            if (passwordError != null) {
+                Toast.makeText(this, passwordError, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 

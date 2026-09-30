@@ -47,7 +47,7 @@ class RouteAdapter(
             binding.switchRouteStatus.setOnCheckedChangeListener(null)
             binding.switchRouteStatus.isChecked = (route.status == "ACTIVE")
 
-            // 2. Click Listener with Custom Professional Logic
+            // Open the route details when selected.
             binding.switchRouteStatus.setOnClickListener {
                 val isCurrentlyActive = (route.status == "ACTIVE")
                 val targetState = !isCurrentlyActive

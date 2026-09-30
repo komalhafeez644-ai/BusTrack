@@ -35,7 +35,7 @@ class AttendanceActivity : AppCompatActivity() {
     
     private var selectedDate: String = ""
     private lateinit var adapter: AttendanceAdapter
-    // Task 3: Principal reuses this exact screen but must not be able to edit records -
+    // Principal uses this screen in view-only mode.
     // AttendanceActivity is launched with VIEW_ONLY=true from PrincipalDashboardActivity.
     private var isViewOnly: Boolean = false
 
@@ -239,7 +239,7 @@ class AttendanceActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Task 3: when Principal reuses this screen (VIEW_ONLY), the Admin bottom nav bar
+        // Hide the Admin bottom navigation in view-only mode.
         // must NOT be active - its Dashboard/Requests/Alerts tabs lead into Admin-only
         // management screens (student/bus/driver edit, tracking approvals) that Principal
         // should not be able to reach. Hide it entirely instead of wiring it up.

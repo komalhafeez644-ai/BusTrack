@@ -13,6 +13,8 @@ import androidx.core.content.IntentCompat
 import com.bumptech.glide.Glide
 import com.example.bustrack_app.R
 import com.example.bustrack_app.data.BusRepository
+import com.example.bustrack_app.data.AuthRepository
+import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.data.DriverRepository
 import com.example.bustrack_app.data.FirebaseRepository
 import com.example.bustrack_app.data.RouteRepository
@@ -20,6 +22,9 @@ import com.example.bustrack_app.databinding.ActivityEditDriverBinding
 import com.example.bustrack_app.models.BusModel
 import com.example.bustrack_app.models.DriverModel
 import com.google.android.material.button.MaterialButton
+import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import utils.FormUtils
 import utils.StorageUtils
 import utils.ViewUtils
@@ -29,6 +34,7 @@ class EditDriverActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEditDriverBinding
     private var driverData: DriverModel? = null
     private var selectedImageUri: Uri? = null
+    private val authRepository = AuthRepository()
 
     // Photo Picker Launcher
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -184,6 +190,9 @@ class EditDriverActivity : AppCompatActivity() {
         }
 
         driverData?.let { driver ->
+            val oldEmail = driver.email.trim().lowercase()
+            val newEmail = email.trim().lowercase()
+            val emailChanged = oldEmail != newEmail
             val selectedBus = binding.menuEditBus.text.toString().trim()
             val finalBus = if (selectedBus == "Select Bus") null else selectedBus
 
@@ -231,13 +240,63 @@ class EditDriverActivity : AppCompatActivity() {
             // 2. Save to Firestore via FirebaseRepository
             com.example.bustrack_app.data.FirebaseRepository.saveDriver(updatedDriver) { success ->
                 if (success) {
-                    DriverRepository.updateDriver(updatedDriver)
-                    Toast.makeText(this, "Profile Updated Successfully!", Toast.LENGTH_SHORT).show()
-                    finish()
+                    if (emailChanged) {
+                        updateDriverAuthEmail(driver, updatedDriver, newEmail)
+                    } else {
+                        Toast.makeText(this, "Profile Updated Successfully!", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
                 } else {
                     binding.btnUpdate.isEnabled = true
                     Toast.makeText(this, "Failed to update Firestore", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+    }
+
+    private fun updateDriverAuthEmail(oldDriver: DriverModel, updatedDriver: DriverModel, newEmail: String) {
+        val driverUid = updatedDriver.uid.trim()
+        if (driverUid.isEmpty()) {
+            rollbackDriverEmail(oldDriver, "Driver account is missing its Firebase ID.")
+            return
+        }
+
+        binding.btnUpdate.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                FirebaseFunctions.getInstance()
+                    .getHttpsCallable("updateDriverEmail")
+                    .call(
+                        mapOf(
+                            "driverUid" to driverUid,
+                            "driverDocumentId" to updatedDriver.driverId.ifBlank { updatedDriver.id },
+                            "email" to newEmail
+                        )
+                    ).await()
+
+                val resetResult = authRepository.sendPasswordResetEmail(newEmail)
+                if (resetResult.isSuccess) {
+                    Toast.makeText(this@EditDriverActivity, "Profile updated. A password reset link was sent to $newEmail.", Toast.LENGTH_LONG).show()
+                    finish()
+                } else {
+                    Toast.makeText(this@EditDriverActivity, "Email updated, but the password reset email could not be sent: ${resetResult.exceptionOrNull()?.localizedMessage ?: "Please try again."}", Toast.LENGTH_LONG).show()
+                    finish()
+                }
+            } catch (e: Exception) {
+                rollbackDriverEmail(oldDriver, e.localizedMessage ?: "Could not update the driver's email.")
+            }
+        }
+    }
+
+    private fun rollbackDriverEmail(oldDriver: DriverModel, message: String) {
+        val driverKey = oldDriver.driverId.ifBlank { oldDriver.id }
+        com.example.bustrack_app.data.FirebaseRepository.restoreDriverEmail(driverKey, oldDriver.email) { restored ->
+            if (restored) {
+                binding.btnUpdate.isEnabled = true
+                Toast.makeText(this, "Email update failed. Previous email restored. $message", Toast.LENGTH_LONG).show()
+            } else {
+                binding.btnUpdate.isEnabled = true
+                Toast.makeText(this, "Email update failed and could not be restored. Contact support. $message", Toast.LENGTH_LONG).show()
             }
         }
     }

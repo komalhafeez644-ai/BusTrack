@@ -22,7 +22,7 @@ class TransportAlertsActivity : AppCompatActivity() {
         ViewModelProvider(this)[AlertsViewModel::class.java]
     }
     private lateinit var adapter: AlertsAdapter
-    // Task 3/5: Principal reuses this exact screen (view notifications), launched with
+    // Principal opens this screen in view-only mode using
     // HIDE_ADMIN_NAV=true - must not get the Admin bottom nav bar (Dashboard/Requests
     // lead into Admin-only management screens) or the "Send Broadcast" FAB (Admin-only
     // action, Principal was only asked to view).

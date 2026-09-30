@@ -223,7 +223,6 @@ class DrawRouteActivity : AppCompatActivity() {
                     // Is se app crash na ho, is liye yahan catch karke gracefully handle karo.
                     Log.e("DrawRoute", "Crash prevented while selecting stored location '${item.name}': ${e.message}", e)
                     // TEMP DEBUG: exact exception seedha Toast mein dikha rahe hain taaki
-                    // Logcat access ke bagair bhi root cause pata chal sake. Baad mein hata dena.
                     Toast.makeText(this@DrawRouteActivity, "DEBUG: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }

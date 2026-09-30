@@ -124,11 +124,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
             // Match Admin's inactive map center and zoom.
             centerOnCollegeWhenInactive()
 
-            // ROOT-CAUSE FIX (Principal marker click / Bottom Card) - identical defect to
-            // Admin's LiveTrackingActivity: buses are drawn via modelLayer/symbolLayer on a
-            // GeoJSON source, not as PointAnnotations, so pointAnnotationManager's click
-            // listener never fired for a real tap on a bus. Hit-test the rendered layers and
-            // match on the "driverId" feature property set in updateMarkers() instead.
+            // Match map taps to the rendered bus feature.
             mapView?.gestures?.addOnMapClickListener { point ->
                 val screenCoordinate = mapView?.mapboxMap?.pixelForCoordinate(point)
                 if (screenCoordinate != null) {
@@ -578,9 +574,7 @@ class PrincipalDashboardActivity : AppCompatActivity() {
     }
 
     private fun setupDrawerListeners() {
-        // Reuses the existing Admin Attendance + Notifications screens (Task 3/5) - shown
-        // here in read-only mode for Attendance. These two drawer rows are GONE by default
-        // in the shared layout_admin_drawer.xml and only made visible for Principal.
+        // Open the shared attendance and notification screens for the Principal.
         findViewById<View>(R.id.drawerPrincipalAttendance)?.let { row ->
             row.visibility = View.VISIBLE
             row.setOnClickListener {

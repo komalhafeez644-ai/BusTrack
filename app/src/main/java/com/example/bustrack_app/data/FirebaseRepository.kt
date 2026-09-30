@@ -94,6 +94,11 @@ object FirebaseRepository {
             .addOnCompleteListener { onComplete(it.isSuccessful) }
     }
 
+    fun restoreDriverEmail(driverId: String, email: String, onComplete: (Boolean) -> Unit) {
+        db.collection("drivers").document(driverId).update("email", email)
+            .addOnCompleteListener { onComplete(it.isSuccessful) }
+    }
+
     fun clearDriverNavigationState(driverId: String) {
         if (driverId.isBlank()) return
         db.collection("drivers").document(driverId).update(
@@ -201,23 +206,7 @@ object FirebaseRepository {
         )
     }
 
-    /**
-     * Consolidated live-tracking write for the Driver Module's high-frequency
-     * location loop (DriverDashboardActivity.syncTrackingDataToFirestore).
-     * Replaces what used to be three separate .update() calls in that one
-     * function (updateDriverLocation + updateDriverStats +
-     * updateDriverRouteGeometry) with a single Firestore write.
-     *
-     * Firestore bills per document write regardless of how many fields change
-     * in it, so now that the Driver's write cadence has been tightened from
-     * 5s to ~1s (to fix Admin/Parent/Principal's laggy marker movement and
-     * the delayed grey traveled-route rendering), merging these three calls
-     * into one avoids roughly tripling the write cost on top of that ~5x
-     * frequency increase. Also carries stopEtaTimes (mirrors the Driver's own
-     * in-memory stopEtaTexts, keyed the same way as stopArrivalTimes) so
-     * Parent/Principal/Admin can show a real per-stop ETA for every upcoming
-     * stop, not just the immediate next one.
-     */
+    /** Writes the driver's live location, route progress, and stop ETAs together. */
     fun updateDriverLiveState(
         driverId: String,
         lat: Double,
@@ -409,12 +398,7 @@ object FirebaseRepository {
             }
     }
 
-    /**
-     * Fetches today's already-saved attendance records for a specific set of students,
-     * keyed by studentId, so a screen (e.g. the driver's Attendance Bottom Sheet) can
-     * pre-fill previously marked Present/Absent/Leave status and let the driver edit it
-     * instead of re-marking from scratch or overwriting it.
-     */
+    /** Loads today's attendance for the selected students. */
     fun fetchAttendanceForStudents(studentIds: List<String>, date: String, onResult: (Map<String, AttendanceRecordModel>) -> Unit) {
         if (studentIds.isEmpty()) {
             onResult(emptyMap())
@@ -759,11 +743,7 @@ object FirebaseRepository {
             }
     }
 
-    /**
-     * Sends a notification to either a specific user (recipientId) or an entire role
-     * (recipientRole, e.g. "admin"/"driver"/"parent"/"principal") - pass exactly one.
-     * Uses deterministic sync ID and SetOptions.merge() for deduplication and retry safety.
-     */
+    /** Sends a notification to one user or to a role. */
     fun sendNotification(
         id: String? = null,
         recipientId: String? = null,
@@ -816,11 +796,7 @@ object FirebaseRepository {
         )
     }
 
-    /**
-     * Real-time feed for a single user: everything addressed to their uid directly,
-     * merged with everything broadcast to their role. Keeps two live listeners and
-     * re-merges on every change from either one, sorted newest-first.
-     */
+    /** Combines direct and role notifications into one live feed. */
     fun listenToNotifications(uid: String, role: String, onResult: (List<NotificationModel>) -> Unit): List<ListenerRegistration> {
         var personal: List<NotificationModel> = emptyList()
         var roleBroadcast: List<NotificationModel> = emptyList()
@@ -986,12 +962,7 @@ object FirebaseRepository {
             }
     }
 
-    /**
-     * Driver On Duty event:
-     * - Notifies Admin and Principal via role broadcast that driver/bus is on duty.
-     * - Strictly notifies ONLY approved parents connected to that driver's assigned route.
-     * - Deduplicates by date and driver/route to avoid duplicate alerts on activity recreation.
-     */
+    /** Notifies staff and approved parents when a driver starts duty. */
     fun notifyDriverDutyStarted(driverId: String, driverName: String, busNo: String, routeName: String) {
         if (routeName.isBlank()) return
         val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())

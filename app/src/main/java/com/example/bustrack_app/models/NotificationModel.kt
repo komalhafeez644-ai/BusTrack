@@ -6,15 +6,7 @@ import com.google.firebase.firestore.ServerTimestamp
 import java.io.Serializable
 import java.util.Date
 
-/**
- * Real Firestore-backed notification, shared by Admin/Driver/Parent/Principal.
- *
- * Targeting: EITHER recipientId (a specific user's uid - used for "this parent",
- * "this driver") OR recipientRole (a role broadcast - "all admins", "all drivers",
- * "all parents") is set, never both. FirebaseRepository.listenToNotifications()
- * queries both fields and merges results so a user sees notifications addressed to
- * them personally as well as ones broadcast to their role.
- */
+/** Notification data shared by all app roles. */
 data class NotificationModel(
     val id: String = "",
     val recipientId: String = "",   // specific user's uid, empty if role-targeted
@@ -61,10 +53,7 @@ data class NotificationModel(
         const val TYPE_TRIP_REMINDER = "TRIP_REMINDER"
         const val TYPE_TRIP_STARTED = "TRIP_STARTED"
 
-        /**
-         * Robust parser that safely handles Firestore Timestamp, Date, Long, Double, Int, Float,
-         * or String representations of timestamp without crashing deserialization.
-         */
+        /** Converts Firestore and legacy timestamp values to a date. */
         fun parseDate(raw: Any?): Date? {
             return when (raw) {
                 is Timestamp -> raw.toDate()

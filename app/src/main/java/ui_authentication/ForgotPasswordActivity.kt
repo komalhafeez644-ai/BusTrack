@@ -14,6 +14,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.R
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.FirebaseNetworkException
@@ -73,7 +74,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
             setLoading(true, btnSendReset, progressBar)
 
             // Firebase sendPasswordResetEmail handles all 4 roles (Admin, Principal, Driver, Parent)
-            auth.sendPasswordResetEmail(email)
+            auth.sendPasswordResetEmail(email, AuthRepository.passwordResetActionCodeSettings())
                 .addOnCompleteListener { task ->
                     setLoading(false, btnSendReset, progressBar)
 

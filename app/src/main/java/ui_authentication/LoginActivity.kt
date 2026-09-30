@@ -72,7 +72,7 @@ class LoginActivity : AppCompatActivity() {
             }
         }
 
-        // UPDATED: Sahi class name (SignupActivity) aur package ke saath link kiya
+        // Open the sign-up screen.
         tvSignUp.setOnClickListener {
             ViewUtils.applyClickEffect(it)
             it.postDelayed({

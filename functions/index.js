@@ -205,3 +205,53 @@ exports.submitTrackingRequest = functions.https.onCall(async (data, context) => 
 
   return { requestId: requestRef.id, studentId, rollNumber: canonicalRollNumber };
 });
+
+exports.updateDriverEmail = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Please sign in before updating a driver.");
+  }
+
+  const db = admin.firestore();
+  const adminSnapshot = await db.collection("users").doc(context.auth.uid).get();
+  if (!adminSnapshot.exists || String(adminSnapshot.data().role || "").toLowerCase() !== "admin") {
+    throw new functions.https.HttpsError("permission-denied", "Only an Admin can update a driver's email.");
+  }
+
+  const driverUid = String(data && data.driverUid || "").trim();
+  const driverDocumentId = String(data && data.driverDocumentId || "").trim();
+  const newEmail = String(data && data.email || "").trim().toLowerCase();
+  if (!driverUid || !driverDocumentId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    throw new functions.https.HttpsError("invalid-argument", "A driver account and valid email are required.");
+  }
+
+  const userRef = db.collection("users").doc(driverUid);
+  const driverRef = db.collection("drivers").doc(driverDocumentId);
+  const [userSnapshot, driverSnapshot] = await Promise.all([userRef.get(), driverRef.get()]);
+  if (!userSnapshot.exists || !driverSnapshot.exists || driverSnapshot.data().uid !== driverUid) {
+    throw new functions.https.HttpsError("not-found", "The driver account could not be found.");
+  }
+
+  const oldEmail = (await admin.auth().getUser(driverUid)).email;
+  if (oldEmail && oldEmail.trim().toLowerCase() === newEmail) {
+    return { changed: false };
+  }
+
+  await admin.auth().updateUser(driverUid, { email: newEmail });
+  try {
+    const batch = db.batch();
+    batch.update(userRef, { email: newEmail });
+    batch.update(driverRef, { email: newEmail });
+    await batch.commit();
+  } catch (error) {
+    if (oldEmail) {
+      try {
+        await admin.auth().updateUser(driverUid, { email: oldEmail });
+      } catch (rollbackError) {
+        console.error("Failed to roll back driver Auth email after Firestore update failure:", rollbackError);
+      }
+    }
+    throw new functions.https.HttpsError("internal", "Could not save the driver's email changes.");
+  }
+
+  return { changed: true };
+});

@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.bustrack_app.R
+import com.example.bustrack_app.data.AuthRepository
 import com.example.bustrack_app.databinding.ActivityAddDriverBinding
 import com.example.bustrack_app.models.DriverModel
 import com.example.bustrack_app.data.DriverRepository
@@ -207,7 +208,10 @@ class AddDriverActivity : AppCompatActivity() {
                 val uid = result.user?.uid ?: throw Exception("Failed to get driver UID")
                 
                 // Immediately send Firebase Authentication password-setup link to driver's email
-                secondaryAuth.sendPasswordResetEmail(email).await()
+                secondaryAuth.sendPasswordResetEmail(
+                    email,
+                    AuthRepository.passwordResetActionCodeSettings()
+                ).await()
                 
                 // Sign out secondary session cleanly
                 secondaryAuth.signOut()

@@ -200,7 +200,7 @@ object NavigationUtils {
         // FLAG_ACTIVITY_SINGLE_TOP: Avoids creating multiple instances if it's already at top
         intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
         activity.startActivity(intent)
-        // Remove standard "Slide in" animations for a professional "static" tab feel
+        // Switch tabs without a slide animation.
         activity.overridePendingTransition(0, 0)
     }
 }
