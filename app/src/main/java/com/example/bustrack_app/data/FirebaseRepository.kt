@@ -968,10 +968,10 @@ object FirebaseRepository {
     /** Notifies staff and approved parents when a driver starts duty. */
     fun notifyDriverDutyStarted(driverId: String, driverName: String, busNo: String, routeName: String) {
         if (routeName.isBlank()) return
-        val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val dutyStartEventId = System.currentTimeMillis()
 
         // 1. Notify Admin (Role broadcast)
-        val adminNotifId = "DUTY_ADMIN_${driverId}_${routeName.replace(" ", "_")}_$today"
+        val adminNotifId = "DUTY_ADMIN_${driverId}_${routeName.replace(" ", "_")}_$dutyStartEventId"
         sendNotification(
             id = adminNotifId,
             recipientRole = "admin",
@@ -985,7 +985,7 @@ object FirebaseRepository {
         )
 
         // 2. Notify Principal (Role broadcast)
-        val principalNotifId = "DUTY_PRINCIPAL_${driverId}_${routeName.replace(" ", "_")}_$today"
+        val principalNotifId = "DUTY_PRINCIPAL_${driverId}_${routeName.replace(" ", "_")}_$dutyStartEventId"
         sendNotification(
             id = principalNotifId,
             recipientRole = "principal",
@@ -1008,7 +1008,7 @@ object FirebaseRepository {
                 val requests = snapshot.documents.mapNotNull { it.toObject<TrackingRequestModel>() }
                 val parentIds = requests.map { it.parentId }.distinct()
                 parentIds.forEach { parentId ->
-                    val parentNotifId = "DUTY_PARENT_${parentId}_${routeName.replace(" ", "_")}_$today"
+                    val parentNotifId = "DUTY_PARENT_${parentId}_${routeName.replace(" ", "_")}_$dutyStartEventId"
                     sendNotification(
                         id = parentNotifId,
                         recipientId = parentId,
