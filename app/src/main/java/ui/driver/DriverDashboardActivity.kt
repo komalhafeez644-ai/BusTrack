@@ -246,6 +246,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private val DEPARTURE_RADIUS = 85.0 // meters
     private var currentRawLocation: Location? = null
+    private var latestMatchedLocationForStopDetection: Location? = null
+    private var latestMatchedLocationTimeMs = 0L
     private var sourceArrivalRecordedForCurrentTrip = false
 
     private var departureCandidateIndex = -1
@@ -1052,6 +1054,16 @@ class DriverDashboardActivity : AppCompatActivity() {
                 if (dist[0] > OFF_ROUTE_THRESHOLD_METERS) raw else androidLocation
             } ?: androidLocation
 
+            val rawToMatchedMeters = currentRawLocation?.let { raw ->
+                val result = FloatArray(1)
+                Location.distanceBetween(raw.latitude, raw.longitude, androidLocation.latitude, androidLocation.longitude, result)
+                result[0]
+            } ?: 0f
+            if (rawToMatchedMeters <= OFF_ROUTE_THRESHOLD_METERS) {
+                latestMatchedLocationForStopDetection = Location(androidLocation)
+                latestMatchedLocationTimeMs = System.currentTimeMillis()
+            }
+
             runOnUiThread {
                 // Never move the visual puck from Mapbox's matcher.
                 if (isNavigating) {
@@ -1269,6 +1281,24 @@ class DriverDashboardActivity : AppCompatActivity() {
         return true
     }
 
+    private fun arrivalDistanceToStop(location: Location, stop: com.example.bustrack_app.models.StopItem): Float {
+        val rawDistance = FloatArray(1)
+        Location.distanceBetween(location.latitude, location.longitude, stop.latitude, stop.longitude, rawDistance)
+
+        val matchedLocation = latestMatchedLocationForStopDetection
+        if (matchedLocation == null || System.currentTimeMillis() - latestMatchedLocationTimeMs > MAX_CALLBACK_LOCATION_AGE_MS) {
+            return rawDistance[0]
+        }
+
+        val matchedDistance = FloatArray(1)
+        Location.distanceBetween(
+            matchedLocation.latitude, matchedLocation.longitude,
+            stop.latitude, stop.longitude,
+            matchedDistance
+        )
+        return minOf(rawDistance[0], matchedDistance[0])
+    }
+
 
     private fun advanceToUpcomingStop(startIndex: Int): Int {
         val stops = activeStops()
@@ -1409,16 +1439,11 @@ class DriverDashboardActivity : AppCompatActivity() {
             val candidateIndex = nextGlobalStopIndex
             if (stateOf(candidateIndex) == StopState.UPCOMING) {
                 val candidateStop = stops[candidateIndex]
-                val results = FloatArray(1)
-                Location.distanceBetween(
-                    location.latitude, location.longitude,
-                    candidateStop.latitude, candidateStop.longitude,
-                    results
-                )
+                val arrivalDistance = arrivalDistanceToStop(location, candidateStop)
 
                 Log.d("STOP_DEBUG", "arrivalCheck: targetStop=${candidateStop.stopName} candidateIndex=$candidateIndex " +
-                        "distance=${results[0]} geofenceEntered=${results[0] <= ARRIVAL_RADIUS} routeProgressValid=n/a")
-                if (results[0] <= ARRIVAL_RADIUS) {
+                        "distance=$arrivalDistance geofenceEntered=${arrivalDistance <= ARRIVAL_RADIUS} routeProgressValid=n/a")
+                if (arrivalDistance <= ARRIVAL_RADIUS) {
                     if (transitionToArrived(candidateIndex)) {
                         recordEveningDropAtStop(candidateStop.stopName)
                         // Trigger stop arrival notification to parents
@@ -1530,9 +1555,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (!isCurrentlyAtStop) {
             val index = nextGlobalStopIndex
             if (stateOf(index) == StopState.UPCOMING) {
-                val distance = FloatArray(1)
-                Location.distanceBetween(location.latitude, location.longitude, stops[index].latitude, stops[index].longitude, distance)
-                if (distance[0] <= ARRIVAL_RADIUS) {
+                val arrivalDistance = arrivalDistanceToStop(location, stops[index])
+                if (arrivalDistance <= ARRIVAL_RADIUS) {
                     if (transitionToArrived(index)) {
                         updateUpcomingStopsUI()
                         drawPointsOnMap(fullNavigationPoints)
@@ -4910,6 +4934,13 @@ class DriverDashboardActivity : AppCompatActivity() {
                         ensureMasterRouteChainage(fullNavigationPoints)
                     }
                     isNavigating = true
+                    viewModel.currentDriver.value?.let { driver ->
+                        FirebaseRepository.updateDriverStatus(
+                            driver.driverId.ifBlank { driver.id },
+                            "Active",
+                            route.routeName
+                        )
+                    }
                     nav.setNavigationRoutes(listOf(selectedRoute))
                     updateStopEtasFromNavigationRoute(selectedRoute)
 

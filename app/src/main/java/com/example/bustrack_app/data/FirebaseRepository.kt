@@ -246,6 +246,9 @@ object FirebaseRepository {
             // an older forward-trip direction.
             "tripDirection" to tripDirection
         )
+        if (isNavigating) {
+            updates["status"] = "Active"
+        }
         activeTripId?.let { updates["activeTripId"] = it }
         activeRouteId?.let { updates["activeRouteId"] = it }
         activeRouteName?.let { updates["activeRouteName"] = it }
