@@ -20,6 +20,7 @@ import com.google.android.material.textfield.TextInputLayout
 import ui.admin.AdminDashboardActivity
 import ui.principal.PrincipalDashboardActivity
 import utils.ViewUtils
+import utils.NotificationPermissionHelper
 
 class LoginActivity : AppCompatActivity() {
 
@@ -31,6 +32,14 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
+
+        // Ask while the user is on a stable, visible screen. SplashActivity navigates
+        // away on a timer, which can dismiss or obscure the Android 13 permission UI.
+        window.decorView.post {
+            if (!isFinishing && !isDestroyed) {
+                NotificationPermissionHelper.requestNotificationPermission(this)
+            }
+        }
 
         // Configure Google Sign-In
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)

@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import ui.admin.IntroActivity
 import ui_authentication.LoginActivity
-import utils.NotificationPermissionHelper
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,8 +22,6 @@ class SplashActivity : AppCompatActivity() {
 
         // Hide action bar
         supportActionBar?.hide()
-        NotificationPermissionHelper.requestNotificationPermission(this)
-
         // Pre-fetch user role during splash to speed up dashboard entry
         if (Firebase.auth.currentUser != null) {
             lifecycleScope.launch {

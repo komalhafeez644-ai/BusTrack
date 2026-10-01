@@ -607,6 +607,18 @@ object FirebaseRepository {
                 "timestamp" to com.google.firebase.Timestamp.now()
             )
 
+            val principalData = HashMap(data).apply {
+                put("id", "${notifId}_PRINCIPAL")
+                put("recipientRole", "principal")
+            }
+            var completedDeliveries = 0
+            var allSaved = true
+            fun onDeliverySaved(success: Boolean) {
+                allSaved = allSaved && success
+                completedDeliveries++
+                if (completedDeliveries == 2) onComplete(allSaved)
+            }
+
             com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
                 syncId = syncId,
                 actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_DRIVER_ALERT,
@@ -614,7 +626,16 @@ object FirebaseRepository {
                 targetDocumentId = notifId,
                 data = data,
                 immediateSync = true,
-                onComplete = onComplete
+                onComplete = ::onDeliverySaved
+            )
+            com.example.bustrack_app.sync.SyncQueueManager.enqueueSet(
+                syncId = "${syncId}_PRINCIPAL",
+                actionType = com.example.bustrack_app.sync.data.SyncQueueEntity.ACTION_DRIVER_ALERT,
+                targetCollection = "notifications",
+                targetDocumentId = "${notifId}_PRINCIPAL",
+                data = principalData,
+                immediateSync = true,
+                onComplete = ::onDeliverySaved
             )
         }
 
