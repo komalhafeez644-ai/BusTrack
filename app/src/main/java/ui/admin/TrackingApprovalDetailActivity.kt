@@ -136,6 +136,12 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
         }
 
         val assignedRoute = student.route ?: "Unassigned"
+        val busNumber = student.busNo?.trim()?.takeIf {
+            it.isNotEmpty() && !it.equals("Unassigned", true) && !it.equals("Not Assigned", true)
+        }
+        val routeName = assignedRoute.takeIf { it.isNotBlank() && !it.equals("Unassigned", true) }
+        val busDescription = busNumber?.let { "Bus $it" } ?: "the assigned bus"
+        val routeDescription = routeName?.let { " on the $it route" }.orEmpty()
         
         requestId?.let { id ->
             viewModel.updateTrackingRequest(id, "APPROVED", true, "ENABLED", Firebase.auth.currentUser?.uid ?: "admin", assignedRoute) { success ->
@@ -143,8 +149,8 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
                     parentId?.let { pid ->
                         FirebaseRepository.sendNotification(
                             recipientId = pid,
-                            title = "Tracking Request Approved",
-                            message = "Your tracking request has been approved. You can now track your child's bus on route $assignedRoute.",
+                            title = "Live Tracking Enabled",
+                            message = "Live tracking has been enabled for $busDescription$routeDescription. You can now view the bus location and track its journey in real time.",
                             type = "TRACKING_APPROVED",
                             relatedId = rollNumber ?: ""
                         )
@@ -194,11 +200,12 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
         requestId?.let { id ->
             viewModel.updateTrackingRequest(id, "REJECTED", false, "REJECTED", Firebase.auth.currentUser?.uid ?: "admin") { success ->
                 if (success) {
+                    val studentName = viewModel.studentData.value?.name?.takeIf { it.isNotBlank() } ?: "your child"
                     parentId?.let { pid ->
                         FirebaseRepository.sendNotification(
                             recipientId = pid,
                             title = "Tracking Request Rejected",
-                            message = "Your tracking request was not approved. Please contact the college administration for details.",
+                            message = "Your request to track $studentName has been rejected. Please contact the college administration for more information.",
                             type = "TRACKING_REJECTED",
                             relatedId = rollNumber ?: ""
                         )
@@ -247,11 +254,18 @@ class TrackingApprovalDetailActivity : AppCompatActivity() {
             requestId?.let { id ->
                 viewModel.updateTrackingRequest(id, "REWORK", false, "REVOKED", Firebase.auth.currentUser?.uid ?: "admin") { success ->
                     if (success) {
+                        val student = viewModel.studentData.value
+                        val busNumber = student?.busNo?.trim()?.takeIf {
+                            it.isNotEmpty() && !it.equals("Unassigned", true) && !it.equals("Not Assigned", true)
+                        }
+                        val routeName = student?.route?.trim()?.takeIf { it.isNotEmpty() && !it.equals("Unassigned", true) }
+                        val busDescription = busNumber?.let { "Bus $it" } ?: "the assigned bus"
+                        val routeDescription = routeName?.let { "on the $it route" } ?: "on the assigned route"
                         parentId?.let { pid ->
                             FirebaseRepository.sendNotification(
                                 recipientId = pid,
-                                title = "Tracking Access Revoked",
-                                message = "Your tracking access has been revoked by the administration.",
+                                title = "Live Tracking Disabled",
+                                message = "Live tracking for $busDescription $routeDescription has been disabled. The live bus location is no longer available.",
                                 type = "TRACKING_REVOKED",
                                 relatedId = rollNumber ?: ""
                             )

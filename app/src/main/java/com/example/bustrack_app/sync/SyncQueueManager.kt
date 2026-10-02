@@ -157,7 +157,7 @@ object SyncQueueManager {
         return try {
             val firestore = Firebase.firestore
             val mapToWrite = rawMap ?: deserializeMap(entity.payloadJson)
-            val sanitized = sanitizeMapForFirestore(mapToWrite)
+            val sanitized = sanitizeMapForFirestore(entity, mapToWrite)
 
             firestore.collection(entity.targetCollection)
                 .document(entity.targetDocumentId)
@@ -196,7 +196,7 @@ object SyncQueueManager {
                 for (item in pending) {
                     try {
                         val map = deserializeMap(item.payloadJson)
-                        val sanitized = sanitizeMapForFirestore(map)
+                        val sanitized = sanitizeMapForFirestore(item, map)
 
                         firestore.collection(item.targetCollection)
                             .document(item.targetDocumentId)
@@ -262,7 +262,7 @@ object SyncQueueManager {
         }
     }
 
-    private fun sanitizeMapForFirestore(map: Map<String, Any?>): Map<String, Any?> {
+    private fun sanitizeMapForFirestore(entity: SyncQueueEntity, map: Map<String, Any?>): Map<String, Any?> {
         val sanitized = mutableMapOf<String, Any?>()
         map.forEach { (k, v) ->
             if (v is Map<*, *> && v["__type"] == "Timestamp") {
@@ -275,6 +275,11 @@ object SyncQueueManager {
             } else {
                 sanitized[k] = v
             }
+        }
+        // Notification timestamps must reflect server commit order so the external
+        // push relay can safely resume after offline queued notifications sync.
+        if (entity.targetCollection == "notifications" && sanitized.containsKey("timestamp")) {
+            sanitized["timestamp"] = FieldValue.serverTimestamp()
         }
         return sanitized
     }

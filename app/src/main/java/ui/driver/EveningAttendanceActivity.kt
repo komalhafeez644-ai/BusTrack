@@ -336,7 +336,11 @@ class EveningAttendanceActivity : AppCompatActivity() {
                         item.studentName,
                         storedStatus,
                         item.date,
-                        isMorning
+                        isMorning,
+                        busNumber = updatedItem.busId.ifBlank { busId },
+                        routeName = updatedItem.route.ifBlank { routeName },
+                        stopName = updatedItem.stopName.ifBlank { updatedItem.stop },
+                        stopNumber = updatedItem.stopId
                     )
 
                     if (result == com.example.bustrack_app.sync.SyncQueueManager.SyncResult.QUEUED_OFFLINE) {

@@ -269,7 +269,11 @@ class AttendanceBottomSheet : BottomSheetDialogFragment() {
                         record.studentName,
                         status,
                         record.date,
-                        isMorning
+                        isMorning,
+                        busNumber = record.busId,
+                        routeName = record.route,
+                        stopName = record.stopName.ifBlank { record.stop },
+                        stopNumber = record.stopId
                     )
                 }
 

@@ -928,12 +928,18 @@ object FirebaseRepository {
         _unreadCount.postValue(0)
     }
 
-    /**
-     * Attendance-related notification: tells a student's approved parent(s)
-     * when their child boards the bus (Present) or is marked Absent.
-     * Includes deduplication by studentId + date + period.
-     */
-    fun notifyParentsOfAttendance(studentId: String, studentName: String, status: String, date: String, isMorning: Boolean) {
+    /** Notify each approved parent when pickup attendance is marked. */
+    fun notifyParentsOfAttendance(
+        studentId: String,
+        studentName: String,
+        status: String,
+        date: String,
+        isMorning: Boolean,
+        busNumber: String = "",
+        routeName: String = "",
+        stopName: String = "",
+        stopNumber: String = ""
+    ) {
         val isPresent = status.equals("Present", true) || status.contains(":")
         val isAbsent = status.equals("Absent", true)
         if (!isPresent && !isAbsent) return
@@ -941,15 +947,30 @@ object FirebaseRepository {
         val period = if (isMorning) "Morning" else "Evening"
         val notifPrefix = if (isPresent) "BOARDED" else "ABSENT"
         val notificationId = "${notifPrefix}_${studentId}_${date.replace("/", "-")}_${period.uppercase()}"
-
-        val notifTitle = if (isPresent) "Child Boarded Bus" else "Attendance Update: Absent"
-        val notifMessage = if (isPresent) {
-            "Your child, $studentName, has boarded the bus for $period trip on $date."
+        val childName = studentName.ifBlank { "Your child" }
+        val notificationTitle = if (isPresent) "Student Boarded" else "Attendance Alert"
+        val notificationMessage = if (isPresent) {
+            val busDetail = busNumber.trim().takeIf {
+                it.isNotEmpty() && !it.equals("not assigned", true) && !it.equals("unassigned", true)
+            }?.let { "Bus $it" }
+            val availableStopName = stopName.trim().takeIf { it.isNotEmpty() }
+            val availableStopNumber = stopNumber.trim().takeIf {
+                it.isNotEmpty() && (availableStopName == null || !it.equals(availableStopName, true))
+            }
+            val stopDetail = when {
+                availableStopName != null && availableStopNumber != null -> "from $availableStopName ($availableStopNumber)"
+                availableStopName != null -> "from $availableStopName"
+                availableStopNumber != null -> "at stop $availableStopNumber"
+                else -> null
+            }
+            val routeDetail = routeName.trim().takeIf { it.isNotEmpty() }?.let { "on the $it route" }
+            val busPhrase = if (busDetail == null) "the bus" else busDetail
+            "$childName has boarded $busPhrase${stopDetail?.let { " $it" }.orEmpty()}${routeDetail?.let { " $it" }.orEmpty()}."
         } else {
-            "Your child, $studentName, was marked absent for $period pickup on $date."
+            "$childName has been marked absent today."
         }
 
-        // Check for duplicate notification before sending
+        // Check for duplicate notification before sending, preserving the existing ID and inbox behavior.
         db.collection("notifications").document(notificationId).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
@@ -967,12 +988,12 @@ object FirebaseRepository {
                             android.util.Log.d("NotifDebug", "No approved tracking request found for student $studentId")
                         }
                         val parentIds = requests.map { it.parentId }.distinct()
-                        parentIds.forEach { pid ->
+                        parentIds.forEach { parentId ->
                             sendNotification(
                                 id = notificationId,
-                                recipientId = pid,
-                                title = notifTitle,
-                                message = notifMessage,
+                                recipientId = parentId,
+                                title = notificationTitle,
+                                message = notificationMessage,
                                 type = "ATTENDANCE",
                                 relatedId = studentId
                             ) { success ->
@@ -981,8 +1002,8 @@ object FirebaseRepository {
                         }
                     }
             }
-            .addOnFailureListener { e ->
-                android.util.Log.e("NotifDebug", "Error checking for duplicate attendance notif: ${e.message}")
+            .addOnFailureListener { error ->
+                android.util.Log.e("NotifDebug", "Error checking for duplicate attendance notif: ${error.message}")
             }
     }
 
@@ -1033,8 +1054,8 @@ object FirebaseRepository {
                     sendNotification(
                         id = parentNotifId,
                         recipientId = parentId,
-                        title = "Bus Started Journey",
-                        message = "Bus $busNo on route $routeName is now on duty and has started its journey.",
+                        title = "Bus Journey Started",
+                        message = "Bus $busNo on the $routeName route has started its journey.",
                         type = NotificationModel.TYPE_TRIP_STARTED,
                         relatedId = routeName
                     )
@@ -1097,11 +1118,22 @@ object FirebaseRepository {
             if (completedQueries == queryCount) {
                 matchedRequests.keys.forEach { parentId ->
                     val id = "ASSIGNMENT_${studentDocumentId.ifBlank { normalizedRoll }}_${System.currentTimeMillis()}_$parentId"
+                    val childName = studentName.ifBlank { "Your child" }
+                    val assignmentDetails = listOfNotNull(
+                        routeName.trim().takeIf { it.isNotEmpty() }?.let { "on the $it route" },
+                        busNumber.trim().takeIf { it.isNotEmpty() }?.let { "Bus $it" },
+                        stopName.trim().takeIf { it.isNotEmpty() }?.let { "pickup at $it" }
+                    ).joinToString(", ")
+                    val assignmentMessage = if (assignmentDetails.isNotEmpty()) {
+                        "$childName's transport assignment has been updated: $assignmentDetails."
+                    } else {
+                        "$childName's transport assignment has been updated."
+                    }
                     sendNotification(
                         id = id,
                         recipientId = parentId,
-                        title = "${studentName.ifBlank { "Your child" }}'s transport updated",
-                        message = "${studentName.ifBlank { "Your child" }} is assigned to $routeName, bus ${busNumber.ifBlank { "not assigned" }}, pickup stop $stopName.",
+                        title = "Transport Assignment Updated",
+                        message = assignmentMessage,
                         type = NotificationModel.TYPE_ROUTE_UPDATE,
                         relatedId = studentDocumentId.ifBlank { normalizedRoll }
                     )

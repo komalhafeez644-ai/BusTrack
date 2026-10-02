@@ -95,6 +95,8 @@ dependencies {
     // and its UploadCallback/MediaManager API matches exactly what the existing code
     // already calls, so no code rewrite was needed beyond this dependency line.
     implementation("com.cloudinary:cloudinary-android:3.1.2")
+    // OneSignal push notifications
+    implementation("com.onesignal:OneSignal:[5.6.1, 5.99.99]")
     implementation(libs.androidx.activity)
     
     // Room Local Database
