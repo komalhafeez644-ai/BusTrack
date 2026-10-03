@@ -93,7 +93,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
         </provider>
         <!--  Driver Module Activities  -->
-        <activity android:name="ui.driver.DriverDashboardActivity" android:exported="false"/>
+        <activity android:name="ui.driver.DriverDashboardActivity" android:exported="false" android:resizeableActivity="true" android:supportsPictureInPicture="true" android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize"/>
         <activity android:name="ui.driver.AttendanceActivity" android:exported="false"/>
         <activity android:name="ui.driver.TransitManifestActivity" android:exported="false"/>
         <activity android:name="ui.driver.navigationStart" android:exported="false"/>

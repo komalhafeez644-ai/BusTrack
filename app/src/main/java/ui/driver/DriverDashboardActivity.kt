@@ -2,10 +2,14 @@ package ui.driver
 
 import android.app.Dialog
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.res.ColorStateList
+import android.app.PictureInPictureParams
+import android.graphics.Rect
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.util.Rational
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +18,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.WindowCompat
@@ -171,7 +176,6 @@ class DriverDashboardActivity : AppCompatActivity() {
     private var isDutyEnabled = false
     private var isNearStart = false
     private var isNavigating = false
-
     private var navigationUiActive = false
     private var shouldFitCameraToRoute = true
     // A route can arrive from LiveData before Mapbox has finished loading its
@@ -359,6 +363,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         private const val FIRESTORE_UPDATE_INTERVAL = 1000L
         private const val FIRESTORE_MIN_DISTANCE = 2f
+        private const val STATE_LAST_SPOKEN_INSTRUCTION = "last_spoken_instruction"
+        private const val STATE_LAST_SPOKEN_TIME_MS = "last_spoken_time_ms"
     }
     private var locationCallback: LocationCallback? = null
     private val bitmapCache = mutableMapOf<Int, Bitmap>()
@@ -448,6 +454,8 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lastSpokenInstruction = savedInstanceState?.getString(STATE_LAST_SPOKEN_INSTRUCTION)
+        lastSpokenTimeMs = savedInstanceState?.getLong(STATE_LAST_SPOKEN_TIME_MS) ?: 0L
 
         WindowCompat.setDecorFitsSystemWindows(window, true)
         window.statusBarColor = ContextCompat.getColor(this, R.color.primaryDark)
@@ -464,6 +472,22 @@ class DriverDashboardActivity : AppCompatActivity() {
 
         drawerLayout = binding.drawerLayout
         mapView = binding.mapView
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    drawerLayout.isDrawerOpen(GravityCompat.END) -> drawerLayout.closeDrawer(GravityCompat.END)
+                    isNavigating && !isInPictureInPictureMode -> enterNavigationPictureInPicture()
+                    else -> {
+                        isEnabled = false
+                        try {
+                            onBackPressedDispatcher.onBackPressed()
+                        } finally {
+                            isEnabled = true
+                        }
+                    }
+                }
+            }
+        })
         isVoiceEnabled = getSharedPreferences("navigation_preferences", MODE_PRIVATE)
             .getBoolean("voice_enabled", true)
 
@@ -5178,6 +5202,8 @@ class DriverDashboardActivity : AppCompatActivity() {
                 }
             }
         }
+        updatePictureInPictureParams()
+        if (!isNavigating && isInPictureInPictureMode) finish()
     }
 
     private fun setupNavigationLayers(style: Style) {
@@ -5682,6 +5708,32 @@ class DriverDashboardActivity : AppCompatActivity() {
         scheduleDutyAutoOffTimer()
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S) {
+            enterNavigationPictureInPicture()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (isInPictureInPictureMode) {
+            showPictureInPictureNavigationUi()
+        } else if (isNavigating && navigationUiActive) {
+            setNavigationMode(true, reloadStyle = false)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (isNavigating) persistCurrentActiveTripState()
+        outState.putString(STATE_LAST_SPOKEN_INSTRUCTION, lastSpokenInstruction)
+        outState.putLong(STATE_LAST_SPOKEN_TIME_MS, lastSpokenTimeMs)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onDestroy() {
         com.example.bustrack_app.sync.network.NetworkMonitor.removeListener(networkListener)
         stopStaleLocationWatchdog()
@@ -5707,11 +5759,50 @@ class DriverDashboardActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.END)) {
-            drawerLayout.closeDrawer(GravityCompat.END)
-        } else {
-            super.onBackPressed()
+    private fun updatePictureInPictureParams() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            !packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) return
+
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(isNavigating)
         }
+        val sourceRect = Rect()
+        if (mapView?.getGlobalVisibleRect(sourceRect) == true && !sourceRect.isEmpty) {
+            builder.setSourceRectHint(sourceRect)
+        }
+        setPictureInPictureParams(builder.build())
+    }
+
+    private fun enterNavigationPictureInPicture() {
+        if (!isNavigating || Build.VERSION.SDK_INT < Build.VERSION_CODES.O || isInPictureInPictureMode) return
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+            moveTaskToBack(true)
+            return
+        }
+
+        updatePictureInPictureParams()
+        enterPictureInPictureMode(
+            PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+        )
+    }
+
+    private fun showPictureInPictureNavigationUi() {
+        binding.toolbar.visibility = View.GONE
+        binding.headerBg.visibility = View.GONE
+        binding.dashboardTopContent.visibility = View.GONE
+        binding.instructionCard.visibility = View.VISIBLE
+        binding.maneuverView.visibility = View.GONE
+        binding.cardRouteDetails.visibility = View.GONE
+        binding.btnStartNavigation.visibility = View.GONE
+        binding.bottomSummaryCard.visibility = View.GONE
+        bottomSheetBehavior.isHideable = true
+        bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_HIDDEN
+        binding.layoutMapControls.visibility = View.GONE
+        binding.btnRecenter.visibility = View.GONE
     }
 }

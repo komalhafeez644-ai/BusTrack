@@ -6,8 +6,8 @@ import java.util.Calendar
 enum class TripPeriod { MORNING, EVENING, GAP }
 
 object TripWindow {
-    private const val MORNING_START_MINUTE = 6 * 60
-    private const val MORNING_END_MINUTE = 9 * 60
+    private const val MORNING_START_MINUTE = 12 * 60
+    private const val MORNING_END_MINUTE = 2* 60
     private const val EVENING_START_MINUTE = 11 * 60
     private const val EVENING_END_MINUTE = 21 * 60
 
