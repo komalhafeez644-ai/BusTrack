@@ -4147,6 +4147,10 @@ class DriverDashboardActivity : AppCompatActivity() {
             ViewUtils.applyClickEffect(it)
             drawerLayout.openDrawer(GravityCompat.END)
         }
+        binding.btnNavigationDrawer.setOnClickListener {
+            ViewUtils.applyClickEffect(it)
+            drawerLayout.openDrawer(GravityCompat.END)
+        }
 
         findViewById<View>(R.id.layoutProfileArea).setOnClickListener(null)
         findViewById<View>(R.id.layoutProfileArea).isClickable = false
@@ -5054,8 +5058,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     currentRouteGeometry = null
                 }
 
-                toolbar.visibility = View.GONE
-                headerBg.visibility = View.GONE
+                setNavigationTopHeader(true)
                 dashboardTopContent.visibility = View.GONE
 
                 // Give the driver a useful card immediately; the next route-progress
@@ -5111,6 +5114,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 btnStartNavigation.visibility = View.GONE
                 bottomSummaryCard.visibility = View.VISIBLE
                 bottomSheetBehavior.isHideable = false
+                bottomSheetBehavior.peekHeight = (110 * resources.displayMetrics.density).toInt()
                 bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_COLLAPSED
 
                 // Do not write null route geometry when this is merely a reroute/UI
@@ -5131,7 +5135,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 infoBar.setBackgroundColor(Color.parseColor("#0D1B3E"))
                 layoutMapControls.visibility = View.VISIBLE
-                val navOffset = -android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP, 236f, resources.displayMetrics)
+                val navOffset = -android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_DIP, 106f, resources.displayMetrics)
                 layoutMapControls.animate().translationY(navOffset).setDuration(500).start()
                 btnRecenter.animate().translationY(navOffset).setDuration(500).start()
             } else {
@@ -5152,8 +5156,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 mapView?.viewport?.idle()
                 dashboardCameraFitPending = true
 
-                toolbar.visibility = View.VISIBLE
-                headerBg.visibility = View.VISIBLE
+                setNavigationTopHeader(false)
                 dashboardTopContent.visibility = View.VISIBLE
                 instructionCard.visibility = View.GONE
                 maneuverView.visibility = View.GONE
@@ -5187,6 +5190,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 bottomSummaryCard.visibility = View.GONE
                 bottomSheetBehavior.isHideable = true
+                bottomSheetBehavior.peekHeight = (220 * resources.displayMetrics.density).toInt()
                 bottomSheetBehavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_HIDDEN
 
                 infoBar.setBackgroundColor(Color.TRANSPARENT)
@@ -5204,6 +5208,49 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
         updatePictureInPictureParams()
         if (!isNavigating && isInPictureInPictureMode) finish()
+    }
+
+    private fun setNavigationTopHeader(navigationActive: Boolean) {
+        val density = resources.displayMetrics.density
+        val headerParams = binding.headerBg.layoutParams
+        headerParams.height = ((if (navigationActive) 56 else 220) * density).toInt()
+        binding.headerBg.layoutParams = headerParams
+        binding.headerBg.visibility = View.VISIBLE
+
+        binding.toolbar.visibility = View.VISIBLE
+        binding.toolbar.setBackgroundColor(
+            if (navigationActive) Color.parseColor("#0D1B3E") else Color.TRANSPARENT
+        )
+        (binding.toolbar.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams)?.let { params ->
+            params.topMargin = ((if (navigationActive) 0 else 24) * density).toInt()
+            binding.toolbar.layoutParams = params
+        }
+        binding.layoutProfileArea.visibility = if (navigationActive) View.GONE else View.VISIBLE
+        binding.btnNotifications.visibility = View.VISIBLE
+        binding.btnMenuDrawer.visibility = if (navigationActive) View.GONE else View.VISIBLE
+        binding.btnNavigationDrawer.visibility = if (navigationActive) View.VISIBLE else View.GONE
+        binding.layoutNavigationGreeting.visibility = if (navigationActive) View.VISIBLE else View.GONE
+        binding.tvNavigationGreeting.text = binding.tvGreeting.text
+        binding.tvNavigationDriverName.text = binding.tvDriverName.text
+
+        (binding.layoutActions.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams)?.let { params ->
+            if (navigationActive) {
+                params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                params.marginStart = 0
+            } else {
+                params.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET
+                params.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                params.marginStart = 0
+            }
+            binding.layoutActions.layoutParams = params
+        }
+
+        val instructionParams = binding.instructionCard.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        instructionParams?.topMargin = ((if (navigationActive) 16 else 8) * density).toInt()
+        if (instructionParams != null) binding.instructionCard.layoutParams = instructionParams
+
+        binding.speedometer.visibility = if (navigationActive) View.GONE else View.VISIBLE
     }
 
     private fun setupNavigationLayers(style: Style) {

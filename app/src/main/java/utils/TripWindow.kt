@@ -13,7 +13,8 @@ object TripWindow {
 
     fun currentPeriod(calendar: Calendar = Calendar.getInstance()): TripPeriod {
         val minuteOfDay = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
-        return when {
+        return when
+        {
             minuteOfDay in MORNING_START_MINUTE until MORNING_END_MINUTE -> TripPeriod.MORNING
             minuteOfDay in EVENING_START_MINUTE until EVENING_END_MINUTE -> TripPeriod.EVENING
             else -> TripPeriod.GAP
