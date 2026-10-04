@@ -6,6 +6,7 @@ import androidx.lifecycle.MutableLiveData
 import com.example.bustrack_app.models.RouteModel
 import com.example.bustrack_app.models.StopItem
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.MetadataChanges
 
 object RouteRepository {
     private val db = FirebaseFirestore.getInstance()
@@ -13,13 +14,16 @@ object RouteRepository {
 
     private val _routeList = MutableLiveData<List<RouteModel>>(emptyList())
     val routeList: LiveData<List<RouteModel>> get() = _routeList
+    @Volatile
+    var isLatestSnapshotFromCache: Boolean = true
+        private set
 
     init {
         fetchRoutesFromFirestore()
     }
 
     private fun fetchRoutesFromFirestore() {
-        routesCollection.addSnapshotListener { snapshot, error ->
+        routesCollection.addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null) {
                 Log.e("RouteRepository", "Listen failed.", error)
                 return@addSnapshotListener
@@ -28,7 +32,7 @@ object RouteRepository {
             if (snapshot != null) {
                 publishRoutes(snapshot.documents.mapNotNull { document ->
                     document.toObject(RouteModel::class.java)?.copy(id = document.id)
-                })
+                }, isFromCache = snapshot.metadata.isFromCache)
             }
         }
     }
@@ -40,7 +44,7 @@ object RouteRepository {
                 val routes = snapshot.documents.mapNotNull { document ->
                     document.toObject(RouteModel::class.java)?.copy(id = document.id)
                 }
-                publishRoutes(routes)
+                publishRoutes(routes, isFromCache = snapshot.metadata.isFromCache)
                 onResult(routes)
             }
             .addOnFailureListener { error ->
@@ -49,7 +53,8 @@ object RouteRepository {
             }
     }
 
-    private fun publishRoutes(routes: List<RouteModel>) {
+    private fun publishRoutes(routes: List<RouteModel>, isFromCache: Boolean = true) {
+        isLatestSnapshotFromCache = isFromCache
         _routeList.postValue(routes)
         Log.d("RouteRepository", "Fetched ${routes.size} routes from Firestore")
         BusRepository.refreshBusList()

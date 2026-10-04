@@ -545,7 +545,14 @@ class DriverDashboardActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 1001) {
-            if (hasLocationPermission()) {
+            if (pendingNavigationStartRoute != null && !hasPreciseLocationPermission()) {
+                clearPendingNavigationStart()
+                Toast.makeText(
+                    this,
+                    "Precise location permission is required for navigation. Enable it in app permissions, then try again.",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else if (hasLocationPermission()) {
                 checkLocationSettings()
             } else {
                 clearPendingNavigationStart()
@@ -2062,6 +2069,9 @@ class DriverDashboardActivity : AppCompatActivity() {
         ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    private fun hasPreciseLocationPermission(): Boolean =
+        ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
     private fun hasFreshCurrentLocation(): Boolean {
         val location = currentLocation ?: return false
         val timestamp = location.time.takeIf { it > 0L } ?: lastFreshLocationTimestamp
@@ -2071,7 +2081,7 @@ class DriverDashboardActivity : AppCompatActivity() {
 
     private fun requestNavigationStartLocation(route: RouteModel) {
         pendingNavigationStartRoute = route
-        if (!hasLocationPermission()) {
+        if (!hasPreciseLocationPermission()) {
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
@@ -2515,8 +2525,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 .bearing(if (isNorthUp) 0.0 else lastValidBearing)
                 .pitch(if (isNorthUp) 45.0 else 65.0)
                 .zoom(if (isNorthUp) 17.5 else DRIVER_RECENTER_ZOOM)
-                // Keep the bus slightly below centre, but safely above the
-                .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
+                .padding(navigationCameraPadding())
                 .build(),
             // Smooth normally; snap when the camera has fallen far behind the bus.
             MapAnimationOptions.mapAnimationOptions {
@@ -2835,7 +2844,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                 abandonNavigationAudioFocus()
             }
         }
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        if (hasLocationPermission()) {
             startLocationUpdates()
         }
     }
@@ -2958,6 +2967,7 @@ class DriverDashboardActivity : AppCompatActivity() {
             if (driver != null) {
                 val assignedBus = driver.assignedBus?.takeIf { it.isNotBlank() && !it.equals("Not Assigned", true) }
                 if (assignedBus == null) {
+                    if (DriverRepository.isLatestSnapshotFromCache) return@observe
                     hasCheckedActiveTripRecovery = true
                     assignedRoute = null
                     lockedActiveRoute = null
@@ -3043,6 +3053,8 @@ class DriverDashboardActivity : AppCompatActivity() {
         }
 
         viewModel.dashboardData.observe(this) { data ->
+            if (DriverRepository.isLatestSnapshotFromCache || RouteRepository.isLatestSnapshotFromCache) return@observe
+
             binding.apply {
                 if (isNavigating && !lockedActiveBus.isNullOrBlank()) {
                     tvBusNumberInfo.text = lockedActiveBus
@@ -4228,6 +4240,11 @@ class DriverDashboardActivity : AppCompatActivity() {
 
             assignedRoute = latestRoute
 
+            if (!hasPreciseLocationPermission()) {
+                requestNavigationStartLocation(latestRoute)
+                return@setOnClickListener
+            }
+
             if (!hasFreshCurrentLocation()) {
                 Toast.makeText(this, "Fetching current location...", Toast.LENGTH_SHORT).show()
                 requestNavigationStartLocation(latestRoute)
@@ -4682,7 +4699,7 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .zoom(DRIVER_RECENTER_ZOOM)
                     .pitch(65.0)
                     .bearing(FollowPuckViewportStateBearing.SyncWithLocationPuck)
-                    .padding(EdgeInsets(260.0, 0.0, 80.0, 0.0))
+                    .padding(navigationCameraPadding())
                     .build()
             )!!
         )
@@ -4695,9 +4712,24 @@ class DriverDashboardActivity : AppCompatActivity() {
                     .zoom(17.5)
                     .pitch(45.0)
                     .bearing(FollowPuckViewportStateBearing.Constant(0.0))
+                    .padding(navigationCameraPadding())
                     .build()
             )!!
         )
+    }
+
+    private fun navigationCameraPadding(): EdgeInsets {
+        val density = resources.displayMetrics.density
+        val height = (mapView?.height?.takeIf { it > 0 }
+            ?: resources.displayMetrics.heightPixels).toDouble()
+        val sheetInset = if (::bottomSheetBehavior.isInitialized && isNavigating) {
+            bottomSheetBehavior.peekHeight.toDouble()
+        } else {
+            110.0 * density
+        }
+        // Keep the bus in the lower map area, while leaving room to see the route ahead.
+        val topInset = height * 0.5
+        return EdgeInsets(topInset, 0.0, sheetInset, 0.0)
     }
 
     private fun toggleNorthUpMode() {
@@ -5154,6 +5186,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 traveledRouteGeometry = null
 
                 mapView?.viewport?.idle()
+                mapView?.mapboxMap?.setCamera(
+                    CameraOptions.Builder()
+                        .padding(EdgeInsets(0.0, 0.0, 0.0, 0.0))
+                        .build()
+                )
                 dashboardCameraFitPending = true
 
                 setNavigationTopHeader(false)
