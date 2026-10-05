@@ -5480,8 +5480,11 @@ class DriverDashboardActivity : AppCompatActivity() {
                 updateLocationReliabilityStatus(LocationReliabilityState.GPS_UNAVAILABLE)
             }
 
-            viewModel.currentDriver.value?.driverId?.let { driverId ->
-                FirebaseRepository.updateDriverStatus(driverId, "Active")
+            viewModel.currentDriver.value?.let { driver ->
+                val driverId = driver.driverId.ifBlank { driver.id }.ifBlank { driver.uid }
+                if (driverId.isNotBlank()) {
+                    FirebaseRepository.updateDriverStatus(driverId, "Active", assignedRoute?.routeName)
+                }
             }
         } else {
             drawerDutyLabel?.text = "DUTY STATUS: OFF"
@@ -5510,11 +5513,14 @@ class DriverDashboardActivity : AppCompatActivity() {
                 clearTraveledRouteHistory()
             }
 
-            viewModel.currentDriver.value?.driverId?.let { driverId ->
-                FirebaseRepository.updateDriverStatus(driverId, "Inactive")
-                FirebaseRepository.updateDriverRouteGeometry(
-                    driverId, null, null, 0, emptyMap(), false
-                )
+            viewModel.currentDriver.value?.let { driver ->
+                val driverId = driver.driverId.ifBlank { driver.id }.ifBlank { driver.uid }
+                if (driverId.isNotBlank()) {
+                    FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                    FirebaseRepository.updateDriverRouteGeometry(
+                        driverId, null, null, 0, emptyMap(), false
+                    )
+                }
             }
         }
         updateNavigationButtonState()
@@ -5714,11 +5720,14 @@ class DriverDashboardActivity : AppCompatActivity() {
 
                 cancelDutyAutoOffTimer()
                 if (isDutyEnabled) {
-                    viewModel.currentDriver.value?.driverId?.let { driverId ->
-                        FirebaseRepository.updateDriverStatus(driverId, "Inactive")
-                        FirebaseRepository.updateDriverRouteGeometry(
-                            driverId, null, null, 0, emptyMap(), false
-                        )
+                    viewModel.currentDriver.value?.let { driver ->
+                        val driverId = driver.driverId.ifBlank { driver.id }.ifBlank { driver.uid }
+                        if (driverId.isNotBlank()) {
+                            FirebaseRepository.updateDriverStatus(driverId, "Inactive")
+                            FirebaseRepository.updateDriverRouteGeometry(
+                                driverId, null, null, 0, emptyMap(), false
+                            )
+                        }
                     }
                 }
 
@@ -5744,7 +5753,9 @@ class DriverDashboardActivity : AppCompatActivity() {
         if (!isDutyEnabled || isNavigating || currentActiveTripId != null) return
 
         cancelDutyAutoOffTimer()
-        val driverIdSnapshot = viewModel.currentDriver.value?.driverId ?: return
+        val driver = viewModel.currentDriver.value
+        val driverIdSnapshot = driver?.driverId?.ifBlank { driver.id }?.ifBlank { driver.uid } ?: return
+        if (driverIdSnapshot.isBlank()) return
 
         val runnable = Runnable {
             if (isNavigating || currentActiveTripId != null) return@Runnable

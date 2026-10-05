@@ -121,9 +121,12 @@ class ChatbotActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                // Send full running history and user role for role-isolated prompt injection
+                // Send full running history and user role with authenticated UID for live data resolution
                 val history = messages.map { it.role to it.content }
-                val reply = ChatbotRepository.sendMessage(history, userRole)
+                val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                val uid = currentUser?.uid.orEmpty()
+                val email = currentUser?.email.orEmpty()
+                val reply = ChatbotRepository.sendMessage(history, userRole, uid, email)
                 adapter.addMessage(ChatMessageModel("assistant", reply))
             } catch (e: Exception) {
                 Log.e("ChatbotDebug", "Chatbot request failed: ${e.javaClass.name}: ${e.message}", e)

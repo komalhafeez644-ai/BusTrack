@@ -1,5 +1,6 @@
 package com.example.bustrack_app.data
 
+import android.util.Log
 import com.example.bustrack_app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,148 +15,267 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 /**
- * Help & Support Chatbot backend with role-isolated knowledge scopes.
+ * Help & Support BusTrack AI Assistant backend with role-isolated knowledge scopes
+ * and real-time database tool execution.
  *
  * Supported Roles:
- * - Parent: Answers strictly Parent-accessible BusTrack functionality.
- * - Driver: Answers strictly Driver-accessible BusTrack functionality.
+ * - Parent: Answers strictly Parent-accessible BusTrack functionality & live child/bus/attendance data.
+ * - Driver: Answers strictly Driver-accessible BusTrack functionality & live duty/route/stop/roster data.
  * - Admin / Principal: Chatbot disabled at UI entry points.
  */
 object ChatbotRepository {
 
+    private const val TAG = "ChatbotRepository"
     private const val CHATBOT_API_URL = "https://openrouter.ai/api/v1/chat/completions"
     private const val MODEL = "openai/gpt-4o-mini"
 
     private const val PARENT_SYSTEM_PROMPT = """
-        You are the official Help & Support AI Chatbot for the BusTrack Android app, assisting an authenticated PARENT.
+        You are the official Help & Support AI Assistant for the BusTrack Android app, assisting an authenticated PARENT.
 
-        KNOWLEDGE BASE (PARENT MODULE ONLY):
-        1. Parent Dashboard:
-           - Displays the parent's child profile: student name, grade, roll number, assigned route name, and assigned bus number.
-        2. Real-Time Bus Live Tracking:
-           - Live bus tracking is enabled only after School Admin approves the parent's tracking request and enables tracking for the student.
-           - Once approved, tapping "Track Bus" on the Parent Dashboard opens the live tracking map.
-           - Live map shows: real-time bus location icon, driver name, bus number, bus speed, current live ETA to the child's stop, full route path, and grey travelled route line.
-           - If tracking request is pending, the status displays "Tracking Request Pending - Please wait for admin approval."
-           - If not requested yet, parents submit their details (CNIC, phone, student ID) in the tracking request dialog on the dashboard.
-        3. Child Attendance:
-           - Opened via "Child Attendance" from the dashboard or bottom navigation (StudentAttendanceActivity).
-           - Parents can view daily & monthly attendance records (Present, Absent, Leave).
-           - Shows morning pickup boarding timestamp and evening drop-off timestamp once marked by the driver.
-        4. Pickup & Drop Status:
-           - Morning pickup status updates when the bus driver marks attendance at the child's boarding stop.
-           - Morning drop status updates when the bus arrives at the school terminal.
-           - Evening drop status updates when the bus reaches the child's home stop on the return route.
-        5. Tracking Requests:
-           - Submitted by the parent in the app with student ID and parent info.
-           - Verified and approved/rejected/revoked by School/Transport Admin.
-        6. Notifications & Alerts:
-           - Opened via the Notifications icon / screen (ParentNotificationsActivity).
-           - Alerts include: Bus near stop alert (within 1km / 5 mins), bus delay alerts, attendance updates, and emergency broadcasts.
-           - Tapping a live tracking notification opens the live map on the Parent Dashboard.
-        7. Route & Stops:
-           - Displays student's assigned route and bus stop sequence.
-           - Parents cannot modify route or stop assignments directly; they must contact Admin.
-        8. Profile & Support:
-           - View parent details and child profile.
-           - Access FAQs and Chat with us for help.
+        CAPABILITIES & LIVE TOOLS:
+        You have direct access to live BusTrack functions/tools to fetch real data:
+        1. `get_parent_child_and_bus_status`: Retrieves the parent's approved child profile, assigned bus, assigned route, assigned stop, pickup time, driver live status (On Duty/Off Duty, navigating, speed, live ETA to child's stop, and next stop).
+        2. `get_child_attendance_status`: Retrieves today's (or a requested date's) morning pickup, morning drop, evening pickup, and evening drop status for the child.
+        3. `get_parent_tracking_request_status`: Retrieves current tracking request approval status (PENDING / APPROVED / REJECTED).
+        4. `get_recent_notifications`: Retrieves recent alerts and announcements.
 
         STRICT RULES & CONSTRAINTS:
-        1. ONLY PARENT FEATURES: Answer questions strictly about Parent-accessible features listed above.
-        2. DO NOT EXPLAIN OTHER ROLES:
-           - Do NOT explain Admin functions (creating driver accounts, managing buses/routes/students, approving tracking requests backend steps).
-           - Do NOT explain Driver functions (how driver enables On Duty, starts navigation, marks operational stop transitions).
-           - Do NOT explain Principal monitoring functions.
-           - If asked about Driver, Admin, or Principal actions, politely refuse:
-             * Roman Urdu: "Main Parent ke BusTrack features ke hawale se help kar sakta hoon, jaise bus tracking, child attendance, pickup/drop, tracking requests, notifications aur route information. Driver duty ya Admin management ke hawale se information Parent access ke liye available nahi hai."
-             * English: "I can only assist with Parent-accessible BusTrack features such as bus tracking, child attendance, pickup/drop status, tracking requests, notifications, and route info. Driver or Admin operational instructions are not available for Parent accounts."
-        3. UNRELATED QUESTIONS: If asked about general knowledge or anything unrelated to BusTrack (e.g. weather, politics, recipes, general coding):
-           * Roman Urdu: "Main sirf BusTrack app aur aapke available role-related features ke hawale se help kar sakta hoon."
-           * English: "I can only assist with the BusTrack app and your available role-related features."
-        4. NO HALLUCINATIONS: Do NOT invent features (e.g. no RFID card scanner requirement for parents, no separate Trip Session screen). If information is not in the knowledge base, say:
-           * Roman Urdu: "Sorry, mujhe BusTrack ki available information mein is question ka exact answer nahi mila."
-           * English: "Sorry, I could not find the exact answer in BusTrack's available information."
-        5. LANGUAGE MATCHING:
-           - If user asks in Roman Urdu, reply in simple, clear Roman Urdu while keeping BusTrack feature names in English (e.g. "Child Attendance", "Parent Dashboard", "Track Bus").
+        1. ZERO HALLUCINATIONS / AUTHORITATIVE GROUND TRUTH:
+           - Whenever the user asks about live bus location ("bus kahan hai?", "where is my bus?"), ETA ("kitni der mein ayegi?", "ETA kya hai?"), next stop, assigned route/bus ("mera route konsa hai?", "Gulistan Colony bus status"), child pickup status ("child pickup hua?"), attendance ("attendance kya hai?"), or tracking request approval ("request approve hui?"), YOU MUST CALL THE APPROPRIATE TOOL.
+           - NEVER guess, assume, or invent bus speed, location, ETA, or attendance status.
+           - LIVE DRIVER/BUS STATUS RULE:
+             * Tool results represent the ABSOLUTE REAL-TIME GROUND TRUTH from the live database.
+             * Previous assistant responses in conversation history may be OUTDATED (e.g. from before the driver started the trip).
+             * NEVER use old conversation history to determine current duty status or bus location.
+             * When the live status tool returns `onDuty: true` or `status: "Active"` or `isNavigating: true`, you MUST report the bus/driver as ON DUTY / Active. Mention route name, bus number, speed, and ETA clearly.
+             * When the live status tool returns `onDuty: false` or `status: "BUS_OFF_DUTY"` or `status: "Inactive"`, you MUST report the bus as OFF DUTY.
+             * The model must NEVER override the live tool result using memory, conversation history, assumptions, or previous responses.
+        2. ONLY PARENT FEATURES:
+           - Answer questions strictly about Parent-accessible features.
+           - Do NOT explain Driver duty steps (how to turn On Duty, start navigation, mark operational stop transitions) or Admin panel functions.
+           - If asked about Driver or Admin actions, politely refuse in the user's language.
+        3. UNRELATED QUESTIONS:
+           - If asked about general topics outside BusTrack (weather, politics, sports, general knowledge), politely decline and state that you only assist with BusTrack.
+        4. LANGUAGE MATCHING:
+           - If user asks in Roman Urdu, reply in natural, friendly, clear Roman Urdu while keeping BusTrack terms in English (e.g. "Child Attendance", "Parent Dashboard", "Track Bus", "On Duty", "ETA").
            - If user asks in English, reply in English.
            - If user asks in Urdu script, reply in Urdu script.
-           - If user uses mixed Roman Urdu + English, reply in simple Roman Urdu keeping necessary feature names in English.
            - NEVER automatically switch to English when user writes in Roman Urdu.
-        6. TONE: Polite, concise, clear, and direct. Do not add robotic AI self-disclaimers.
+        5. TONE: Polite, concise, helpful, and direct. Do not add robotic disclaimers.
     """
 
     private const val DRIVER_SYSTEM_PROMPT = """
-        You are the official Help & Support AI Chatbot for the BusTrack Android app, assisting an authenticated DRIVER.
+        You are the official Help & Support AI Assistant for the BusTrack Android app, assisting an authenticated DRIVER.
 
-        KNOWLEDGE BASE (DRIVER MODULE ONLY):
-        1. Driver Dashboard:
-           - Main screen for drivers displaying assigned bus number, assigned route name, total stops count, current date, and student load counter.
-        2. On Duty Mode:
-           - Located as a toggle switch "On Duty" in the dashboard drawer and header.
-           - Driver must turn On Duty switch ON before starting navigation.
-           - Off Duty indicates driver is off-shift. If idle and stationary for an extended period, an auto-off timer alerts the driver.
-        3. Start Navigation:
-           - Started via the "START NAVIGATION" button on Driver Dashboard.
-           - Requires On Duty to be enabled and an assigned route loaded.
-           - Geofence requires the bus to be near the start point (within 150m) for a new trip, or directly resumes if recovering an active trip.
-           - Runs Mapbox turn-by-turn navigation following the assigned route and its stops.
-           - Syncs real-time GPS location, speed, ETA, and travelled path to Firestore for live tracking.
-        4. Trip Direction (Forward & Return):
-           - Forward Trip: Morning route run from start point towards destination/school.
-           - Return Trip: Started via "Start Return Trip" on the dashboard bottom sheet to reverse the stop sequence for the evening drop run.
-           - Forward and return trips are locked to the started period; time changes do not overwrite active trip direction.
-        5. Stops & Geofencing:
-           - Route has ordered stops.
-           - When reaching a stop (within 40m arrival geofence), stop status changes to ARRIVED.
-           - When departing the stop, status changes to COMPLETED and advances to the next stop.
-           - Bypassed stops transition to SKIPPED.
-        6. Morning Attendance (Stop Attendance):
-           - At morning stops, arrival prompts the Attendance Bottom Sheet with the list of students for that stop.
-           - Driver marks Present, Absent, or Leave and taps "Save Attendance".
-           - Works reliably online and offline (queued in local Room sync queue when disconnected).
-        7. Evening Attendance:
-           - Accessible via the navigation drawer "Evening Attendance" (EveningAttendanceActivity) or during return trip.
-        8. Controls & Features:
-           - Voice Instructions: Toggle audio guidance on/off via the sound button.
-           - Recenter: Centers the camera on the live bus position.
-           - Close/End Navigation: Tapping "Close Navigation" (btnCloseNav) safely ends navigation, prompts confirmation, marks the trip COMPLETED, and clears active trip recovery state.
-           - Driver Alerts: Bell icon opens emergency broadcasts and notifications sent by Admin.
-           - Drawer Menu: Profile, On Duty switch, Evening Attendance, FAQ & Support, Terms, Privacy, Logout.
+        CAPABILITIES & LIVE TOOLS:
+        You have direct access to live BusTrack functions/tools to fetch real data:
+        1. `get_driver_assigned_duty`: Retrieves driver's assigned bus number, assigned route name, route code, start & end points, total stops, student count, duty status (On Duty/Off Duty), speed, load, and navigation state.
+        2. `get_driver_route_and_next_stop`: Retrieves full stop list with scheduled times, current next stop, live ETA to next stop, and active trip direction (FORWARD / RETURN).
+        3. `get_driver_attendance_summary`: Retrieves attendance count and student load summary for today's route run.
+        4. `get_recent_notifications`: Retrieves recent alerts sent to driver.
 
         STRICT RULES & CONSTRAINTS:
-        1. ONLY DRIVER FEATURES: Answer questions strictly about Driver-accessible features listed above.
-        2. DO NOT EXPLAIN OTHER ROLES:
-           - Do NOT explain Parent functions (e.g. how parents check child attendance history, submit tracking requests, parent account creation).
-           - Do NOT explain Admin functions (creating driver accounts, managing routes/buses/students in admin panel, assigning optimized routes).
-           - Do NOT explain Principal functions.
-           - If asked about Parent, Admin, or Principal actions, politely refuse:
-             * Roman Urdu: "Main Driver ke BusTrack features ke hawale se help kar sakta hoon, jaise assigned route, stops, trip, attendance, navigation aur duty. Child attendance checking ya Parent tracking request Parent-side feature hai."
-             * English: "I can only assist with Driver-accessible BusTrack features such as assigned route, stops, trip direction, attendance marking, navigation, and duty mode. Parent or Admin functions are not accessible from the Driver account."
-        3. UNRELATED QUESTIONS: If asked about general knowledge or anything outside BusTrack (e.g. weather, politics, recipes, general coding):
-           * Roman Urdu: "Main sirf BusTrack app aur aapke available role-related features ke hawale se help kar sakta hoon."
-           * English: "I can only assist with the BusTrack app and your available role-related features."
-        4. NO HALLUCINATIONS: Do NOT invent features (e.g. no separate "Trip Session" screen, no physical RFID scanning required). If information is not in the knowledge base, say:
-           * Roman Urdu: "Sorry, mujhe BusTrack ki available information mein is question ka exact answer nahi mila."
-           * English: "Sorry, I could not find the exact answer in BusTrack's available information."
-        5. LANGUAGE MATCHING:
-           - If user asks in Roman Urdu, reply in simple, clear Roman Urdu while keeping BusTrack feature names in English (e.g. "On Duty", "START NAVIGATION", "Attendance", "Driver Dashboard").
+        1. ZERO HALLUCINATIONS / AUTHORITATIVE GROUND TRUTH:
+           - Whenever the driver asks about assigned route/bus ("meri assigned route/bus konsi hai?"), next stop ("next stop konsa hai?"), ETA ("next stop tak kitna time hai?"), trip direction ("morning trip hai ya evening?"), duty status ("mera status kya hai?", "am I on duty?"), or student attendance load, YOU MUST CALL THE APPROPRIATE TOOL.
+           - NEVER guess or invent route names, bus numbers, stop names, or ETAs.
+           - LIVE DRIVER/BUS STATUS RULE:
+             * Tool results represent the ABSOLUTE REAL-TIME GROUND TRUTH from the live database.
+             * Previous assistant responses in conversation history may be OUTDATED (e.g. from before the driver started the trip).
+             * NEVER use old conversation history to determine current duty status.
+             * When the live status tool returns `onDuty: true` or `status: "Active"` or `isNavigating: true`, you MUST report the driver as ON DUTY / Active. Confirm their assigned bus (e.g. ICT-2345), route (e.g. Gulistan Colony), and navigation status.
+             * When the live status tool returns `onDuty: false` or `status: "Inactive"`, you MUST report the driver as OFF DUTY / Inactive.
+             * The model must NEVER override the live tool result using memory, conversation history, assumptions, or previous responses.
+        2. ONLY DRIVER FEATURES:
+           - Answer questions strictly about Driver-accessible features (assigned route, stops, navigation, duty mode, attendance marking).
+           - Do NOT explain Parent account actions or Admin management functions.
+        3. UNRELATED QUESTIONS:
+           - If asked about general topics outside BusTrack, politely decline and state you only assist with BusTrack.
+        4. LANGUAGE MATCHING:
+           - If user asks in Roman Urdu, reply in clear Roman Urdu keeping technical BusTrack feature names in English (e.g. "On Duty", "START NAVIGATION", "Attendance", "Driver Dashboard", "Forward Trip", "Return Trip").
            - If user asks in English, reply in English.
            - If user asks in Urdu script, reply in Urdu script.
-           - If user uses mixed Roman Urdu + English, reply in simple Roman Urdu keeping necessary feature names in English.
            - NEVER automatically switch to English when user writes in Roman Urdu.
-        6. TONE: Polite, concise, clear, and direct. Do not add robotic AI self-disclaimers.
+        5. TONE: Professional, concise, clear, and direct.
     """
 
     /**
-     * Sends the running conversation with role-specific system prompt injection.
+     * Builds role-specific tools schema for OpenAI function calling.
+     */
+    private fun getToolsForRole(role: String): JSONArray {
+        val isDriver = role.equals("driver", ignoreCase = true)
+        val tools = JSONArray()
+
+        if (isDriver) {
+            // Driver Tools
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_driver_assigned_duty")
+                    put("description", "Fetches driver assigned bus number, assigned route name, start/end points, stops count, student count, On Duty status, and active trip direction.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_driver_route_and_next_stop")
+                    put("description", "Fetches the driver's route stops sequence, upcoming next stop name, ETA to next stop, and trip direction (FORWARD / RETURN).")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_driver_attendance_summary")
+                    put("description", "Fetches today's marked attendance summary and student load for the driver's assigned route.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_recent_notifications")
+                    put("description", "Fetches recent announcements and notifications for the driver.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+        } else {
+            // Parent Tools
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_parent_child_and_bus_status")
+                    put("description", "Fetches the parent's child profile, assigned route, assigned bus, assigned stop, driver live On Duty status, current speed, next stop, and live ETA to child's stop.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject().apply {
+                            put("busNo", JSONObject().apply {
+                                put("type", "string")
+                                put("description", "Optional bus number mentioned by the user (e.g. ICT-2345).")
+                            })
+                            put("routeName", JSONObject().apply {
+                                put("type", "string")
+                                put("description", "Optional route name mentioned by the user (e.g. Gulistan Colony).")
+                            })
+                        })
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_child_attendance_status")
+                    put("description", "Fetches child's morning pickup, morning drop, evening pickup, and evening drop attendance status for today or a specific date.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject().apply {
+                            put("date", JSONObject().apply {
+                                put("type", "string")
+                                put("description", "Optional date in dd-MM-yyyy format. If omitted, today's date is used.")
+                            })
+                        })
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_parent_tracking_request_status")
+                    put("description", "Fetches the status of tracking requests submitted by the parent (PENDING, APPROVED, REJECTED).")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+            tools.put(JSONObject().apply {
+                put("type", "function")
+                put("function", JSONObject().apply {
+                    put("name", "get_recent_notifications")
+                    put("description", "Fetches recent alerts and notifications for the parent.")
+                    put("parameters", JSONObject().apply {
+                        put("type", "object")
+                        put("properties", JSONObject())
+                    })
+                })
+            })
+        }
+
+        return tools
+    }
+
+    /**
+     * Executes local BusTrack tool call and returns JSON string result.
+     */
+    private suspend fun executeTool(
+        toolName: String,
+        argumentsJson: JSONObject,
+        role: String,
+        userId: String,
+        userEmail: String
+    ): String {
+        Log.i(TAG, "[CHATBOT_TOOL_CALL]\ntoolName=$toolName\narguments=${argumentsJson.toString(2)}")
+        val toolResult = when (toolName) {
+            "get_parent_child_and_bus_status" -> {
+                val queryBus = if (argumentsJson.has("busNo")) argumentsJson.optString("busNo") else null
+                val queryRoute = if (argumentsJson.has("routeName")) argumentsJson.optString("routeName") else null
+                BusTrackAssistantDataManager.resolveParentChildAndBusStatus(userId, queryBus, queryRoute)
+            }
+            "get_child_attendance_status" -> {
+                val date = if (argumentsJson.has("date")) argumentsJson.optString("date") else null
+                BusTrackAssistantDataManager.resolveChildAttendance(userId, date)
+            }
+            "get_parent_tracking_request_status" -> {
+                BusTrackAssistantDataManager.resolveParentTrackingRequests(userId)
+            }
+            "get_driver_assigned_duty" -> {
+                BusTrackAssistantDataManager.resolveDriverAssignedDuty(userId, userEmail)
+            }
+            "get_driver_route_and_next_stop" -> {
+                BusTrackAssistantDataManager.resolveDriverRouteAndStops(userId, userEmail)
+            }
+            "get_driver_attendance_summary" -> {
+                BusTrackAssistantDataManager.resolveDriverAttendanceSummary(userId, userEmail)
+            }
+            "get_recent_notifications" -> {
+                BusTrackAssistantDataManager.resolveRecentNotifications(userId, role)
+            }
+            else -> {
+                JSONObject().put("error", "Unknown function $toolName").toString()
+            }
+        }
+        Log.i(TAG, "[CHATBOT_TOOL_RESULT]\nrawResult=$toolResult")
+        return toolResult
+    }
+
+    /**
+     * Sends the running conversation with role-specific system prompt injection and
+     * performs OpenAI-compatible function-calling loop with local BusTrack database resolution.
      */
     suspend fun sendMessage(
         history: List<Pair<String, String>>,
-        role: String = "parent"
+        role: String = "parent",
+        userId: String = "",
+        userEmail: String = ""
     ): String = withContext(Dispatchers.IO) {
         if (BuildConfig.CHATBOT_API_KEY.isBlank()) {
             throw IllegalStateException("Chatbot API key is not configured. Add CHATBOT_API_KEY to local.properties.")
         }
+
+        val lastUserMessage = history.lastOrNull { it.first == "user" }?.second.orEmpty()
+        Log.i(TAG, "[CHATBOT_INPUT]\nuserQuestion=$lastUserMessage\nrole=$role\nuserId=$userId\nuserEmail=$userEmail")
 
         val systemPrompt = if (role.equals("driver", ignoreCase = true)) {
             DRIVER_SYSTEM_PROMPT
@@ -163,19 +283,88 @@ object ChatbotRepository {
             PARENT_SYSTEM_PROMPT
         }
 
+        val tools = getToolsForRole(role)
+
         val messages = JSONArray()
         messages.put(JSONObject().put("role", "system").put("content", systemPrompt.trimIndent()))
         history.forEach { (msgRole, content) ->
             messages.put(JSONObject().put("role", msgRole).put("content", content))
         }
 
+        // 1. Initial Request with Tools
         val requestJson = JSONObject()
             .put("model", MODEL)
             .put("messages", messages)
-            .put("temperature", 0.3)
-            .put("max_tokens", 450)
-            .toString()
+            .put("tools", tools)
+            .put("tool_choice", "auto")
+            .put("temperature", 0.2)
+            .put("max_tokens", 500)
 
+        Log.i(TAG, "[CHATBOT_PROMPT]\nmessagesSentToLLM=${requestJson.toString(2)}")
+
+        val initialResponse = executeHttpRequest(requestJson.toString())
+        Log.i(TAG, "[CHATBOT_LLM_RESPONSE]\nrawLLMResponse=${initialResponse.toString(2)}")
+
+        val choice = initialResponse.getJSONArray("choices").getJSONObject(0)
+        val messageObj = choice.getJSONObject("message")
+
+        // Check if model wants to call tools
+        if (messageObj.has("tool_calls") && !messageObj.isNull("tool_calls")) {
+            val toolCalls = messageObj.getJSONArray("tool_calls")
+            if (toolCalls.length() > 0) {
+                // Append the assistant's tool-call request to messages
+                messages.put(messageObj)
+
+                // Execute each tool call locally
+                for (i in 0 until toolCalls.length()) {
+                    val toolCall = toolCalls.getJSONObject(i)
+                    val callId = toolCall.getString("id")
+                    val functionObj = toolCall.getJSONObject("function")
+                    val functionName = functionObj.getString("name")
+                    val argumentsStr = functionObj.optString("arguments", "{}")
+                    val argumentsJson = try {
+                        JSONObject(argumentsStr)
+                    } catch (_: Exception) {
+                        JSONObject()
+                    }
+
+                    val toolResult = executeTool(functionName, argumentsJson, role, userId, userEmail)
+
+                    // Add tool result message
+                    val toolMsg = JSONObject()
+                        .put("role", "tool")
+                        .put("tool_call_id", callId)
+                        .put("name", functionName)
+                        .put("content", toolResult)
+                    messages.put(toolMsg)
+                }
+
+                // 2. Second Request with Tool Results to generate natural language reply
+                val followUpRequestJson = JSONObject()
+                    .put("model", MODEL)
+                    .put("messages", messages)
+                    .put("temperature", 0.2)
+                    .put("max_tokens", 500)
+
+                Log.i(TAG, "[CHATBOT_PROMPT]\nmessagesSentToLLM=${followUpRequestJson.toString(2)}")
+
+                val followUpResponse = executeHttpRequest(followUpRequestJson.toString())
+                Log.i(TAG, "[CHATBOT_LLM_RESPONSE]\nrawLLMResponse=${followUpResponse.toString(2)}")
+
+                val finalChoice = followUpResponse.getJSONArray("choices").getJSONObject(0)
+                val finalText = finalChoice.getJSONObject("message").optString("content", "").trim()
+                Log.i(TAG, "[CHATBOT_FINAL]\nfinalText=$finalText")
+                return@withContext finalText
+            }
+        }
+
+        // Direct answer with no tool call
+        val directText = messageObj.optString("content", "").trim()
+        Log.i(TAG, "[CHATBOT_FINAL]\nfinalText=$directText")
+        directText
+    }
+
+    private fun executeHttpRequest(requestJsonString: String): JSONObject {
         var connection: HttpURLConnection? = null
         try {
             val url = URL(CHATBOT_API_URL)
@@ -189,7 +378,7 @@ object ChatbotRepository {
             }
 
             OutputStreamWriter(connection.outputStream, StandardCharsets.UTF_8).use { writer ->
-                writer.write(requestJson)
+                writer.write(requestJsonString)
                 writer.flush()
             }
 
@@ -201,12 +390,7 @@ object ChatbotRepository {
                 throw IOException("Chatbot request failed ($responseCode): $responseBody")
             }
 
-            val json = JSONObject(responseBody)
-            json.getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content")
-                .trim()
+            return JSONObject(responseBody)
         } finally {
             connection?.disconnect()
         }

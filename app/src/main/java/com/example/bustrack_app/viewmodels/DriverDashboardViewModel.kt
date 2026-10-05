@@ -84,7 +84,7 @@ class DriverDashboardViewModel : ViewModel() {
             studentsCount = "${studentsInRoute.size}",
             tripTime = "Calculating...", 
             tripDistance = "Calculating...",
-            isOnDuty = driver.status == "Active"
+            isOnDuty = driver.status.contains("Active", ignoreCase = true) || driver.status.contains("Duty", ignoreCase = true) || driver.isNavigating
         )
     }
 
